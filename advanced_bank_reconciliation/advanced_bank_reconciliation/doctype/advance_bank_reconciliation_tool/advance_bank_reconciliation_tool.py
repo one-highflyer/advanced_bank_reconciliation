@@ -581,7 +581,7 @@ def get_queries(
 	queries = []
 
 	# get matching queries from all the apps
-	for method_name in frappe.get_hooks("get_matching_queries", app_name="nexwave_insinc_erp_app"):
+	for method_name in frappe.get_hooks("get_matching_queries", app_name="advanced_bank_reconciliation"):
 		print(f"Matching queries: {method_name}")
 		queries.extend(
 			frappe.get_attr(method_name)(

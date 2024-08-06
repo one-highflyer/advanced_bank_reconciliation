@@ -129,7 +129,6 @@ frappe.ui.form.on("Advance Bank Reconciliation Tool", {
 		if (frm.doc.bank_account && frm.doc.bank_statement_to_date) {
 			return frappe.call({
 				method: "erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.get_account_balance",
-				// method: "nexwave_insinc_erp_app.nexwave_insinc_erp_app.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_cleared_balance",
 				args: {
 					bank_account: frm.doc.bank_account,
 					till_date: frm.doc.bank_statement_to_date,
@@ -145,7 +144,7 @@ frappe.ui.form.on("Advance Bank Reconciliation Tool", {
 		if (frm.doc.bank_account && frm.doc.bank_statement_to_date) {
 			console.log("Validating bank transactions...");
 			frappe.call({
-				method: "nexwave_insinc_erp_app.nexwave_insinc_erp_app.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.validate_bank_transactions",
+				method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.validate_bank_transactions",
 				args: {
 					from_date: frm.doc.bank_statement_from_date,
 					to_date: frm.doc.bank_statement_to_date,

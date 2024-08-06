@@ -78,7 +78,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 
 		console.log("get_linked_payments", this.bank_transaction_name, document_types, this.from_date, this.to_date, this.filter_by_reference_date, this.from_reference_date, this.to_reference_date);
 		frappe.call({
-			method: "nexwave_insinc_erp_app.nexwave_insinc_erp_app.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_linked_payments",
+			method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_linked_payments",
 			// method: "erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.get_linked_payments",
 			args: {
 				bank_transaction_name: this.bank_transaction_name,

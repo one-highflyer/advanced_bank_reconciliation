@@ -38,7 +38,7 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 		console.log("Making reconciled data table");
 		var me = this;
 		frappe.call({
-			method: "nexwave_insinc_erp_app.nexwave_insinc_erp_app.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_reconciled_bank_transactions",
+			method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_reconciled_bank_transactions",
 			args: {
 				bank_account: this.bank_account,
 				from_date: this.bank_statement_from_date,
@@ -334,7 +334,6 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 		if (this.bank_account && this.bank_statement_to_date) {
 			return frappe.call({
 				method: "erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.get_account_balance",
-				// method: "nexwave_insinc_erp_app.nexwave_insinc_erp_app.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_cleared_balance",
 				args: {
 					bank_account: this.bank_account,
 					till_date: this.bank_statement_to_date,

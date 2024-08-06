@@ -227,4 +227,8 @@ override_doctype_class = {
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
 
+get_matching_queries = [
+    "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_matching_queries"
+]
+
 required_apps = ["erpnext"]

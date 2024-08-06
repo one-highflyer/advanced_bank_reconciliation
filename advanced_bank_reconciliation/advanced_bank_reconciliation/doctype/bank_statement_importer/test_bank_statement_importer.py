@@ -4,7 +4,7 @@
 # import frappe
 from datetime import datetime, date
 from frappe.tests.utils import FrappeTestCase
-from nexwave_insinc_erp_app.nexwave_insinc_erp_app.doctype.bank_statement_importer.bank_statement_importer import parse_date
+from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.bank_statement_importer.bank_statement_importer import parse_date
 
 
 class TestBankStatementImporter(FrappeTestCase):
