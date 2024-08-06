@@ -1,0 +1,209 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2024-03-08 00:33:34.686872",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "po_automation_section",
+  "company",
+  "bank_account",
+  "last_transaction_html",
+  "bank",
+  "import_file",
+  "upload_statement",
+  "data_fetched",
+  "fields_mapped",
+  "field_mapping",
+  "date_select",
+  "date_format",
+  "same_amount_field",
+  "deposit_select",
+  "withdrawal_select",
+  "amount_select",
+  "positive_field",
+  "reference_number_select",
+  "description_select",
+  "map_fields",
+  "import_preview",
+  "import_data",
+  "reset"
+ ],
+ "fields": [
+  {
+   "fieldname": "po_automation_section",
+   "fieldtype": "Section Break",
+   "label": "Import Bank Statement"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "bank_account",
+   "fieldtype": "Link",
+   "label": "Bank Account",
+   "options": "Bank Account"
+  },
+  {
+   "fetch_from": "bank_account.bank",
+   "fieldname": "bank",
+   "fieldtype": "Link",
+   "label": "Bank",
+   "options": "Bank"
+  },
+  {
+   "fieldname": "import_file",
+   "fieldtype": "Attach",
+   "in_list_view": 1,
+   "label": "Import File",
+   "read_only_depends_on": "eval: ['Success', 'Partial Success'].includes(doc.status)"
+  },
+  {
+   "fieldname": "upload_statement",
+   "fieldtype": "Button",
+   "label": "Upload Statement"
+  },
+  {
+   "default": "0",
+   "fieldname": "data_fetched",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Data Fetched"
+  },
+  {
+   "depends_on": "eval:doc.data_fetched == true",
+   "fieldname": "field_mapping",
+   "fieldtype": "Section Break",
+   "label": "Field Mapping"
+  },
+  {
+   "depends_on": "eval:doc.data_fetched == true",
+   "fieldname": "date_select",
+   "fieldtype": "Select",
+   "label": "Date"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.data_fetched == true",
+   "fieldname": "same_amount_field",
+   "fieldtype": "Check",
+   "label": "Same Deposit/Withdrawal Field"
+  },
+  {
+   "depends_on": "eval:doc.data_fetched == true && doc.same_amount_field == false",
+   "fieldname": "deposit_select",
+   "fieldtype": "Select",
+   "label": "Deposit"
+  },
+  {
+   "depends_on": "eval:doc.data_fetched == true && doc.same_amount_field == false",
+   "fieldname": "withdrawal_select",
+   "fieldtype": "Select",
+   "label": "Withdrawal"
+  },
+  {
+   "depends_on": "eval:doc.data_fetched == true && doc.same_amount_field == true",
+   "fieldname": "amount_select",
+   "fieldtype": "Select",
+   "label": "Amount"
+  },
+  {
+   "depends_on": "eval:doc.data_fetched == true && doc.same_amount_field == true",
+   "fieldname": "positive_field",
+   "fieldtype": "Select",
+   "label": "Positive Amount Field",
+   "options": "Deposit\nWithdrawal"
+  },
+  {
+   "depends_on": "eval:doc.data_fetched == true",
+   "fieldname": "description_select",
+   "fieldtype": "Select",
+   "label": "Description"
+  },
+  {
+   "depends_on": "eval:doc.data_fetched == true",
+   "fieldname": "reference_number_select",
+   "fieldtype": "Select",
+   "label": "Reference Number"
+  },
+  {
+   "depends_on": "eval:doc.data_fetched == true",
+   "fieldname": "map_fields",
+   "fieldtype": "Button",
+   "label": "Map Fields"
+  },
+  {
+   "fieldname": "import_preview",
+   "fieldtype": "HTML",
+   "label": "Import Preview"
+  },
+  {
+   "depends_on": "eval:doc.fields_mapped == true",
+   "fieldname": "import_data",
+   "fieldtype": "Button",
+   "label": "Import"
+  },
+  {
+   "default": "0",
+   "fieldname": "fields_mapped",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Fields Mapped"
+  },
+  {
+   "fieldname": "last_transaction_html",
+   "fieldtype": "HTML",
+   "label": "Last Transaction HTML"
+  },
+  {
+   "depends_on": "eval:doc.data_fetched == true",
+   "fieldname": "reset",
+   "fieldtype": "Button",
+   "label": "Reset"
+  },
+  {
+   "default": "Auto",
+   "fieldname": "date_format",
+   "fieldtype": "Select",
+   "label": "Date Format",
+   "options": "Auto\nY/m/d\nd/m/Y\ndd/mm/YY\nm/d/Y\nm-d-Y\nd-m-Y\nY-m-d"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2024-07-08 17:15:02.148515",
+ "modified_by": "Administrator",
+ "module": "Nexwave Insinc Erp App",
+ "name": "Bank Statement Importer",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Purchase Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

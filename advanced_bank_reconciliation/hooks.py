@@ -114,9 +114,9 @@ app_license = "gpl-3.0"
 # ---------------
 # Override standard doctype classes
 
-# override_doctype_class = {
-# 	"ToDo": "custom_app.overrides.CustomToDo"
-# }
+override_doctype_class = {
+    "Bank Transaction": "advanced_bank_reconciliation.advanced_bank_reconciliation.overrides.bank_transaction.ExtendedBankTransaction",
+}
 
 # Document Events
 # ---------------
@@ -227,3 +227,4 @@ app_license = "gpl-3.0"
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
 
+required_apps = ["erpnext"]
