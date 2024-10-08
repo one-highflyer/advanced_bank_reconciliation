@@ -9,6 +9,7 @@ logger.setLevel(logging.INFO)
 class ExtendedBankTransaction(BankTransaction):
 
 		def before_update_after_submit(self):
+				super().before_update_after_submit()
 				logger.info(f"before_update_after_submit: {self.name}")
 				# Fetch the current state of the document from the database
 				existing_doc = frappe.get_doc(self.doctype, self.name)
@@ -16,7 +17,6 @@ class ExtendedBankTransaction(BankTransaction):
 				self._previous_payments = existing_doc.get("payment_entries")
 
 		def on_update_after_submit(self):
-				super().on_update_after_submit()
 				logger.info(f"on_update_after_submit: {self.name}")
 				logger.info(
 						f"self.payment_entries: {self.payment_entries} vs {self._previous_payments}"
