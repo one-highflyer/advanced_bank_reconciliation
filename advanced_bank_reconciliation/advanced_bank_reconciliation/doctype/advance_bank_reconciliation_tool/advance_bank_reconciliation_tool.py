@@ -847,7 +847,6 @@ def get_je_matching_query(
 	# We have mapping at the bank level
 	# So one bank could have both types of bank accounts like asset and liability
 	# So cr_or_dr should be judged only on basis of withdrawal and deposit and not account type
-	cr_or_dr = "credit" if transaction.withdrawal > 0.0 else "debit"
 	filter_by_date = f"AND je.posting_date between '{from_date}' and '{to_date}'"
 	order_by = " je.posting_date"
 	filter_by_reference_no = ""
@@ -859,11 +858,15 @@ def get_je_matching_query(
 	return f"""
 		SELECT
 			(CASE WHEN je.cheque_no=%(reference_no)s THEN 1 ELSE 0 END
-			+ CASE WHEN jea.{cr_or_dr}_in_account_currency = %(amount)s THEN 1 ELSE 0 END
-			+ 1) AS rank ,
+			+ CASE WHEN jea.debit_in_account_currency = %(amount)s THEN 1 ELSE 0 END
+            + CASE WHEN jea.credit_in_account_currency = %(amount)s THEN 1 ELSE 0 END
+            + 1) AS rank ,
 			'Journal Entry' AS doctype,
 			je.name,
-			jea.{cr_or_dr}_in_account_currency AS paid_amount,
+			IF(jea.debit_in_account_currency > 0, 
+                IF({transaction.deposit} > 0, jea.debit_in_account_currency, -jea.debit_in_account_currency), 
+                IF({transaction.deposit} > 0, -jea.credit_in_account_currency, jea.credit_in_account_currency)
+            ) AS paid_amount,
 			je.cheque_no AS reference_no,
 			je.cheque_date AS reference_date,
 			je.pay_to_recd_from AS party,
@@ -881,7 +884,8 @@ def get_je_matching_query(
 			AND je.voucher_type NOT IN ('Opening Entry')
 			AND (je.clearance_date IS NULL OR je.clearance_date='0000-00-00')
 			AND jea.account = %(bank_account)s
-			AND jea.{cr_or_dr}_in_account_currency {'= %(amount)s' if exact_match else '> 0.0'}
+			AND (jea.debit_in_account_currency {'= %(amount)s' if exact_match else '> 0.0'}
+            OR jea.credit_in_account_currency {'= %(amount)s' if exact_match else '> 0.0'})
 			AND je.docstatus = 1
 			{filter_by_date}
 			{filter_by_reference_no}
