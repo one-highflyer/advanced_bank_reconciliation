@@ -5,3 +5,5 @@
 tags
 node_modules
 __pycache__
+
+advanced_bank_reconciliation/public/dist
