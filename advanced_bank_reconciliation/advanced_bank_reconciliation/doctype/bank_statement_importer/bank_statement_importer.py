@@ -62,6 +62,10 @@ def build_table(mapping, data_headers, data_body):
     matching = True
 
     for data_row in data_body:
+        # Skip empty rows
+        if not data_row or all(cell is None or cell == "" for cell in data_row):
+            continue
+        
         tbl_row = []
         # Date
         date = data_row[data_headers.index(mapping["date_select"])]
