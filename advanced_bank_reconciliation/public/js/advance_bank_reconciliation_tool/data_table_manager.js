@@ -337,6 +337,7 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 				args: {
 					bank_account: this.bank_account,
 					till_date: this.bank_statement_to_date,
+					company: this.company,
 				},
 				callback: (response) => (this.cleared_balance = response.message),
 			});
