@@ -1233,6 +1233,12 @@ def clear_journal_entry(journal_entry_name):
 		if account_type != "Bank":
 			continue
 
+		# check if the account is a bank account for do the reconciliation
+		bank_account = frappe.db.count("Bank Account", {"account": acc.account, "company": journal_entry.company})
+		if bank_account == 0:
+			logger.warning(f"Bank reconciliation is not enabled for account {acc.account} in {journal_entry_name}. Skipping...")
+			continue
+
 		if acc.account in clearance_status:
 			logger.warn(f"Account {acc.account} found twice in the same journal entry. Skipping...")
 			skip = True
