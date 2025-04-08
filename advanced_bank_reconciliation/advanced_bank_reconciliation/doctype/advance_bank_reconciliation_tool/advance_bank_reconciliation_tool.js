@@ -111,12 +111,13 @@ frappe.ui.form.on("Advance Bank Reconciliation Tool", {
 	},
 
 	get_account_opening_balance(frm) {
-		if (frm.doc.bank_account && frm.doc.bank_statement_from_date) {
+		if (frm.doc.company && frm.doc.bank_account && frm.doc.bank_statement_from_date) {
 			frappe.call({
 				method: "erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.get_account_balance",
 				args: {
 					bank_account: frm.doc.bank_account,
 					till_date: frappe.datetime.add_days(frm.doc.bank_statement_from_date, -1),
+					company: frm.doc.company,
 				},
 				callback: (response) => {
 					frm.set_value("account_opening_balance", response.message);
@@ -126,12 +127,13 @@ frappe.ui.form.on("Advance Bank Reconciliation Tool", {
 	},
 
 	get_cleared_balance(frm) {
-		if (frm.doc.bank_account && frm.doc.bank_statement_to_date) {
+		if (frm.doc.company && frm.doc.bank_account && frm.doc.bank_statement_to_date) {
 			return frappe.call({
 				method: "erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.get_account_balance",
 				args: {
 					bank_account: frm.doc.bank_account,
 					till_date: frm.doc.bank_statement_to_date,
+					company: frm.doc.company,
 				},
 				callback: (response) => {
 					frm.cleared_balance = response.message;

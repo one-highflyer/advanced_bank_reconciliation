@@ -55,6 +55,10 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 					this.dialog.set_values(r.message);
 					this.copy_data_to_voucher();
 					this.dialog.show();
+					const me = this;
+					setTimeout(() => {
+						me.update_options();
+					}, 300);
 				}
 			},
 		});

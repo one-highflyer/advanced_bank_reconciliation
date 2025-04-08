@@ -497,8 +497,12 @@ def get_linked_payments(
 def subtract_allocations(gl_account, vouchers):
 	"Look up & subtract any existing Bank Transaction allocations"
 	copied = []
+
+	voucher_docs = [(voucher[1], voucher[2]) for voucher in vouchers]
+	voucher_allocated_amounts = get_total_allocated_amount(voucher_docs)
+
 	for voucher in vouchers:
-		rows = get_total_allocated_amount(voucher[1], voucher[2])
+		rows = voucher_allocated_amounts.get((voucher[1], voucher[2])) or []
 		amount = None
 		for row in rows:
 			if row["gl_account"] == gl_account:
@@ -1227,6 +1231,12 @@ def clear_journal_entry(journal_entry_name):
 	for acc in journal_entry.accounts:
 		account_type = frappe.get_value("Account", acc.account, "account_type")
 		if account_type != "Bank":
+			continue
+
+		# check if the account is a bank account for do the reconciliation
+		bank_account = frappe.db.count("Bank Account", {"account": acc.account, "company": journal_entry.company})
+		if bank_account == 0:
+			logger.warning(f"Bank reconciliation is not enabled for account {acc.account} in {journal_entry_name}. Skipping...")
 			continue
 
 		if acc.account in clearance_status:
