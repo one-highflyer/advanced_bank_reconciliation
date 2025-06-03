@@ -3,6 +3,7 @@
 import os
 import frappe
 import json
+import logging
 from datetime import datetime
 from frappe.model.document import Document
 from frappe.utils.xlsxutils import (
@@ -12,6 +13,9 @@ from frappe.utils.xlsxutils import (
 from frappe.utils.csvutils import read_csv_content
 from frappe.utils import getdate
 from frappe import _
+
+logger = frappe.logger("bank_rec", allow_site=True)
+logger.setLevel(logging.INFO)
 
 class BankStatementImporter(Document):
 	pass
@@ -150,13 +154,15 @@ def parse_date(date_str, format):
     if pattern:
         try:
             return datetime.strptime(str(date_str), pattern).date()
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as e:
+            logger.warning("Failed to parse date '%s' with format '%s': %s", date_str, format, str(e))
             pass
     
     # Fallback to auto detection
     try:
         return getdate(date_str)
-    except (ValueError, TypeError):
+    except (ValueError, TypeError) as e:
+        logger.error("Failed to parse date '%s' with auto detection: %s", date_str, str(e))
         return None
 
 
@@ -210,7 +216,7 @@ def publish_records(data_import):
 		print("Bank transactions submitted")
 		return True
 	except (ValueError, TypeError, KeyError) as e:
-		frappe.log_error(f"Publish records error: {str(e)}")
+		logger.error("Publish records error: %s", str(e))
 		print("Publish exception")
 		return False
 	finally:
