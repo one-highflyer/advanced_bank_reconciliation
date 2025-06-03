@@ -28,7 +28,7 @@ def read_content(content, extension):
 
 	return data
 
-def start_import(file_path):
+def start_import(file_path, bank_account=None):
 	file_content = None
 	file_name = frappe.db.get_value("File", {"file_url": file_path})
 	if file_name:
@@ -38,9 +38,22 @@ def start_import(file_path):
 		data = read_content(file_content,extn)
 		data_headers = data[0]
 		data_body = data[1:]
+	
+	bank_mapping = {}
+	if bank_account:
+		bank_doc = frappe.get_doc("Bank Account", bank_account)
+		if bank_doc.bank:
+			bank = frappe.get_doc("Bank", bank_doc.bank)
+			# Get bank transaction mapping
+			for mapping in bank.bank_transaction_mapping:
+				bank_mapping[mapping.file_field] = mapping.bank_transaction_field
+			# Get date format
+			bank_mapping['date_format'] = bank.bank_statement_date_format or "Auto"
+	
 	return {
 		"header": data_headers,
-		"body": data_body
+		"body": data_body,
+		"bank": bank_mapping
 	}
 
 def build_table(mapping, data_headers, data_body):
@@ -120,39 +133,33 @@ def parse_date(date_str, format):
     if format == "Auto":
         return getdate(date_str)
 
-    # Check with following formats
-    # Y/m/d
-    # d/m/Y
-    # dd/mm/YY
-    # m/d/Y
-    # m-d-Y
-    # d-m-Y
-    # Y-m-d
-    # Y/d/m
-
-    if format == "Y/m/d":
-        return datetime.strptime(date_str, "%Y/%m/%d").date()
-    elif format == "d/m/Y":
-        return datetime.strptime(date_str, "%d/%m/%Y").date()
-    elif format == "dd/mm/YY":
-        return datetime.strptime(date_str, "%d/%m/%y").date()
-    elif format == "m/d/Y":
-        return datetime.strptime(date_str, "%m/%d/%Y").date()
-    elif format == "m-d-Y":
-        return datetime.strptime(date_str, "%m-%d-%Y").date()
-    elif format == "d-m-Y":
-        return datetime.strptime(date_str, "%d-%m-%Y").date()
-    elif format == "Y-m-d":
-        return datetime.strptime(date_str, "%Y-%m-%d").date()
-    elif format == "Y/d/m":
-        return datetime.strptime(date_str, "%Y/%d/%m").date()
-    else:
-        return None
+    # Use bank_statement_date_format from Bank doctype
+    try:
+        if format == "Y/m/d":
+            return datetime.strptime(str(date_str), "%Y/%m/%d").date()
+        elif format == "d/m/Y":
+            return datetime.strptime(str(date_str), "%d/%m/%Y").date()
+        elif format == "dd/mm/YY":
+            return datetime.strptime(str(date_str), "%d/%m/%y").date()
+        elif format == "m/d/Y":
+            return datetime.strptime(str(date_str), "%m/%d/%Y").date()
+        elif format == "m-d-Y":
+            return datetime.strptime(str(date_str), "%m-%d-%Y").date()
+        elif format == "d-m-Y":
+            return datetime.strptime(str(date_str), "%d-%m-%Y").date()
+        elif format == "Y-m-d":
+            return datetime.strptime(str(date_str), "%Y-%m-%d").date()
+        elif format == "Y/d/m":
+            return datetime.strptime(str(date_str), "%Y/%d/%m").date()
+        else:
+            return getdate(date_str)
+    except:
+        return getdate(date_str)
 
 
 @frappe.whitelist()
-def form_start_import(data_import):
-	out = start_import(data_import)
+def form_start_import(data_import, bank_account=None):
+	out = start_import(data_import, bank_account)
 	return out
 
 @frappe.whitelist()
