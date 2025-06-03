@@ -78,7 +78,7 @@ frappe.ui.form.on('Bank Statement Importer', {
 				frm.set_df_property("amount_select", "options", options);
 				frm.set_df_property("description_select", "options", options);
 				frm.set_df_property("reference_number_select", "options", options);
-                frm.set_df_property("bank_account_select", "options", options);
+				frm.set_df_property("bank_account_select", "options", options);
 				
 				// Apply bank mapping if available
 				const bank_mapping = data?.message?.bank || {};
