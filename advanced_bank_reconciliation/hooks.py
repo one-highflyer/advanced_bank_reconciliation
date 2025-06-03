@@ -232,3 +232,18 @@ get_matching_queries = [
 ]
 
 required_apps = ["erpnext"]
+
+fixtures = [
+    {
+        "dt": "Custom Field",
+        "filters": [
+            [
+                "fieldname",
+                "in",
+                [
+                    "bank_statement_date_format"
+                ],
+            ]
+        ],
+    },
+]
