@@ -97,8 +97,8 @@ frappe.ui.form.on('Bank Statement Importer', {
 					Object.entries(bank_mapping).forEach(([file_field, bank_field]) => {
 						if (bank_field === 'date_format') return; // Skip date_format
 						
-						const form_field = field_mapping[bank_field] || `${bank_field}_select`;
-						if (frm.fields_dict[form_field]) {
+						const form_field = field_mapping[bank_field];
+						if (form_field && frm.fields_dict[form_field]) {
 							frm.set_value(form_field, file_field);
 						}
 					});
