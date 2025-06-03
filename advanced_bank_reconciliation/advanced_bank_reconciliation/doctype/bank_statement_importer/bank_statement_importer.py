@@ -133,28 +133,31 @@ def parse_date(date_str, format):
     if format == "Auto":
         return getdate(date_str)
 
-    # Use bank_statement_date_format from Bank doctype
+    # Define format patterns mapping
+    format_patterns = {
+        "Y/m/d": "%Y/%m/%d",
+        "d/m/Y": "%d/%m/%Y", 
+        "dd/mm/YY": "%d/%m/%y",
+        "m/d/Y": "%m/%d/%Y",
+        "m-d-Y": "%m-%d-%Y",
+        "d-m-Y": "%d-%m-%Y",
+        "Y-m-d": "%Y-%m-%d",
+        "Y/d/m": "%Y/%d/%m"
+    }
+
+    # Try to parse with specified format
+    pattern = format_patterns.get(format)
+    if pattern:
+        try:
+            return datetime.strptime(str(date_str), pattern).date()
+        except (ValueError, TypeError):
+            pass
+    
+    # Fallback to auto detection
     try:
-        if format == "Y/m/d":
-            return datetime.strptime(str(date_str), "%Y/%m/%d").date()
-        elif format == "d/m/Y":
-            return datetime.strptime(str(date_str), "%d/%m/%Y").date()
-        elif format == "dd/mm/YY":
-            return datetime.strptime(str(date_str), "%d/%m/%y").date()
-        elif format == "m/d/Y":
-            return datetime.strptime(str(date_str), "%m/%d/%Y").date()
-        elif format == "m-d-Y":
-            return datetime.strptime(str(date_str), "%m-%d-%Y").date()
-        elif format == "d-m-Y":
-            return datetime.strptime(str(date_str), "%d-%m-%Y").date()
-        elif format == "Y-m-d":
-            return datetime.strptime(str(date_str), "%Y-%m-%d").date()
-        elif format == "Y/d/m":
-            return datetime.strptime(str(date_str), "%Y/%d/%m").date()
-        else:
-            return getdate(date_str)
-    except:
         return getdate(date_str)
+    except (ValueError, TypeError):
+        return None
 
 
 @frappe.whitelist()
@@ -206,7 +209,8 @@ def publish_records(data_import):
 			bank_transaction.submit()
 		print("Bank transactions submitted")
 		return True
-	except Exception:
+	except (ValueError, TypeError, KeyError) as e:
+		frappe.log_error(f"Publish records error: {str(e)}")
 		print("Publish exception")
 		return False
 	finally:
