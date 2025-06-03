@@ -11,6 +11,7 @@ from frappe.utils.xlsxutils import (
 )
 from frappe.utils.csvutils import read_csv_content
 from frappe.utils import getdate
+from frappe import _
 
 class BankStatementImporter(Document):
 	pass
@@ -28,7 +29,7 @@ def read_content(content, extension):
 
 	return data
 
-def start_import(file_path, bank_account=None):
+def start_import(file_path, bank_account):
 	file_content = None
 	file_name = frappe.db.get_value("File", {"file_url": file_path})
 	if file_name:
@@ -40,15 +41,14 @@ def start_import(file_path, bank_account=None):
 		data_body = data[1:]
 	
 	bank_mapping = {}
-	if bank_account:
-		bank_doc = frappe.get_doc("Bank Account", bank_account)
-		if bank_doc.bank:
-			bank = frappe.get_doc("Bank", bank_doc.bank)
-			# Get bank transaction mapping
-			for mapping in bank.bank_transaction_mapping:
-				bank_mapping[mapping.file_field] = mapping.bank_transaction_field
-			# Get date format
-			bank_mapping['date_format'] = bank.bank_statement_date_format or "Auto"
+	bank_doc = frappe.get_doc("Bank Account", bank_account)
+	if bank_doc.bank:
+		bank = frappe.get_doc("Bank", bank_doc.bank)
+		# Get bank transaction mapping
+		for mapping in bank.bank_transaction_mapping:
+			bank_mapping[mapping.file_field] = mapping.bank_transaction_field
+		# Get date format
+		bank_mapping['date_format'] = bank.bank_statement_date_format or "Auto"
 	
 	return {
 		"header": data_headers,
@@ -161,7 +161,7 @@ def parse_date(date_str, format):
 
 
 @frappe.whitelist()
-def form_start_import(data_import, bank_account=None):
+def form_start_import(data_import, bank_account):
 	out = start_import(data_import, bank_account)
 	return out
 
