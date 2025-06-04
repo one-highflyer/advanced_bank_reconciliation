@@ -58,7 +58,10 @@ frappe.ui.form.on('Bank Statement Importer', {
 
 		frm.call({
 			method: "form_start_import",
-			args: { data_import: frm.doc.import_file },
+			args: { 
+				data_import: frm.doc.import_file,
+				bank_account: frm.doc.bank_account
+			},
 			btn: frm.page.btn_primary,
 			freeze: true,
 			callback: function (data) {
@@ -67,12 +70,44 @@ frappe.ui.form.on('Bank Statement Importer', {
 				const options = data?.message?.header?.join('\n') ?? "";
 				data_headers = data?.message?.header;
 				data_body = data?.message?.body;
+				
+				// Set field options
 				frm.set_df_property("date_select", "options", options);
 				frm.set_df_property("deposit_select", "options", options);
 				frm.set_df_property("withdrawal_select", "options", options);
 				frm.set_df_property("amount_select", "options", options);
 				frm.set_df_property("description_select", "options", options);
 				frm.set_df_property("reference_number_select", "options", options);
+				frm.set_df_property("bank_account_select", "options", options);
+				
+				// Apply bank mapping if available
+				const bank_mapping = data?.message?.bank || {};
+				// Define field mapping configuration
+				const field_mapping = {
+					'date': 'date_select',
+					'deposit': 'deposit_select',
+					'withdrawal': 'withdrawal_select',
+					'description': 'description_select',
+					'reference_number': 'reference_number_select',
+					'amount': 'amount_select'
+				};
+				
+				// Map fields based on bank transaction mapping
+				Object.entries(bank_mapping).forEach(([file_field, bank_field]) => {
+					if (bank_field === 'date_format') return; // Skip date_format
+					
+					const form_field = field_mapping[bank_field];
+					if (form_field && frm.fields_dict[form_field]) {
+						frm.set_value(form_field, file_field);
+					}
+				});
+				
+				// Set date format from bank
+				if (bank_mapping.date_format) {
+					frm.set_value('date_format', bank_mapping.date_format);
+				}
+				
+				// Refresh all fields
 				frm.refresh_field("date_select");
 				frm.refresh_field("deposit_select");
 				frm.refresh_field("amount_select");

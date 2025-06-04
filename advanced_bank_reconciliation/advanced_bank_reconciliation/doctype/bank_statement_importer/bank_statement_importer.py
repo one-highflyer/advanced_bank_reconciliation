@@ -3,6 +3,7 @@
 import os
 import frappe
 import json
+import logging
 from datetime import datetime
 from frappe.model.document import Document
 from frappe.utils.xlsxutils import (
@@ -11,6 +12,10 @@ from frappe.utils.xlsxutils import (
 )
 from frappe.utils.csvutils import read_csv_content
 from frappe.utils import getdate
+from frappe import _
+
+logger = frappe.logger("bank_rec", allow_site=True)
+logger.setLevel(logging.INFO)
 
 class BankStatementImporter(Document):
 	pass
@@ -28,7 +33,7 @@ def read_content(content, extension):
 
 	return data
 
-def start_import(file_path):
+def start_import(file_path, bank_account):
 	file_content = None
 	file_name = frappe.db.get_value("File", {"file_url": file_path})
 	if file_name:
@@ -38,9 +43,21 @@ def start_import(file_path):
 		data = read_content(file_content,extn)
 		data_headers = data[0]
 		data_body = data[1:]
+	
+	bank_mapping = {}
+	bank_doc = frappe.get_doc("Bank Account", bank_account)
+	if bank_doc.bank:
+		bank = frappe.get_doc("Bank", bank_doc.bank)
+		# Get bank transaction mapping
+		for mapping in bank.bank_transaction_mapping:
+			bank_mapping[mapping.file_field] = mapping.bank_transaction_field
+		# Get date format
+		bank_mapping['date_format'] = bank.bank_statement_date_format or "Auto"
+	
 	return {
 		"header": data_headers,
-		"body": data_body
+		"body": data_body,
+		"bank": bank_mapping
 	}
 
 def build_table(mapping, data_headers, data_body):
@@ -120,39 +137,38 @@ def parse_date(date_str, format):
     if format == "Auto":
         return getdate(date_str)
 
-    # Check with following formats
-    # Y/m/d
-    # d/m/Y
-    # dd/mm/YY
-    # m/d/Y
-    # m-d-Y
-    # d-m-Y
-    # Y-m-d
-    # Y/d/m
+    # Define format patterns mapping
+    format_patterns = {
+        "Y/m/d": "%Y/%m/%d",
+        "d/m/Y": "%d/%m/%Y", 
+        "dd/mm/YY": "%d/%m/%y",
+        "m/d/Y": "%m/%d/%Y",
+        "m-d-Y": "%m-%d-%Y",
+        "d-m-Y": "%d-%m-%Y",
+        "Y-m-d": "%Y-%m-%d",
+        "Y/d/m": "%Y/%d/%m"
+    }
 
-    if format == "Y/m/d":
-        return datetime.strptime(date_str, "%Y/%m/%d").date()
-    elif format == "d/m/Y":
-        return datetime.strptime(date_str, "%d/%m/%Y").date()
-    elif format == "dd/mm/YY":
-        return datetime.strptime(date_str, "%d/%m/%y").date()
-    elif format == "m/d/Y":
-        return datetime.strptime(date_str, "%m/%d/%Y").date()
-    elif format == "m-d-Y":
-        return datetime.strptime(date_str, "%m-%d-%Y").date()
-    elif format == "d-m-Y":
-        return datetime.strptime(date_str, "%d-%m-%Y").date()
-    elif format == "Y-m-d":
-        return datetime.strptime(date_str, "%Y-%m-%d").date()
-    elif format == "Y/d/m":
-        return datetime.strptime(date_str, "%Y/%d/%m").date()
-    else:
+    # Try to parse with specified format
+    pattern = format_patterns.get(format)
+    if pattern:
+        try:
+            return datetime.strptime(str(date_str), pattern).date()
+        except (ValueError, TypeError) as e:
+            logger.warning("Failed to parse date '%s' with format '%s': %s", date_str, format, str(e))
+            pass
+    
+    # Fallback to auto detection
+    try:
+        return getdate(date_str)
+    except (ValueError, TypeError) as e:
+        logger.error("Failed to parse date '%s' with auto detection: %s", date_str, str(e))
         return None
 
 
 @frappe.whitelist()
-def form_start_import(data_import):
-	out = start_import(data_import)
+def form_start_import(data_import, bank_account):
+	out = start_import(data_import, bank_account)
 	return out
 
 @frappe.whitelist()
@@ -199,7 +215,8 @@ def publish_records(data_import):
 			bank_transaction.submit()
 		print("Bank transactions submitted")
 		return True
-	except Exception:
+	except (ValueError, TypeError, KeyError) as e:
+		logger.error("Publish records error: %s", str(e))
 		print("Publish exception")
 		return False
 	finally:
