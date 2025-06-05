@@ -48,9 +48,9 @@ def start_import(file_path, bank_account):
 	bank_doc = frappe.get_doc("Bank Account", bank_account)
 	if bank_doc.bank:
 		bank = frappe.get_doc("Bank", bank_doc.bank)
-		# Get bank transaction mapping
+		# Get bank transaction mapping - swap key and value
 		for mapping in bank.bank_transaction_mapping:
-			bank_mapping[mapping.file_field] = mapping.bank_transaction_field
+			bank_mapping[mapping.bank_transaction_field] = mapping.file_field
 		# Get date format
 		bank_mapping['date_format'] = bank.bank_statement_date_format or "Auto"
 	

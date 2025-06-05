@@ -71,6 +71,18 @@ frappe.ui.form.on('Bank Statement Importer', {
 				data_headers = data?.message?.header;
 				data_body = data?.message?.body;
 				
+				// Apply bank mapping if available
+				const bank_mapping = data?.message?.bank || {};
+                console.log("BANK MAPPING", bank_mapping);
+				
+				// Extract file field names directly from bank mapping (now bank fields are keys)
+				const dateField = bank_mapping.date;
+				const depositField = bank_mapping.deposit;
+				const withdrawalField = bank_mapping.withdrawal;
+				const amountField = bank_mapping.amount;
+				const descriptionField = bank_mapping.description;
+				const referenceField = bank_mapping.reference_number;
+				
 				// Set field options
 				frm.set_df_property("date_select", "options", options);
 				frm.set_df_property("deposit_select", "options", options);
@@ -80,27 +92,46 @@ frappe.ui.form.on('Bank Statement Importer', {
 				frm.set_df_property("reference_number_select", "options", options);
 				frm.set_df_property("bank_account_select", "options", options);
 				
-				// Apply bank mapping if available
-				const bank_mapping = data?.message?.bank || {};
-				// Define field mapping configuration
-				const field_mapping = {
-					'date': 'date_select',
-					'deposit': 'deposit_select',
-					'withdrawal': 'withdrawal_select',
-					'description': 'description_select',
-					'reference_number': 'reference_number_select',
-					'amount': 'amount_select'
-				};
+				// Check if deposit and withdrawal use the same field
+				// amountField indicates bank explicitly maps to 'amount' field (single column for both deposit/withdrawal)
+				// OR both depositField and withdrawalField exist and point to the same file column
+				const isSameAmountField = amountField || (depositField && withdrawalField && depositField === withdrawalField);
 				
-				// Map fields based on bank transaction mapping
-				Object.entries(bank_mapping).forEach(([file_field, bank_field]) => {
-					if (bank_field === 'date_format') return; // Skip date_format
+				if (isSameAmountField) {
+					frm.set_value('same_amount_field', 1);
+					frm.refresh_field("same_amount_field");
 					
-					const form_field = field_mapping[bank_field];
-					if (form_field && frm.fields_dict[form_field]) {
-						frm.set_value(form_field, file_field);
-					}
-				});
+					// Set amount_select to the shared field
+					const sharedField = amountField || depositField || withdrawalField;
+					frm.set_value('amount_select', sharedField);
+                    
+					// Default positive field to Deposit - this means positive values in the amount column
+					// will be treated as deposits (money coming in) and negative values as withdrawals (money going out)
+					// This is the most common banking convention where positive = credit/deposit, negative = debit/withdrawal
+					frm.set_value('positive_field', 'Deposit');
+				} else {
+					frm.set_value('same_amount_field', 0);
+				}
+
+				// Set form field values directly from bank mapping
+				if (dateField) {
+					frm.set_value('date_select', dateField);
+				}
+				if (depositField) {
+					frm.set_value('deposit_select', depositField);
+				}
+				if (withdrawalField) {
+					frm.set_value('withdrawal_select', withdrawalField);
+				}
+				if (amountField) {
+					frm.set_value('amount_select', amountField);
+				}
+				if (descriptionField) {
+					frm.set_value('description_select', descriptionField);
+				}
+				if (referenceField) {
+					frm.set_value('reference_number_select', referenceField);
+				}
 				
 				// Set date format from bank
 				if (bank_mapping.date_format) {
@@ -114,6 +145,8 @@ frappe.ui.form.on('Bank Statement Importer', {
 				frm.refresh_field("withdrawal_select");
 				frm.refresh_field("description_select");
 				frm.refresh_field("reference_number_select");
+                frm.refresh_field("bank_account_select");
+                frm.refresh_field("date_format");
 			}
 		}).then((r) => {
 			if (r.message === true) {
