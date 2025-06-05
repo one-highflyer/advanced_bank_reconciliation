@@ -79,7 +79,6 @@ frappe.ui.form.on('Bank Statement Importer', {
 				const dateField = bank_mapping.date;
 				const depositField = bank_mapping.deposit;
 				const withdrawalField = bank_mapping.withdrawal;
-				const amountField = bank_mapping.amount;
 				const descriptionField = bank_mapping.description;
 				const referenceField = bank_mapping.reference_number;
 				
@@ -91,18 +90,18 @@ frappe.ui.form.on('Bank Statement Importer', {
 				frm.set_df_property("description_select", "options", options);
 				frm.set_df_property("reference_number_select", "options", options);
 				frm.set_df_property("bank_account_select", "options", options);
-				
+
+
 				// Check if deposit and withdrawal use the same field
-				// amountField indicates bank explicitly maps to 'amount' field (single column for both deposit/withdrawal)
-				// OR both depositField and withdrawalField exist and point to the same file column
-				const isSameAmountField = amountField || (depositField && withdrawalField && depositField === withdrawalField);
+				// This happens when both depositField and withdrawalField exist and point to the same file column
+				const isSameAmountField = depositField && withdrawalField && depositField === withdrawalField;
 				
 				if (isSameAmountField) {
 					frm.set_value('same_amount_field', 1);
 					frm.refresh_field("same_amount_field");
 					
 					// Set amount_select to the shared field
-					const sharedField = amountField || depositField || withdrawalField;
+					const sharedField = depositField || withdrawalField;
 					frm.set_value('amount_select', sharedField);
                     
 					// Default positive field to Deposit - this means positive values in the amount column
@@ -122,9 +121,6 @@ frappe.ui.form.on('Bank Statement Importer', {
 				}
 				if (withdrawalField) {
 					frm.set_value('withdrawal_select', withdrawalField);
-				}
-				if (amountField) {
-					frm.set_value('amount_select', amountField);
 				}
 				if (descriptionField) {
 					frm.set_value('description_select', descriptionField);
