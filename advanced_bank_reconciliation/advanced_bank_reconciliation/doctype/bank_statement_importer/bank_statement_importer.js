@@ -89,7 +89,6 @@ frappe.ui.form.on('Bank Statement Importer', {
 				frm.set_df_property("amount_select", "options", options);
 				frm.set_df_property("description_select", "options", options);
 				frm.set_df_property("reference_number_select", "options", options);
-				frm.set_df_property("bank_account_select", "options", options);
 
 
 				// Check if deposit and withdrawal use the same field
@@ -150,7 +149,6 @@ frappe.ui.form.on('Bank Statement Importer', {
 				frm.refresh_field("withdrawal_select");
 				frm.refresh_field("description_select");
 				frm.refresh_field("reference_number_select");
-                frm.refresh_field("bank_account_select");
                 frm.refresh_field("date_format");
 			}
 		}).then((r) => {
