@@ -261,7 +261,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		];
 
 		frappe.call({
-			method: "erpnext.accounts.doctype.bank_transaction.bank_transaction.get_doctypes_for_bank_reconciliation",
+			method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_doctypes_for_bank_reconciliation",
 			callback: (r) => {
 				$.each(r.message, (_i, entry) => {
 					if (_i % 3 == 0) {
@@ -561,28 +561,62 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			}
 		});
 		console.log("Selected vouchers", selectedRows);
-		let vouchers = [];
-		selectedRows.forEach((x) => {
-			vouchers.push({
-				payment_doctype: x[1],
-				payment_name: x[2],
-				amount: x[3],
+		
+		// Check if any of the selected rows are unpaid invoices
+		let hasUnpaidInvoices = selectedRows.some(x => x[1] === "Unpaid Sales Invoice" || x[1] === "Unpaid Purchase Invoice");
+		
+		if (hasUnpaidInvoices) {
+			// Handle unpaid invoices - create payment entries first
+			let invoices = [];
+			selectedRows.forEach((x) => {
+				if (x[1] === "Unpaid Sales Invoice" || x[1] === "Unpaid Purchase Invoice") {
+					invoices.push({
+						doctype: x[1],
+						name: x[2],
+						allocated_amount: x[3],
+					});
+				}
 			});
-		});
-		frappe.call({
-			method: "erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.reconcile_vouchers",
-			args: {
-				bank_transaction_name: this.bank_transaction.name,
-				vouchers: vouchers,
-			},
-			callback: (response) => {
-				const alert_string = __("Bank Transaction {0} Matched", [this.bank_transaction.name]);
-				frappe.show_alert(alert_string);
-				this.update_dt_cards(response.message);
-				this.reset_datatable();
-				this.dialog.hide();
-			},
-		});
+			
+			frappe.call({
+				method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.create_payment_entries_for_invoices",
+				args: {
+					bank_transaction_name: this.bank_transaction.name,
+					invoices: invoices,
+				},
+				callback: (response) => {
+					const alert_string = __("Payment Entries created and Bank Transaction {0} Matched", [this.bank_transaction.name]);
+					frappe.show_alert(alert_string);
+					this.update_dt_cards(response.message);
+					this.reset_datatable();
+					this.dialog.hide();
+				},
+			});
+		} else {
+			// Handle regular vouchers (Payment Entry, Journal Entry, etc.)
+			let vouchers = [];
+			selectedRows.forEach((x) => {
+				vouchers.push({
+					payment_doctype: x[1],
+					payment_name: x[2],
+					amount: x[3],
+				});
+			});
+			frappe.call({
+				method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.reconcile_vouchers",
+				args: {
+					bank_transaction_name: this.bank_transaction.name,
+					vouchers: vouchers,
+				},
+				callback: (response) => {
+					const alert_string = __("Bank Transaction {0} Matched", [this.bank_transaction.name]);
+					frappe.show_alert(alert_string);
+					this.update_dt_cards(response.message);
+					this.reset_datatable();
+					this.dialog.hide();
+				},
+			});
+		}
 	}
 
 	add_payment_entry(values) {
