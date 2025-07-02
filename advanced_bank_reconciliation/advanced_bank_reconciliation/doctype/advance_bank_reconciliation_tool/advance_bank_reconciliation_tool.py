@@ -1030,12 +1030,15 @@ def get_unpaid_pi_matching_query(exact_match):
 
 
 @frappe.whitelist()
-def create_payment_entries_for_invoices(bank_transaction_name, invoices):
-	"""Create payment entries for unpaid invoices and reconcile them with the bank transaction."""
+def create_payment_entries_for_invoices(bank_transaction_name, invoices, auto_reconcile=True):
+	"""Create payment entries for unpaid invoices and optionally reconcile them with the bank transaction."""
 	import json
 	
 	if isinstance(invoices, str):
 		invoices = json.loads(invoices)
+	
+	if isinstance(auto_reconcile, str):
+		auto_reconcile = auto_reconcile.lower() in ['true', '1', 'yes']
 	
 	bank_transaction = frappe.get_doc("Bank Transaction", bank_transaction_name)
 	
@@ -1043,6 +1046,7 @@ def create_payment_entries_for_invoices(bank_transaction_name, invoices):
 		frappe.throw(_("No invoices selected for payment entry creation"))
 	
 	vouchers = []
+	created_payment_entries = []
 	
 	for invoice_data in invoices:
 		invoice_name = invoice_data.get("name")
@@ -1078,17 +1082,26 @@ def create_payment_entries_for_invoices(bank_transaction_name, invoices):
 			party
 		)
 		
+		created_payment_entries.append(payment_entry.name)
+		
 		vouchers.append({
 			"payment_doctype": "Payment Entry",
 			"payment_name": payment_entry.name,
 			"amount": allocated_amount
 		})
 	
-	# Reconcile the vouchers with the bank transaction
-	if vouchers:
+	if not vouchers:
+		frappe.throw(_("No valid payment entries created"))
+	
+	# Optionally reconcile the vouchers with the bank transaction
+	if auto_reconcile:
 		return reconcile_vouchers(bank_transaction_name, json.dumps(vouchers))
 	else:
-		frappe.throw(_("No valid payment entries created"))
+		# Return the created payment entries for further processing
+		return {
+			"payment_entries": created_payment_entries,
+			"vouchers": vouchers
+		}
 
 
 def create_payment_entry_for_invoice(invoice_doc, bank_transaction, allocated_amount, payment_type, party_type, party):
