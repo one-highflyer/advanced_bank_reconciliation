@@ -179,7 +179,7 @@ def map_fields(data, data_headers, data_body):
 
 @frappe.whitelist()
 def get_last_transaction(bank_account):
-    print("Bank account: ", bank_account)
+    logger.info("Getting last transaction for bank account: %s", bank_account)
     # get the last bank transaction doc ordered by date desc for the given bank account
     last_transaction = frappe.get_all(
         "Bank Transaction",
@@ -213,11 +213,11 @@ def publish_records(data_import):
 			bank_transaction.update(transaction)
 			bank_transaction.insert()
 			bank_transaction.submit()
-		print("Bank transactions submitted")
+		logger.info("Bank transactions submitted successfully")
 		return True
-	except (ValueError, TypeError, KeyError) as e:
+	except Exception as e:
 		logger.error("Publish records error: %s", str(e))
-		print("Publish exception")
+		logger.info("Publish operation failed with exception")
 		return False
 	finally:
-		print("After publish")
+		logger.info("Publish records operation completed")
