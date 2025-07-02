@@ -34,6 +34,14 @@ def read_content(content, extension):
 	return data
 
 def start_import(file_path, bank_account):
+	# Validate bank_account parameter
+	if not bank_account:
+		frappe.throw(_("Bank Account is required"), title="Validation Error")
+	
+	# Validate that bank account exists
+	if not frappe.db.exists("Bank Account", bank_account):
+		frappe.throw(_("Bank Account '{0}' does not exist").format(bank_account), title="Validation Error")
+	
 	file_content = None
 	file_name = frappe.db.get_value("File", {"file_url": file_path})
 	if file_name:
@@ -46,13 +54,31 @@ def start_import(file_path, bank_account):
 	
 	bank_mapping = {}
 	bank_doc = frappe.get_doc("Bank Account", bank_account)
+	
+	# Validate that bank account is linked to a bank
 	if bank_doc.bank:
-		bank = frappe.get_doc("Bank", bank_doc.bank)
-		# Get bank transaction mapping - swap key and value
-		for mapping in bank.bank_transaction_mapping:
-			bank_mapping[mapping.bank_transaction_field] = mapping.file_field
-		# Get date format
-		bank_mapping['date_format'] = bank.bank_statement_date_format or "Auto"
+		try:
+			bank = frappe.get_doc("Bank", bank_doc.bank)
+			
+			# Safely get bank transaction mapping if it exists
+			if hasattr(bank, 'bank_transaction_mapping') and bank.bank_transaction_mapping:
+				# Get bank transaction mapping - swap key and value
+				for mapping in bank.bank_transaction_mapping:
+					if hasattr(mapping, 'bank_transaction_field') and hasattr(mapping, 'file_field'):
+						bank_mapping[mapping.bank_transaction_field] = mapping.file_field
+			
+			# Safely get date format with fallback
+			date_format = "Auto"  # Default fallback
+			if hasattr(bank, 'bank_statement_date_format') and bank.bank_statement_date_format:
+				date_format = bank.bank_statement_date_format
+			bank_mapping['date_format'] = date_format
+			
+		except frappe.DoesNotExistError:
+			frappe.throw(_("Bank '{0}' linked to Bank Account '{1}' does not exist").format(bank_doc.bank, bank_account), title="Validation Error")
+	else:
+		# Bank account not linked to any bank - use default date format
+		bank_mapping['date_format'] = "Auto"
+		frappe.msgprint(_("Bank Account '{0}' is not linked to any Bank. Using default settings.").format(bank_account), title="Warning")
 	
 	return {
 		"header": data_headers,
