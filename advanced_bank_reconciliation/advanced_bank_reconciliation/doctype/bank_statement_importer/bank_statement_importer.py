@@ -215,7 +215,7 @@ def publish_records(data_import):
 			bank_transaction.submit()
 		print("Bank transactions submitted")
 		return True
-	except (ValueError, TypeError, KeyError) as e:
+	except Exception as e:
 		logger.error("Publish records error: %s", str(e))
 		print("Publish exception")
 		return False

@@ -171,7 +171,7 @@
    "fieldname": "date_format",
    "fieldtype": "Select",
    "label": "Date Format",
-   "options": "Auto\nY/m/d\nd/m/Y\ndd/mm/YY\nm/d/Y\nm-d-Y\nd-m-Y\nY-m-d"
+   "options": "Auto\nY/m/d\nd/m/Y\ndd/mm/YY\nm/d/Y\nm-d-Y\nd-m-Y\nY-m-d\nY/d/m"
   }
  ],
  "index_web_pages_for_search": 1,
