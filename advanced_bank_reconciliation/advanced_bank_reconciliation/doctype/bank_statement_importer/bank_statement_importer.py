@@ -3,6 +3,7 @@
 import os
 import frappe
 import json
+import logging
 from datetime import datetime
 from frappe.model.document import Document
 from frappe.utils.xlsxutils import (
@@ -11,6 +12,10 @@ from frappe.utils.xlsxutils import (
 )
 from frappe.utils.csvutils import read_csv_content
 from frappe.utils import getdate
+from frappe import _
+
+logger = frappe.logger("bank_rec", allow_site=True)
+logger.setLevel(logging.INFO)
 
 class BankStatementImporter(Document):
 	pass
@@ -28,7 +33,15 @@ def read_content(content, extension):
 
 	return data
 
-def start_import(file_path):
+def start_import(file_path, bank_account):
+	# Validate bank_account parameter
+	if not bank_account:
+		frappe.throw(_("Bank Account is required"), title="Validation Error")
+	
+	# Validate that bank account exists
+	if not frappe.db.exists("Bank Account", bank_account):
+		frappe.throw(_("Bank Account '{0}' does not exist").format(bank_account), title="Validation Error")
+	
 	file_content = None
 	file_name = frappe.db.get_value("File", {"file_url": file_path})
 	if file_name:
@@ -38,9 +51,39 @@ def start_import(file_path):
 		data = read_content(file_content,extn)
 		data_headers = data[0]
 		data_body = data[1:]
+	
+	bank_mapping = {}
+	bank_doc = frappe.get_doc("Bank Account", bank_account)
+	
+	# Validate that bank account is linked to a bank
+	if bank_doc.bank:
+		try:
+			bank = frappe.get_doc("Bank", bank_doc.bank)
+			
+			# Safely get bank transaction mapping if it exists
+			if hasattr(bank, 'bank_transaction_mapping') and bank.bank_transaction_mapping:
+				# Get bank transaction mapping - swap key and value
+				for mapping in bank.bank_transaction_mapping:
+					if hasattr(mapping, 'bank_transaction_field') and hasattr(mapping, 'file_field'):
+						bank_mapping[mapping.bank_transaction_field] = mapping.file_field
+			
+			# Safely get date format with fallback
+			date_format = "Auto"  # Default fallback
+			if hasattr(bank, 'bank_statement_date_format') and bank.bank_statement_date_format:
+				date_format = bank.bank_statement_date_format
+			bank_mapping['date_format'] = date_format
+			
+		except frappe.DoesNotExistError:
+			frappe.throw(_("Bank '{0}' linked to Bank Account '{1}' does not exist").format(bank_doc.bank, bank_account), title="Validation Error")
+	else:
+		# Bank account not linked to any bank - use default date format
+		bank_mapping['date_format'] = "Auto"
+		frappe.msgprint(_("Bank Account '{0}' is not linked to any Bank. Using default settings.").format(bank_account), title="Warning")
+	
 	return {
 		"header": data_headers,
-		"body": data_body
+		"body": data_body,
+		"bank": bank_mapping
 	}
 
 def build_table(mapping, data_headers, data_body):
@@ -120,39 +163,38 @@ def parse_date(date_str, format):
     if format == "Auto":
         return getdate(date_str)
 
-    # Check with following formats
-    # Y/m/d
-    # d/m/Y
-    # dd/mm/YY
-    # m/d/Y
-    # m-d-Y
-    # d-m-Y
-    # Y-m-d
-    # Y/d/m
+    # Define format patterns mapping
+    format_patterns = {
+        "Y/m/d": "%Y/%m/%d",
+        "d/m/Y": "%d/%m/%Y", 
+        "dd/mm/YY": "%d/%m/%y",
+        "m/d/Y": "%m/%d/%Y",
+        "m-d-Y": "%m-%d-%Y",
+        "d-m-Y": "%d-%m-%Y",
+        "Y-m-d": "%Y-%m-%d",
+        "Y/d/m": "%Y/%d/%m"
+    }
 
-    if format == "Y/m/d":
-        return datetime.strptime(date_str, "%Y/%m/%d").date()
-    elif format == "d/m/Y":
-        return datetime.strptime(date_str, "%d/%m/%Y").date()
-    elif format == "dd/mm/YY":
-        return datetime.strptime(date_str, "%d/%m/%y").date()
-    elif format == "m/d/Y":
-        return datetime.strptime(date_str, "%m/%d/%Y").date()
-    elif format == "m-d-Y":
-        return datetime.strptime(date_str, "%m-%d-%Y").date()
-    elif format == "d-m-Y":
-        return datetime.strptime(date_str, "%d-%m-%Y").date()
-    elif format == "Y-m-d":
-        return datetime.strptime(date_str, "%Y-%m-%d").date()
-    elif format == "Y/d/m":
-        return datetime.strptime(date_str, "%Y/%d/%m").date()
-    else:
+    # Try to parse with specified format
+    pattern = format_patterns.get(format)
+    if pattern:
+        try:
+            return datetime.strptime(str(date_str), pattern).date()
+        except (ValueError, TypeError) as e:
+            logger.warning("Failed to parse date '%s' with format '%s': %s", date_str, format, str(e))
+            pass
+    
+    # Fallback to auto detection
+    try:
+        return getdate(date_str)
+    except (ValueError, TypeError) as e:
+        logger.error("Failed to parse date '%s' with auto detection: %s", date_str, str(e))
         return None
 
 
 @frappe.whitelist()
-def form_start_import(data_import):
-	out = start_import(data_import)
+def form_start_import(data_import, bank_account):
+	out = start_import(data_import, bank_account)
 	return out
 
 @frappe.whitelist()
@@ -163,7 +205,7 @@ def map_fields(data, data_headers, data_body):
 
 @frappe.whitelist()
 def get_last_transaction(bank_account):
-    print("Bank account: ", bank_account)
+    logger.info("Getting last transaction for bank account: %s", bank_account)
     # get the last bank transaction doc ordered by date desc for the given bank account
     last_transaction = frappe.get_all(
         "Bank Transaction",
@@ -197,10 +239,11 @@ def publish_records(data_import):
 			bank_transaction.update(transaction)
 			bank_transaction.insert()
 			bank_transaction.submit()
-		print("Bank transactions submitted")
+		logger.info("Bank transactions submitted successfully")
 		return True
-	except Exception:
-		print("Publish exception")
+	except Exception as e:
+		logger.error("Publish records error: %s", str(e))
+		logger.info("Publish operation failed with exception")
 		return False
 	finally:
-		print("After publish")
+		logger.info("Publish records operation completed")

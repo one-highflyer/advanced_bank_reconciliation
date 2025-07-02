@@ -171,13 +171,13 @@
    "fieldname": "date_format",
    "fieldtype": "Select",
    "label": "Date Format",
-   "options": "Auto\nY/m/d\nd/m/Y\ndd/mm/YY\nm/d/Y\nm-d-Y\nd-m-Y\nY-m-d"
+   "options": "Auto\nY/m/d\nd/m/Y\ndd/mm/YY\nm/d/Y\nm-d-Y\nd-m-Y\nY-m-d\nY/d/m"
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2024-07-08 17:15:02.148515",
+ "modified": "2025-06-03 22:05:59.353802",
  "modified_by": "Administrator",
  "module": "Advanced Bank Reconciliation",
  "name": "Bank Statement Importer",

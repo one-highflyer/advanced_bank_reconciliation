@@ -58,7 +58,10 @@ frappe.ui.form.on('Bank Statement Importer', {
 
 		frm.call({
 			method: "form_start_import",
-			args: { data_import: frm.doc.import_file },
+			args: { 
+				data_import: frm.doc.import_file,
+				bank_account: frm.doc.bank_account
+			},
 			btn: frm.page.btn_primary,
 			freeze: true,
 			callback: function (data) {
@@ -67,18 +70,86 @@ frappe.ui.form.on('Bank Statement Importer', {
 				const options = data?.message?.header?.join('\n') ?? "";
 				data_headers = data?.message?.header;
 				data_body = data?.message?.body;
+				
+				// Apply bank mapping if available
+				const bank_mapping = data?.message?.bank || {};
+				console.log("BANK MAPPING", bank_mapping);
+				
+				// Extract file field names directly from bank mapping (now bank fields are keys)
+				const dateField = bank_mapping.date;
+				const depositField = bank_mapping.deposit;
+				const withdrawalField = bank_mapping.withdrawal;
+				const descriptionField = bank_mapping.description;
+				const referenceField = bank_mapping.reference_number;
+				
+				// Set field options
 				frm.set_df_property("date_select", "options", options);
 				frm.set_df_property("deposit_select", "options", options);
 				frm.set_df_property("withdrawal_select", "options", options);
 				frm.set_df_property("amount_select", "options", options);
 				frm.set_df_property("description_select", "options", options);
 				frm.set_df_property("reference_number_select", "options", options);
+
+
+				// Check if deposit and withdrawal use the same field
+				// This happens when both depositField and withdrawalField exist and point to the same file column
+				const isSameAmountField = depositField && withdrawalField && depositField === withdrawalField;
+				
+				if (isSameAmountField) {
+					frm.set_value('same_amount_field', 1);
+					
+					// Set amount_select to the shared field
+					const sharedField = depositField || withdrawalField;
+					frm.set_value('amount_select', sharedField);
+                    
+					// Clear deposit_select and withdrawal_select to avoid redundancy
+					frm.set_value('deposit_select', '');
+					frm.set_value('withdrawal_select', '');
+                    
+					// Default positive field to Deposit - this means positive values in the amount column
+					// will be treated as deposits (money coming in) and negative values as withdrawals (money going out)
+					// This is the most common banking convention where positive = credit/deposit, negative = debit/withdrawal
+					frm.set_value('positive_field', 'Deposit');
+				} else {
+					frm.set_value('same_amount_field', 0);
+					frm.set_value('positive_field', '');
+				}
+
+				// Set form field values directly from bank mapping
+				if (dateField) {
+					frm.set_value('date_select', dateField);
+				}
+				if (!isSameAmountField) {
+					// Only set individual deposit/withdrawal fields if not using same amount field
+					if (depositField) {
+						frm.set_value('deposit_select', depositField);
+					}
+					if (withdrawalField) {
+						frm.set_value('withdrawal_select', withdrawalField);
+					}
+				}
+				if (descriptionField) {
+					frm.set_value('description_select', descriptionField);
+				}
+				if (referenceField) {
+					frm.set_value('reference_number_select', referenceField);
+				}
+				
+				// Set date format from bank
+				if (bank_mapping.date_format) {
+					frm.set_value('date_format', bank_mapping.date_format);
+				}
+				
+				// Refresh all fields consistently
+				frm.refresh_field("same_amount_field");
+				frm.refresh_field("positive_field");
 				frm.refresh_field("date_select");
 				frm.refresh_field("deposit_select");
 				frm.refresh_field("amount_select");
 				frm.refresh_field("withdrawal_select");
 				frm.refresh_field("description_select");
 				frm.refresh_field("reference_number_select");
+                frm.refresh_field("date_format");
 			}
 		}).then((r) => {
 			if (r.message === true) {
@@ -219,5 +290,45 @@ frappe.ui.form.on('Bank Statement Importer', {
 		frm.refresh_field("data_fetched");
 		frm.refresh_field("fields_mapped");
 		frm.get_field("import_preview").$wrapper.empty();
+	},
+	
+	same_amount_field(frm) {
+		// Handle manual changes to same_amount_field checkbox
+		if (frm.doc.same_amount_field) {
+			// When checked, clear individual deposit/withdrawal selects to avoid redundancy
+			frm.set_value('deposit_select', '');
+			frm.set_value('withdrawal_select', '');
+			
+			// Set default positive field if not already set
+			if (!frm.doc.positive_field) {
+				frm.set_value('positive_field', 'Deposit');
+			}
+		} else {
+			// When unchecked, clear amount_select and positive_field
+			frm.set_value('amount_select', '');
+			frm.set_value('positive_field', '');
+		}
+		
+		// Refresh all related fields consistently
+		frm.refresh_field("deposit_select");
+		frm.refresh_field("withdrawal_select");
+		frm.refresh_field("amount_select");
+		frm.refresh_field("positive_field");
+	},
+	
+	amount_select(frm) {
+		// When amount_select changes and same_amount_field is checked
+		if (frm.doc.same_amount_field && frm.doc.amount_select) {
+			// Ensure deposit and withdrawal selects remain clear
+			frm.set_value('deposit_select', '');
+			frm.set_value('withdrawal_select', '');
+			frm.refresh_field("deposit_select");
+			frm.refresh_field("withdrawal_select");
+		}
+	},
+	
+	positive_field(frm) {
+		// Refresh the field when positive_field changes
+		frm.refresh_field("positive_field");
 	}
 });
