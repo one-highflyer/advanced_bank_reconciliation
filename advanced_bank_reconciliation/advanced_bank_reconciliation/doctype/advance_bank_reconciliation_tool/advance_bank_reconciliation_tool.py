@@ -26,6 +26,20 @@ class AdvanceBankReconciliationTool(Document):
 
 
 @frappe.whitelist()
+def get_doctypes_for_bank_reconciliation():
+	"""Return available document types for bank reconciliation."""
+	return [
+		"Payment Entry",
+		"Journal Entry", 
+		"Sales Invoice",
+		"Purchase Invoice",
+		"Unpaid Sales Invoice",
+		"Unpaid Purchase Invoice",
+		"Bank Transaction"
+	]
+
+
+@frappe.whitelist()
 def get_bank_transactions(bank_account, from_date=None, to_date=None):
 	# returns bank transactions for a bank account
 	filters = []
@@ -649,10 +663,18 @@ def get_matching_queries(
 	if transaction.deposit > 0.0 and "sales_invoice" in document_types:
 		query = get_si_matching_query(exact_match)
 		queries.append(query)
+	
+	if transaction.deposit > 0.0 and "unpaid_sales_invoice" in document_types:
+		query = get_unpaid_si_matching_query(exact_match)
+		queries.append(query)
 
 	if transaction.withdrawal > 0.0:
 		if "purchase_invoice" in document_types:
 			query = get_pi_matching_query(exact_match)
+			queries.append(query)
+		
+		if "unpaid_purchase_invoice" in document_types:
+			query = get_unpaid_pi_matching_query(exact_match)
 			queries.append(query)
 
 	if "bank_transaction" in document_types:
@@ -953,6 +975,177 @@ def get_pi_matching_query(exact_match):
 			AND cash_bank_account = %(bank_account)s
 			AND paid_amount {'= %(amount)s' if exact_match else '> 0.0'}
 	"""
+
+
+def get_unpaid_si_matching_query(exact_match):
+	# get matching unpaid sales invoice query
+	return f"""
+		SELECT
+			( CASE WHEN customer = %(party)s THEN 1 ELSE 0 END
+			+ CASE WHEN outstanding_amount = %(amount)s THEN 1 ELSE 0 END
+			+ 1 ) AS rank,
+			'Unpaid Sales Invoice' as doctype,
+			name,
+			outstanding_amount as paid_amount,
+			'' as reference_no,
+			posting_date as reference_date,
+			customer as party,
+			'Customer' as party_type,
+			posting_date,
+			currency
+		FROM
+			`tabSales Invoice`
+		WHERE
+			docstatus = 1
+			AND status NOT IN ('Paid', 'Cancelled', 'Credit Note Issued')
+			AND outstanding_amount {'= %(amount)s' if exact_match else '> 0.0'}
+		ORDER BY posting_date DESC
+	"""
+
+
+def get_unpaid_pi_matching_query(exact_match):
+	# get matching unpaid purchase invoice query
+	return f"""
+		SELECT
+			( CASE WHEN supplier = %(party)s THEN 1 ELSE 0 END
+			+ CASE WHEN outstanding_amount = %(amount)s THEN 1 ELSE 0 END
+			+ 1 ) AS rank,
+			'Unpaid Purchase Invoice' as doctype,
+			name,
+			outstanding_amount as paid_amount,
+			'' as reference_no,
+			posting_date as reference_date,
+			supplier as party,
+			'Supplier' as party_type,
+			posting_date,
+			currency
+		FROM
+			`tabPurchase Invoice`
+		WHERE
+			docstatus = 1
+			AND status NOT IN ('Paid', 'Cancelled', 'Debit Note Issued')
+			AND outstanding_amount {'= %(amount)s' if exact_match else '> 0.0'}
+		ORDER BY posting_date DESC
+	"""
+
+
+@frappe.whitelist()
+def create_payment_entries_for_invoices(bank_transaction_name, invoices, auto_reconcile=True):
+	"""Create payment entries for unpaid invoices and optionally reconcile them with the bank transaction."""
+	import json
+	
+	if isinstance(invoices, str):
+		invoices = json.loads(invoices)
+	
+	if isinstance(auto_reconcile, str):
+		auto_reconcile = auto_reconcile.lower() in ['true', '1', 'yes']
+	
+	bank_transaction = frappe.get_doc("Bank Transaction", bank_transaction_name)
+	
+	if not invoices:
+		frappe.throw(_("No invoices selected for payment entry creation"))
+	
+	vouchers = []
+	created_payment_entries = []
+	
+	for invoice_data in invoices:
+		invoice_name = invoice_data.get("name")
+		invoice_type = invoice_data.get("doctype")
+		allocated_amount = flt(invoice_data.get("allocated_amount", 0))
+		
+		if not invoice_name or not invoice_type or allocated_amount <= 0:
+			continue
+			
+		# Determine the actual doctype (remove 'Unpaid ' prefix)
+		actual_doctype = invoice_type.replace("Unpaid ", "")
+		
+		# Get the invoice document
+		invoice_doc = frappe.get_doc(actual_doctype, invoice_name)
+		
+		# Determine payment type based on invoice type
+		if actual_doctype == "Sales Invoice":
+			payment_type = "Receive"
+			party_type = "Customer"
+			party = invoice_doc.customer
+		else:  # Purchase Invoice
+			payment_type = "Pay"
+			party_type = "Supplier"
+			party = invoice_doc.supplier
+		
+		# Create payment entry
+		payment_entry = create_payment_entry_for_invoice(
+			invoice_doc,
+			bank_transaction,
+			allocated_amount,
+			payment_type,
+			party_type,
+			party
+		)
+		
+		created_payment_entries.append(payment_entry.name)
+		
+		vouchers.append({
+			"payment_doctype": "Payment Entry",
+			"payment_name": payment_entry.name,
+			"amount": allocated_amount
+		})
+	
+	if not vouchers:
+		frappe.throw(_("No valid payment entries created"))
+	
+	# Optionally reconcile the vouchers with the bank transaction
+	if auto_reconcile:
+		return reconcile_vouchers(bank_transaction_name, json.dumps(vouchers))
+	else:
+		# Return the created payment entries for further processing
+		return {
+			"payment_entries": created_payment_entries,
+			"vouchers": vouchers
+		}
+
+
+def create_payment_entry_for_invoice(invoice_doc, bank_transaction, allocated_amount, payment_type, party_type, party):
+	"""Create a payment entry for an unpaid invoice."""
+	from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
+	
+	# Get the bank account from bank transaction
+	bank_account_doc = frappe.get_doc("Bank Account", bank_transaction.bank_account)
+	bank_gl_account = bank_account_doc.account
+	
+	# Get payment entry template from the invoice
+	payment_entry = get_payment_entry(invoice_doc.doctype, invoice_doc.name)
+	
+	# Set the correct bank account based on payment type
+	if payment_type == "Receive":
+		payment_entry.paid_to = bank_gl_account
+	else:  # Pay
+		payment_entry.paid_from = bank_gl_account
+	
+	# Set the payment amount to the allocated amount
+	payment_entry.paid_amount = allocated_amount
+	payment_entry.received_amount = allocated_amount
+	
+	# Set reference details from bank transaction
+	payment_entry.reference_no = bank_transaction.reference_number or bank_transaction.description
+	payment_entry.reference_date = bank_transaction.date
+	payment_entry.posting_date = bank_transaction.date
+	
+	# Update the references table to allocate only the specified amount
+	if payment_entry.references:
+		for ref in payment_entry.references:
+			if ref.reference_name == invoice_doc.name:
+				ref.allocated_amount = min(allocated_amount, ref.outstanding_amount)
+				break
+	
+	# Validate the payment entry
+	payment_entry.validate()
+	
+	# Save and submit the payment entry
+	payment_entry.insert()
+	payment_entry.submit()
+	
+	return payment_entry
+
 
 @frappe.whitelist()
 def get_cleared_balance(bank_account, from_date, till_date):
