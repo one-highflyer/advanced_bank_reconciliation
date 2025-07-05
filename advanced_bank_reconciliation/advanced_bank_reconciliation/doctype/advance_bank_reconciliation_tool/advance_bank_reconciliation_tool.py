@@ -1279,50 +1279,67 @@ def validate_bank_transactions(from_date, to_date, company, bank_account):
 	bt_payment = frappe.qb.DocType("Bank Transaction Payments")
 	payment_entry = frappe.qb.DocType("Payment Entry")
 
-	query = (
-		frappe.qb.from_(bank_transaction)
-		.select(
-			bank_transaction.name,
-			bank_transaction.date,
-			bank_transaction.deposit,
-			bank_transaction.withdrawal,
-			bank_transaction.unallocated_amount,
-			bank_transaction.party_type,
-			bank_transaction.party,
-			bt_payment.payment_document,
-			bt_payment.payment_entry,
-			bt_payment.allocated_amount,
-			payment_entry.paid_amount,
-			payment_entry.payment_type
-		)
-		.inner_join(bt_payment).on(bank_transaction.name == bt_payment.parent)
-		.inner_join(payment_entry).on(bt_payment.payment_entry == payment_entry.name)
-		.where(bank_transaction.company == company)
-		.where(bank_transaction.bank_account == bank_account)
-		.where(bank_transaction.date >= from_date)
-		.where(bank_transaction.date <= to_date)
-		.where(bank_transaction.docstatus == 1)
-		.where(bt_payment.payment_document == "Payment Entry")
-		.where(payment_entry.clearance_date.isnull() | (payment_entry.clearance_date != bank_transaction.date))
-		.orderby(bank_transaction.date)
+	# Get the bank account's GL account for filtering
+	bank_gl_account = frappe.db.get_value("Bank Account", bank_account, "account")
+	
+	# Use SQL query to get the correct payment amount based on payment type
+	entries = frappe.db.sql(
+		"""
+		SELECT 
+			bt.name,
+			bt.date,
+			bt.deposit,
+			bt.withdrawal,
+			bt.unallocated_amount,
+			bt.party_type,
+			bt.party,
+			btp.payment_document,
+			btp.payment_entry,
+			btp.allocated_amount,
+			pe.payment_type,
+			CASE 
+				WHEN pe.payment_type = 'Receive' AND pe.paid_to = %(bank_gl_account)s THEN pe.received_amount
+				WHEN pe.payment_type = 'Pay' AND pe.paid_from = %(bank_gl_account)s THEN pe.paid_amount
+				ELSE 0 
+			END as payment_amount
+		FROM `tabBank Transaction` as bt
+		INNER JOIN `tabBank Transaction Payments` as btp ON bt.name = btp.parent
+		INNER JOIN `tabPayment Entry` as pe ON btp.payment_entry = pe.name
+		WHERE 
+			bt.company = %(company)s
+			AND bt.bank_account = %(bank_account)s
+			AND bt.date >= %(from_date)s
+			AND bt.date <= %(to_date)s
+			AND bt.docstatus = 1
+			AND btp.payment_document = 'Payment Entry'
+			AND (pe.clearance_date IS NULL OR pe.clearance_date != bt.date)
+		ORDER BY bt.date
+		""",
+		{
+			"bank_gl_account": bank_gl_account,
+			"company": company,
+			"bank_account": bank_account,
+			"from_date": from_date,
+			"to_date": to_date,
+		},
+		as_dict=True
 	)
 
-	entries = query.run(as_dict=True)
 	logger.info(f"Found {len(entries)} entries with incorrect clearance date")
 	for entry in entries:
 		if entry.deposit > 0.0:
-			if entry.payment_type == "Receive" and entry.allocated_amount == entry.paid_amount:
-				logger.info(f"Setting clearance date for {entry.payment_entry}. Payment type {entry.payment_type}, Allocated amount {entry.allocated_amount}, Paid amount {entry.paid_amount}, Deposit {entry.deposit}")
+			if entry.payment_type == "Receive" and entry.allocated_amount == entry.payment_amount:
+				logger.info(f"Setting clearance date for {entry.payment_entry}. Payment type {entry.payment_type}, Allocated amount {entry.allocated_amount}, Payment amount {entry.payment_amount}, Deposit {entry.deposit}")
 				frappe.db.set_value("Payment Entry", entry.payment_entry, "clearance_date", entry.date)
-			elif entry.payment_type == "Pay" and entry.allocated_amount == -entry.paid_amount:
-				logger.info(f"Setting clearance date for {entry.payment_entry}. Payment type {entry.payment_type}, Allocated amount {entry.allocated_amount}, Paid amount {entry.paid_amount}, Deposit {entry.deposit}")
+			elif entry.payment_type == "Pay" and entry.allocated_amount == -entry.payment_amount:
+				logger.info(f"Setting clearance date for {entry.payment_entry}. Payment type {entry.payment_type}, Allocated amount {entry.allocated_amount}, Payment amount {entry.payment_amount}, Deposit {entry.deposit}")
 				frappe.db.set_value("Payment Entry", entry.payment_entry, "clearance_date", entry.date)
 		else:
-			if entry.payment_type == "Receive" and entry.allocated_amount == -entry.paid_amount:
-				logger.info(f"Setting clearance date for {entry.payment_entry}. Payment type {entry.payment_type}, Allocated amount {entry.allocated_amount}, Paid amount {entry.paid_amount}, Withdrawal {entry.withdrawal}")
+			if entry.payment_type == "Receive" and entry.allocated_amount == -entry.payment_amount:
+				logger.info(f"Setting clearance date for {entry.payment_entry}. Payment type {entry.payment_type}, Allocated amount {entry.allocated_amount}, Payment amount {entry.payment_amount}, Withdrawal {entry.withdrawal}")
 				frappe.db.set_value("Payment Entry", entry.payment_entry, "clearance_date", entry.date)
-			elif entry.payment_type == "Pay" and entry.allocated_amount == entry.paid_amount:
-				logger.info(f"Setting clearance date for {entry.payment_entry}. Payment type {entry.payment_type}, Allocated amount {entry.allocated_amount}, Paid amount {entry.paid_amount}, Withdrawal {entry.withdrawal}")
+			elif entry.payment_type == "Pay" and entry.allocated_amount == entry.payment_amount:
+				logger.info(f"Setting clearance date for {entry.payment_entry}. Payment type {entry.payment_type}, Allocated amount {entry.allocated_amount}, Payment amount {entry.payment_amount}, Withdrawal {entry.withdrawal}")
 				frappe.db.set_value("Payment Entry", entry.payment_entry, "clearance_date", entry.date)
 
 	jle_allocations = frappe.db.sql(

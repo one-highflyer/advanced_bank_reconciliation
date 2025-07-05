@@ -41,7 +41,13 @@
 - Use `received_amount` for Receive payments, `paid_amount` for Pay payments
 - Ensured consistency with the matching query logic
 
-#### 3. Journal Entry Query (already correct)
+#### 3. Updated `validate_bank_transactions` function (lines 1280-1350)
+- Fixed the query to use correct payment amount based on payment type
+- For Receive payments: Use `received_amount` when `paid_to = bank_account`
+- For Pay payments: Use `paid_amount` when `paid_from = bank_account`
+- Updated validation logic to compare `allocated_amount` with correct `payment_amount`
+
+#### 4. Journal Entry Query (already correct)
 - The `get_je_matching_query` already uses `debit_in_account_currency` and `credit_in_account_currency`
 - No changes needed as Journal Entries store account currency amounts directly
 
@@ -58,7 +64,8 @@ To verify the fixes work correctly, test with:
 1. A USD bank account in a company with LKR base currency
 2. Payment entries made in USD that should match USD bank transactions
 3. Cleared balance calculations for foreign currency accounts
-4. Mixed currency scenarios with both local and foreign currency transactions
+4. Bank transaction validation for foreign currency payment entries
+5. Mixed currency scenarios with both local and foreign currency transactions
 
 ## Notes
 
