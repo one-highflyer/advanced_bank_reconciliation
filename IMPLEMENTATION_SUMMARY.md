@@ -213,7 +213,7 @@ Use ERPNext's standard Bank Reconciliation Statement and Bank Clearance Summary 
 1. Test with various document types (Payment Entry, Journal Entry, Sales Invoice, Purchase Invoice)
 2. Verify proper error logging with stack traces
 3. Test document type detection and meta validation
-4. Monitor enhanced reporting functionality
+4. Test batch validation functionality
 
 ## Benefits Summary
 

@@ -1568,8 +1568,7 @@ def validate_single_bank_transaction(bank_transaction_name):
 					)
 					
 					if should_set_clearance and (not payment_doc.clearance_date or getdate(payment_doc.clearance_date) != getdate(bank_transaction.date)):
-						payment_doc.clearance_date = bank_transaction.date
-						payment_doc.save()
+						payment_doc.db_set("clearance_date", bank_transaction.date)
 						logger.info("Set clearance date for Payment Entry %s to %s", payment_doc.name, bank_transaction.date)
 						clearance_date_set = True
 				
@@ -1580,25 +1579,18 @@ def validate_single_bank_transaction(bank_transaction_name):
 				
 				elif payment_entry.payment_document == "Sales Invoice":
 					# Handle Sales Invoice - set clearance date on Sales Invoice Payment child table
-					invoice_updated = False
 					for sales_payment in payment_doc.payments:
 						if sales_payment.account == bank_gl_account:
 							if not sales_payment.clearance_date or getdate(sales_payment.clearance_date) != getdate(bank_transaction.date):
-								sales_payment.clearance_date = bank_transaction.date
+								frappe.db.set_value("Sales Invoice Payment", sales_payment.name, "clearance_date", bank_transaction.date)
 								logger.info("Set clearance date for Sales Invoice Payment %s to %s", sales_payment.name, bank_transaction.date)
-								invoice_updated = True
 								clearance_date_set = True
-					
-					# Save the document to persist child table changes
-					if invoice_updated:
-						payment_doc.save()
 				
 				elif payment_entry.payment_document == "Purchase Invoice":
 					# Handle Purchase Invoice - set clearance date directly on the document
 					if hasattr(payment_doc, 'clearance_date'):
 						if not payment_doc.clearance_date or getdate(payment_doc.clearance_date) != getdate(bank_transaction.date):
-							payment_doc.clearance_date = bank_transaction.date
-							payment_doc.save()
+							payment_doc.db_set("clearance_date", bank_transaction.date)
 							logger.info("Set clearance date for Purchase Invoice %s to %s", payment_doc.name, bank_transaction.date)
 							clearance_date_set = True
 			
@@ -1655,63 +1647,6 @@ def validate_payment_entry_clearance(bank_transaction, payment_entry, payment_do
 		return False
 
 
-def validate_bank_transactions_for_account(bank_account, from_date=None, to_date=None):
-	"""
-	Validate all bank transactions for a specific bank account within a date range
-	This is a utility function that can be called programmatically
-	"""
-	try:
-		# Get company for the bank account
-		company = frappe.db.get_value("Bank Account", bank_account, "company")
-		
-		if not company:
-			logger.error("Could not find company for bank account %s", bank_account)
-			return
-		
-		# Set default date range if not provided
-		if not from_date:
-			from_date = frappe.utils.add_days(frappe.utils.today(), -30)  # Last 30 days
-		if not to_date:
-			to_date = frappe.utils.today()
-		
-		# Get all unallocated bank transactions in the date range
-		bank_transactions = frappe.db.sql(
-			"""
-			SELECT name 
-			FROM `tabBank Transaction`
-			WHERE 
-				bank_account = %(bank_account)s
-				AND company = %(company)s
-				AND docstatus = 1
-				AND date >= %(from_date)s
-				AND date <= %(to_date)s
-				AND unallocated_amount = 0.0
-			ORDER BY date
-			""",
-			{
-				"bank_account": bank_account,
-				"company": company,
-				"from_date": from_date,
-				"to_date": to_date,
-			},
-			as_dict=True
-		)
-		
-		logger.info("Found %s bank transactions to validate for account %s", len(bank_transactions), bank_account)
-		
-		# Validate each transaction
-		for bt in bank_transactions:
-			try:
-				validate_single_bank_transaction(bt.name)
-			except Exception as e:
-				logger.error("Error validating bank transaction %s: %s", bt.name, str(e), exc_info=True)
-				continue
-		
-		return {"success": True, "validated_count": len(bank_transactions)}
-		
-	except Exception as e:
-		logger.error("Error validating bank transactions for account %s: %s", bank_account, str(e), exc_info=True)
-		return {"success": False, "error": str(e)}
 
 
 def clear_journal_entry(journal_entry_name):
