@@ -1,10 +1,6 @@
 import frappe
 import logging
 from erpnext.accounts.doctype.bank_transaction.bank_transaction import BankTransaction
-from frappe import _
-from frappe.model.document import Document
-from frappe.utils import logger, getdate
-import json
 
 logger = frappe.logger("bank_rec")
 logger.setLevel(logging.INFO)
@@ -118,8 +114,8 @@ class ExtendedBankTransaction(BankTransaction):
 				):
 					found = True
 
-			print("Voucher: %s", voucher)
 			if not found:
+				logger.info("Voucher: %s being added to bank transaction %s", voucher, self.name)
 				pe = {
 					"payment_document": voucher["payment_doctype"],
 					"payment_entry": voucher["payment_name"],
