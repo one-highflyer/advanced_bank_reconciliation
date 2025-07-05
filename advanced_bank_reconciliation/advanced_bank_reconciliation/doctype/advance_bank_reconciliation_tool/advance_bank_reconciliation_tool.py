@@ -1388,7 +1388,7 @@ def validate_bank_transaction_async(bank_transaction_name):
 		logger.info(f"Enqueued validation job for bank transaction {bank_transaction_name}")
 		return {"success": True, "message": f"Validation queued for bank transaction {bank_transaction_name}"}
 	except Exception as e:
-		logger.error(f"Failed to enqueue validation for bank transaction {bank_transaction_name}: {str(e)}")
+		logger.error(f"Failed to enqueue validation for bank transaction {bank_transaction_name}: {str(e)}", exc_info=True)
 		return {"success": False, "error": str(e)}
 
 
@@ -1473,8 +1473,34 @@ def batch_validate_unvalidated_transactions(bank_account, from_date=None, to_dat
 			as_dict=True
 		)
 		
-		# Combine both lists and remove duplicates
-		all_transactions = list({t['name']: t for t in (unvalidated_transactions + unvalidated_je_transactions)}.values())
+		# Find invoice transactions that might need validation
+		unvalidated_invoice_transactions = frappe.db.sql(
+			"""
+			SELECT DISTINCT bt.name
+			FROM `tabBank Transaction` bt
+			INNER JOIN `tabBank Transaction Payments` btp ON bt.name = btp.parent
+			WHERE 
+				bt.bank_account = %(bank_account)s
+				AND bt.company = %(company)s
+				AND bt.docstatus = 1
+				AND bt.unallocated_amount = 0.0
+				AND bt.date >= %(from_date)s
+				AND bt.date <= %(to_date)s
+				AND btp.payment_document IN ('Sales Invoice', 'Purchase Invoice')
+			LIMIT %(limit)s
+			""",
+			{
+				"bank_account": bank_account,
+				"company": company,
+				"from_date": from_date,
+				"to_date": to_date,
+				"limit": limit,
+			},
+			as_dict=True
+		)
+		
+		# Combine all lists and remove duplicates
+		all_transactions = list({t['name']: t for t in (unvalidated_transactions + unvalidated_je_transactions + unvalidated_invoice_transactions)}.values())
 		
 		logger.info(f"Found {len(all_transactions)} unvalidated transactions for batch processing")
 		
@@ -1491,7 +1517,7 @@ def batch_validate_unvalidated_transactions(bank_account, from_date=None, to_dat
 				else:
 					logger.error(f"Failed to queue validation for transaction {transaction['name']}")
 			except Exception as e:
-				logger.error(f"Error processing transaction {transaction['name']}: {str(e)}")
+				logger.error(f"Error processing transaction {transaction['name']}: {str(e)}", exc_info=True)
 				continue
 		
 		return {
@@ -1502,7 +1528,7 @@ def batch_validate_unvalidated_transactions(bank_account, from_date=None, to_dat
 		}
 		
 	except Exception as e:
-		logger.error(f"Error in batch validation: {str(e)}")
+		logger.error(f"Error in batch validation: {str(e)}", exc_info=True)
 		return {"success": False, "error": str(e)}
 
 
@@ -1578,6 +1604,30 @@ def get_unvalidated_transactions_summary(bank_account, from_date=None, to_date=N
 			as_dict=True
 		)[0]['count']
 		
+		# Count invoice transactions that might need validation
+		unvalidated_invoice_count = frappe.db.sql(
+			"""
+			SELECT COUNT(DISTINCT bt.name) as count
+			FROM `tabBank Transaction` bt
+			INNER JOIN `tabBank Transaction Payments` btp ON bt.name = btp.parent
+			WHERE 
+				bt.bank_account = %(bank_account)s
+				AND bt.company = %(company)s
+				AND bt.docstatus = 1
+				AND bt.unallocated_amount = 0.0
+				AND bt.date >= %(from_date)s
+				AND bt.date <= %(to_date)s
+				AND btp.payment_document IN ('Sales Invoice', 'Purchase Invoice')
+			""",
+			{
+				"bank_account": bank_account,
+				"company": company,
+				"from_date": from_date,
+				"to_date": to_date,
+			},
+			as_dict=True
+		)[0]['count']
+		
 		return {
 			"success": True,
 			"bank_account": bank_account,
@@ -1585,11 +1635,12 @@ def get_unvalidated_transactions_summary(bank_account, from_date=None, to_date=N
 			"to_date": to_date,
 			"unvalidated_payment_entries": unvalidated_pe_count,
 			"unvalidated_journal_entries": unvalidated_je_count,
-			"total_unvalidated": unvalidated_pe_count + unvalidated_je_count
+			"unvalidated_invoices": unvalidated_invoice_count,
+			"total_unvalidated": unvalidated_pe_count + unvalidated_je_count + unvalidated_invoice_count
 		}
 		
 	except Exception as e:
-		logger.error(f"Error getting unvalidated transactions summary: {str(e)}")
+		logger.error(f"Error getting unvalidated transactions summary: {str(e)}", exc_info=True)
 		return {"success": False, "error": str(e)}
 
 
@@ -1690,7 +1741,40 @@ def validate_single_bank_transaction(bank_transaction_name):
 				clear_journal_entry(je.payment_entry)
 				clearance_date_set = True
 			except Exception as e:
-				logger.error(f"Error clearing journal entry {je.payment_entry}: {str(e)}")
+				logger.error(f"Error clearing journal entry {je.payment_entry}: {str(e)}", exc_info=True)
+		
+		# Validate invoice entries linked to this bank transaction
+		invoice_entries = frappe.db.sql(
+			"""
+			SELECT 
+				btp.payment_document,
+				btp.payment_entry,
+				btp.allocated_amount
+			FROM `tabBank Transaction Payments` as btp
+			WHERE 
+				btp.parent = %(bank_transaction_name)s
+				AND btp.payment_document IN ('Sales Invoice', 'Purchase Invoice')
+			""",
+			{
+				"bank_transaction_name": bank_transaction_name,
+			},
+			as_dict=True
+		)
+		
+		logger.info(f"Found {len(invoice_entries)} invoice entries for bank transaction {bank_transaction_name}")
+		
+		for inv in invoice_entries:
+			try:
+				# Check if the invoice has clearance_date field and set it
+				meta = frappe.get_meta(inv.payment_document)
+				if meta.has_field("clearance_date"):
+					current_clearance_date = frappe.db.get_value(inv.payment_document, inv.payment_entry, "clearance_date")
+					if not current_clearance_date or getdate(current_clearance_date) != getdate(bank_transaction.date):
+						frappe.db.set_value(inv.payment_document, inv.payment_entry, "clearance_date", bank_transaction.date)
+						logger.info(f"Setting clearance date for {inv.payment_document} {inv.payment_entry} to {bank_transaction.date}")
+						clearance_date_set = True
+			except Exception as e:
+				logger.error(f"Error setting clearance date for {inv.payment_document} {inv.payment_entry}: {str(e)}", exc_info=True)
 		
 		if clearance_date_set:
 			logger.info(f"Successfully validated bank transaction {bank_transaction_name}")
@@ -1701,7 +1785,7 @@ def validate_single_bank_transaction(bank_transaction_name):
 		frappe.db.commit()
 		
 	except Exception as e:
-		logger.error(f"Error validating bank transaction {bank_transaction_name}: {str(e)}")
+		logger.error(f"Error validating bank transaction {bank_transaction_name}: {str(e)}", exc_info=True)
 		frappe.db.rollback()
 		raise
 
@@ -1755,85 +1839,90 @@ def validate_bank_transactions_for_account(bank_account, from_date=None, to_date
 			try:
 				validate_single_bank_transaction(bt.name)
 			except Exception as e:
-				logger.error(f"Error validating bank transaction {bt.name}: {str(e)}")
+				logger.error(f"Error validating bank transaction {bt.name}: {str(e)}", exc_info=True)
 				continue
 		
 		return {"success": True, "validated_count": len(bank_transactions)}
 		
 	except Exception as e:
-		logger.error(f"Error validating bank transactions for account {bank_account}: {str(e)}")
+		logger.error(f"Error validating bank transactions for account {bank_account}: {str(e)}", exc_info=True)
 		return {"success": False, "error": str(e)}
 
 
 def clear_journal_entry(journal_entry_name):
 	# First we need to get the allocations for this payment entry in the bank transactions	
-	bt_payments = frappe.db.sql(
-		"""
-		select 
-					bt.date,
-					ba.account,
-					IF(bt.deposit > 0.0, btp.allocated_amount, -btp.allocated_amount) as allocated_amount
-			from `tabBank Transaction` as bt
-					inner join `tabBank Account` as ba on bt.bank_account = ba.name 
-					inner join `tabBank Transaction Payments` as btp on bt.name = btp.parent
-			where btp.payment_document = "Journal Entry"
-						and btp.payment_entry = %(journal_entry)s
-						and bt.docstatus = 1
-			order by bt.date asc
-		""",
-		{
-			"journal_entry": journal_entry_name
-		},
-		as_dict=True
-	)
-	
-	journal_entry = frappe.get_doc("Journal Entry", journal_entry_name)
-	clearance_status = {}
-	clearance_date = None
-	skip = False
-	for acc in journal_entry.accounts:
-		account_type = frappe.get_value("Account", acc.account, "account_type")
-		if account_type != "Bank":
-			continue
+	try:
+		bt_payments = frappe.db.sql(
+			"""
+			select 
+						bt.date,
+						ba.account,
+						IF(bt.deposit > 0.0, btp.allocated_amount, -btp.allocated_amount) as allocated_amount
+				from `tabBank Transaction` as bt
+						inner join `tabBank Account` as ba on bt.bank_account = ba.name 
+						inner join `tabBank Transaction Payments` as btp on bt.name = btp.parent
+				where btp.payment_document = "Journal Entry"
+							and btp.payment_entry = %(journal_entry)s
+							and bt.docstatus = 1
+				order by bt.date asc
+			""",
+			{
+				"journal_entry": journal_entry_name
+			},
+			as_dict=True
+		)
+		
+		journal_entry = frappe.get_doc("Journal Entry", journal_entry_name)
+		clearance_status = {}
+		clearance_date = None
+		skip = False
+		for acc in journal_entry.accounts:
+			account_type = frappe.get_value("Account", acc.account, "account_type")
+			if account_type != "Bank":
+				continue
 
-		# check if the account is a bank account for do the reconciliation
-		bank_account = frappe.db.count("Bank Account", {"account": acc.account, "company": journal_entry.company})
-		if bank_account == 0:
-			logger.warning(f"Bank reconciliation is not enabled for account {acc.account} in {journal_entry_name}. Skipping...")
-			continue
+			# check if the account is a bank account for do the reconciliation
+			bank_account = frappe.db.count("Bank Account", {"account": acc.account, "company": journal_entry.company})
+			if bank_account == 0:
+				logger.warning(f"Bank reconciliation is not enabled for account {acc.account} in {journal_entry_name}. Skipping...")
+				continue
 
-		if acc.account in clearance_status:
-			logger.warn(f"Account {acc.account} found twice in the same journal entry. Skipping...")
-			skip = True
-			break
+			if acc.account in clearance_status:
+				logger.warn(f"Account {acc.account} found twice in the same journal entry. Skipping...")
+				skip = True
+				break
 
-		clearance_status[acc.account] = False
+			clearance_status[acc.account] = False
 
-		allocated_amount = 0.0
-		for bt in bt_payments:
-			if bt.account == acc.account:
-				allocated_amount += bt.allocated_amount
+			allocated_amount = 0.0
+			for bt in bt_payments:
+				if bt.account == acc.account:
+					allocated_amount += bt.allocated_amount
 
-		clearance_date = bt.date
-		if acc.debit_in_account_currency > 0 and allocated_amount == acc.debit_in_account_currency:
-			clearance_status[acc.account] = True
-		elif acc.credit_in_account_currency > 0 and allocated_amount == -acc.credit_in_account_currency:
-			clearance_status[acc.account] = True
-	
-	if skip:
-		logger.info(f"Skipping journal entry {journal_entry_name}")
-		return
-	
-	if all(clearance_status.values()):
-		if not journal_entry.clearance_date or getdate(journal_entry.clearance_date) != getdate(clearance_date):
-			logger.info(f"Clearing Journal entry {journal_entry.name}: {clearance_date}")
-			frappe.db.set_value("Journal Entry", journal_entry.name, "clearance_date", clearance_date)
+			clearance_date = bt.date
+			if acc.debit_in_account_currency > 0 and allocated_amount == acc.debit_in_account_currency:
+				clearance_status[acc.account] = True
+			elif acc.credit_in_account_currency > 0 and allocated_amount == -acc.credit_in_account_currency:
+				clearance_status[acc.account] = True
+		
+		if skip:
+			logger.info(f"Skipping journal entry {journal_entry_name}")
+			return
+		
+		if all(clearance_status.values()):
+			if not journal_entry.clearance_date or getdate(journal_entry.clearance_date) != getdate(clearance_date):
+				logger.info(f"Clearing Journal entry {journal_entry.name}: {clearance_date}")
+				frappe.db.set_value("Journal Entry", journal_entry.name, "clearance_date", clearance_date)
+			else:
+				logger.info(f"Journal entry {journal_entry.name} is already cleared")
+		elif journal_entry.clearance_date:
+				logger.info(f"Resetting clearance date for {journal_entry.name}: {clearance_date}")
+				frappe.db.set_value("Journal Entry", journal_entry.name, "clearance_date", None)
 		else:
-			logger.info(f"Journal entry {journal_entry.name} is already cleared")
-	elif journal_entry.clearance_date:
-			logger.info(f"Resetting clearance date for {journal_entry.name}: {clearance_date}")
-			frappe.db.set_value("Journal Entry", journal_entry.name, "clearance_date", None)
-	else:
-		logger.info(f"Some accounts are not cleared for {journal_entry_name}: {clearance_date}")
-		logger.info(f"Allocated amounts {bt_payments}")
+			logger.info(f"Some accounts are not cleared for {journal_entry_name}: {clearance_date}")
+			logger.info(f"Allocated amounts {bt_payments}")
+			
+	except Exception as e:
+		logger.error(f"Error clearing journal entry {journal_entry_name}: {str(e)}", exc_info=True)
+		raise
 

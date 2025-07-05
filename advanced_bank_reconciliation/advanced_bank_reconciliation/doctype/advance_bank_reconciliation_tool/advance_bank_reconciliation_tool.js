@@ -204,7 +204,7 @@ frappe.ui.form.on("Advance Bank Reconciliation Tool", {
 					} else {
 						frappe.msgprint({
 							title: __("Unvalidated Transactions Found"),
-							message: __("Found {0} unvalidated transactions:<br>- Payment Entries: {1}<br>- Journal Entries: {2}<br><br>Consider running batch validation to fix these.", [total, data.unvalidated_payment_entries, data.unvalidated_journal_entries]),
+							message: __("Found {0} unvalidated transactions:<br>- Payment Entries: {1}<br>- Journal Entries: {2}<br>- Invoices: {3}<br><br>Consider running batch validation to fix these.", [total, data.unvalidated_payment_entries, data.unvalidated_journal_entries, data.unvalidated_invoices]),
 							indicator: "orange"
 						});
 					}

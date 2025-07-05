@@ -42,20 +42,34 @@ class ExtendedBankTransaction(BankTransaction):
 								logger.info(
 										f"Payment entry {previous_payment.payment_document} {previous_payment.payment_entry} was removed from the bank transaction {self.name}. Clearing the clearance date."
 								)
-								if previous_payment.payment_document == "Payment Entry":
-									frappe.db.set_value(
-											"Payment Entry",
-											previous_payment.payment_entry,
-											"clearance_date",
-											None,
-									)
-								elif previous_payment.payment_document == "Journal Entry":
-									frappe.db.set_value(
-											"Journal Entry",
-											previous_payment.payment_entry,
-											"clearance_date",
-											None,
-									)
+								self.clear_document_clearance_date(previous_payment.payment_document, previous_payment.payment_entry)
+
+		def clear_document_clearance_date(self, document_type, document_name):
+				"""
+				Clear the clearance date for different document types that support it
+				"""
+				try:
+					# Document types that have clearance_date field
+					clearance_date_doctypes = ["Payment Entry", "Journal Entry", "Sales Invoice", "Purchase Invoice"]
+					
+					if document_type in clearance_date_doctypes:
+						# Check if the document exists and has clearance_date field
+						if frappe.db.exists(document_type, document_name):
+							# Get the meta to check if clearance_date field exists
+							meta = frappe.get_meta(document_type)
+							if meta.has_field("clearance_date"):
+								frappe.db.set_value(document_type, document_name, "clearance_date", None)
+								logger.info(f"Cleared clearance_date for {document_type} {document_name}")
+							else:
+								logger.debug(f"{document_type} does not have clearance_date field")
+						else:
+							logger.warning(f"{document_type} {document_name} does not exist")
+					else:
+						logger.debug(f"Document type {document_type} does not support clearance dates")
+						
+				except Exception as e:
+					logger.error(f"Error clearing clearance date for {document_type} {document_name}: {str(e)}", exc_info=True)
+					# Don't raise the exception as we don't want to break the main transaction flow
 
 		def trigger_background_validation(self):
 				"""
@@ -76,7 +90,7 @@ class ExtendedBankTransaction(BankTransaction):
 						logger.error(f"Failed to queue validation for bank transaction {self.name}: {result.get('error')}")
 						
 				except Exception as e:
-					logger.error(f"Error triggering background validation for bank transaction {self.name}: {str(e)}")
+					logger.error(f"Error triggering background validation for bank transaction {self.name}: {str(e)}", exc_info=True)
 					# Don't raise the exception as we don't want to break the main transaction flow
 
 		def add_payment_entries(self, vouchers):
