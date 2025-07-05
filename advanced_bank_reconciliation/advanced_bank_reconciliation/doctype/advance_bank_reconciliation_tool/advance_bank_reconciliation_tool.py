@@ -821,18 +821,18 @@ def get_pe_matching_query(
 	# get matching payment entries query
 	# Handle multi-currency scenarios by calculating amounts in bank account currency
 	
-	# Get the bank account currency
-	bank_account_currency = frappe.db.get_value("Account", "%(bank_account)s", "account_currency")
-	
 	if transaction.deposit > 0.0:
 		currency_field = "paid_to_account_currency as currency"
-		# For deposits (money coming into bank account), calculate amount in bank account currency
+		# For deposits (Receive payments): money coming into bank account
+		# For Receive payments, the bank account is paid_to, use received_amount
+		# Convert base currency amount to account currency by dividing by exchange rate
 		amount_field = f"""
 			CASE 
 				WHEN paid_to = %(bank_account)s THEN 
 					CASE 
-						WHEN paid_to_account_currency = (SELECT default_currency FROM `tabCompany` WHERE name = company) THEN received_amount
-						ELSE received_amount / target_exchange_rate
+						WHEN paid_to_account_currency = (SELECT default_currency FROM `tabCompany` WHERE name = company) 
+						THEN received_amount
+						ELSE COALESCE(received_amount / NULLIF(target_exchange_rate, 0), received_amount)
 					END
 				ELSE received_amount
 			END
@@ -840,13 +840,16 @@ def get_pe_matching_query(
 		amount_comparison = amount_field
 	else:
 		currency_field = "paid_from_account_currency as currency"
-		# For withdrawals (money going out of bank account), calculate amount in bank account currency
+		# For withdrawals (Pay payments): money going out of bank account  
+		# For Pay payments, the bank account is paid_from, use paid_amount
+		# Convert base currency amount to account currency by dividing by exchange rate
 		amount_field = f"""
 			CASE 
 				WHEN paid_from = %(bank_account)s THEN 
 					CASE 
-						WHEN paid_from_account_currency = (SELECT default_currency FROM `tabCompany` WHERE name = company) THEN paid_amount
-						ELSE paid_amount / source_exchange_rate
+						WHEN paid_from_account_currency = (SELECT default_currency FROM `tabCompany` WHERE name = company)
+						THEN paid_amount
+						ELSE COALESCE(paid_amount / NULLIF(source_exchange_rate, 0), paid_amount)
 					END
 				ELSE paid_amount
 			END
@@ -1196,14 +1199,16 @@ def get_cleared_balance(bank_account, from_date, till_date):
 			pe.name as payment_entry,
 			if(pe.paid_to=%(account)s, 
 				CASE 
-					WHEN pe.paid_to_account_currency = (SELECT default_currency FROM `tabCompany` WHERE name = pe.company) THEN pe.received_amount
-					ELSE pe.received_amount / pe.target_exchange_rate
+					WHEN pe.paid_to_account_currency = (SELECT default_currency FROM `tabCompany` WHERE name = pe.company) 
+					THEN pe.received_amount
+					ELSE COALESCE(pe.received_amount / NULLIF(pe.target_exchange_rate, 0), pe.received_amount)
 				END, 
 				0) as debit,
 			if(pe.paid_from=%(account)s, 
 				CASE 
-					WHEN pe.paid_from_account_currency = (SELECT default_currency FROM `tabCompany` WHERE name = pe.company) THEN pe.paid_amount
-					ELSE pe.paid_amount / pe.source_exchange_rate
+					WHEN pe.paid_from_account_currency = (SELECT default_currency FROM `tabCompany` WHERE name = pe.company) 
+					THEN pe.paid_amount
+					ELSE COALESCE(pe.paid_amount / NULLIF(pe.source_exchange_rate, 0), pe.paid_amount)
 				END, 
 				0) as credit,
 			pe.posting_date, 

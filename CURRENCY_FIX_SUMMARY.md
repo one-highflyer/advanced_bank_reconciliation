@@ -10,9 +10,12 @@
 
 **Solution**: Modified the query to calculate amounts in the bank account's currency by:
 - Using exchange rates (`source_exchange_rate` and `target_exchange_rate`) to convert base currency amounts to account currency
-- For deposits: Using `received_amount / target_exchange_rate` when the account is not in base currency
-- For withdrawals: Using `paid_amount / source_exchange_rate` when the account is not in base currency
+- For **Receive payments** (deposits): Using `received_amount / target_exchange_rate` to convert from base currency to bank account currency
+- For **Pay payments** (withdrawals): Using `paid_amount / source_exchange_rate` to convert from base currency to bank account currency  
+- Adding safety checks for zero division with `COALESCE` and `NULLIF`
 - Adding tolerance for amount matching (0.01) to handle minor rounding differences
+
+**Key Fix for Receive Payments**: The issue was specifically with Receive-type payment entries where the `received_amount` (stored in base currency) needed to be converted to the bank account's currency using the correct exchange rate and direction.
 
 ### 2. Cleared Balance Calculation Currency Issue
 
@@ -60,3 +63,11 @@ To verify the fixes work correctly, test with:
 - Exchange rates are retrieved from Payment Entry fields (`source_exchange_rate`, `target_exchange_rate`)
 - The solution maintains backward compatibility with single-currency setups
 - Tolerance-based matching (0.01) helps handle minor rounding differences in currency conversions
+- **Specific to Receive Payments**: The fix ensures that when a customer pays in USD to a USD bank account (with LKR base currency), the payment entry amount is correctly converted back to USD for bank reconciliation matching
+- Added safety checks (`COALESCE` and `NULLIF`) to prevent division by zero errors with exchange rates
+
+## Exchange Rate Logic
+
+- **For Receive payments**: `received_amount` (base currency) ÷ `target_exchange_rate` = Bank account currency amount
+- **For Pay payments**: `paid_amount` (base currency) ÷ `source_exchange_rate` = Bank account currency amount
+- **Exchange rate direction**: Assumes rates are stored as conversion factors from base currency to account currency
