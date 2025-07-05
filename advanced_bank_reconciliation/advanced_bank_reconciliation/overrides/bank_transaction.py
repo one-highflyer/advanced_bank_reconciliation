@@ -1,6 +1,10 @@
 import frappe
 import logging
 from erpnext.accounts.doctype.bank_transaction.bank_transaction import BankTransaction
+from frappe import _
+from frappe.model.document import Document
+from frappe.utils import logger, getdate
+import json
 
 logger = frappe.logger("bank_rec")
 logger.setLevel(logging.INFO)
@@ -28,70 +32,82 @@ class ExtendedBankTransaction(BankTransaction):
 					self.trigger_background_validation()
 
 		def process_removed_payment_entries(self):
-				for previous_payment in self._previous_payments:
-						removed = True
-						for payment_entry in self.payment_entries:
-								if (
-										payment_entry.payment_document == previous_payment.payment_document
-										and payment_entry.payment_entry == previous_payment.payment_entry
-								):
-										removed = False
-										break
-						# If the payment entry was removed, we need to clear the clearance date
-						if removed:
-								logger.info(
-										f"Payment entry {previous_payment.payment_document} {previous_payment.payment_entry} was removed from the bank transaction {self.name}. Clearing the clearance date."
-								)
-								self.clear_document_clearance_date(previous_payment.payment_document, previous_payment.payment_entry)
+				try:
+						# Get the previous document state
+						if hasattr(self, '_doc_before_save'):
+								previous_payments = self._doc_before_save.get('payment_entries', [])
+								current_payments = self.payment_entries or []
+								
+								# Find removed payments
+								current_payment_keys = {(p.payment_document, p.payment_entry) for p in current_payments}
+								removed_payments = [p for p in previous_payments if (p.payment_document, p.payment_entry) not in current_payment_keys]
+								
+								# Clear clearance dates for removed payments
+								for previous_payment in removed_payments:
+										self.clear_document_clearance_date(previous_payment.payment_document, previous_payment.payment_entry)
+				except Exception as e:
+						logger.error("Error processing removed payment entries for bank transaction %s: %s", self.name, str(e), exc_info=True)
 
 		def clear_document_clearance_date(self, document_type, document_name):
 				"""
-				Clear the clearance date for different document types that support it
+				Clear clearance date for different document types
+				For Sales Invoice, it handles the Sales Invoice Payment child table
+				For Purchase Invoice, it handles the direct clearance_date field
 				"""
 				try:
-					# Document types that have clearance_date field
-					clearance_date_doctypes = ["Payment Entry", "Journal Entry", "Sales Invoice", "Purchase Invoice"]
+						# Handle Sales Invoice - clearance date goes on Sales Invoice Payment child table
+						if document_type == "Sales Invoice":
+								# Find the Sales Invoice Payment child records that match this bank transaction
+								bank_account = frappe.db.get_value("Bank Account", self.bank_account, "account")
+								
+								# Get the Sales Invoice Payment child records
+								sales_invoice_payments = frappe.db.sql(
+										"""
+										SELECT name, clearance_date 
+										FROM `tabSales Invoice Payment` 
+										WHERE parent = %s AND account = %s
+										""",
+										(document_name, bank_account),
+										as_dict=True
+								)
+								
+								for sip in sales_invoice_payments:
+										if sip.clearance_date:
+												frappe.db.set_value("Sales Invoice Payment", sip.name, "clearance_date", None)
+												logger.info("Cleared clearance_date for Sales Invoice Payment %s", sip.name)
 					
-					if document_type in clearance_date_doctypes:
-						# Check if the document exists and has clearance_date field
-						if frappe.db.exists(document_type, document_name):
-							# Get the meta to check if clearance_date field exists
-							meta = frappe.get_meta(document_type)
-							if meta.has_field("clearance_date"):
-								frappe.db.set_value(document_type, document_name, "clearance_date", None)
-								logger.info(f"Cleared clearance_date for {document_type} {document_name}")
-							else:
-								logger.debug(f"{document_type} does not have clearance_date field")
+						# Handle other document types with direct clearance_date field
+						elif document_type in ["Payment Entry", "Journal Entry", "Purchase Invoice"]:
+								# Check if the document exists and has clearance_date field
+								if frappe.db.exists(document_type, document_name):
+										# Get the meta to check if clearance_date field exists
+										meta = frappe.get_meta(document_type)
+										if meta.has_field("clearance_date"):
+												frappe.db.set_value(document_type, document_name, "clearance_date", None)
+												logger.info("Cleared clearance_date for %s %s", document_type, document_name)
+										else:
+												logger.debug("%s does not have clearance_date field", document_type)
 						else:
-							logger.warning(f"{document_type} {document_name} does not exist")
-					else:
-						logger.debug(f"Document type {document_type} does not support clearance dates")
+								logger.debug("Document type %s not supported for clearance date clearing", document_type)
 						
 				except Exception as e:
-					logger.error(f"Error clearing clearance date for {document_type} {document_name}: {str(e)}", exc_info=True)
-					# Don't raise the exception as we don't want to break the main transaction flow
+						logger.error("Error clearing clearance date for %s %s: %s", document_type, document_name, str(e), exc_info=True)
 
 		def trigger_background_validation(self):
-				"""
-				Trigger background validation for this bank transaction
-				"""
+				"""Trigger background validation when bank transaction is updated with payment entries"""
 				try:
-					logger.info(f"Triggering background validation for bank transaction {self.name}")
-					
-					# Import the validation function
-					from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool import validate_bank_transaction_async
-					
-					# Call the async validation function
-					result = validate_bank_transaction_async(self.name)
-					
-					if result.get("success"):
-						logger.info(f"Successfully queued validation for bank transaction {self.name}")
-					else:
-						logger.error(f"Failed to queue validation for bank transaction {self.name}: {result.get('error')}")
-						
+						# Only trigger validation if this transaction has payment entries
+						if self.payment_entries:
+								frappe.enqueue(
+										"advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.validate_bank_transaction_async",
+										bank_transaction_name=self.name,
+										queue='long',
+										timeout=300,
+										job_name="validate_bank_transaction_%s" % self.name
+								)
+								logger.info("Triggered background validation for bank transaction %s", self.name)
 				except Exception as e:
-					logger.error(f"Error triggering background validation for bank transaction {self.name}: {str(e)}", exc_info=True)
-					# Don't raise the exception as we don't want to break the main transaction flow
+						logger.error("Failed to trigger background validation for bank transaction %s: %s", self.name, str(e), exc_info=True)
 
 		def add_payment_entries(self, vouchers):
 				"Add the vouchers with zero allocation. Save() will perform the allocations and clearance"
