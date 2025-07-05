@@ -1698,7 +1698,8 @@ def clear_journal_entry(journal_entry_name):
 			for bt in bt_payments:
 				if bt.account == acc.account:
 					allocated_amount += bt.allocated_amount
-					clearance_date = bt.date
+					if not clearance_date or getdate(bt.date) > getdate(clearance_date):
+						clearance_date = bt.date
 
 			if acc.debit_in_account_currency > 0 and allocated_amount == acc.debit_in_account_currency:
 				clearance_status[acc.account] = True

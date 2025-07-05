@@ -88,7 +88,7 @@ class ExtendedBankTransaction(BankTransaction):
 			# Only trigger validation if this transaction has payment entries
 			if self.payment_entries:
 				frappe.enqueue(
-					"advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.validate_bank_transaction_async",
+					"advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.validate_single_bank_transaction",
 					bank_transaction_name=self.name,
 					queue='long',
 					timeout=300,
