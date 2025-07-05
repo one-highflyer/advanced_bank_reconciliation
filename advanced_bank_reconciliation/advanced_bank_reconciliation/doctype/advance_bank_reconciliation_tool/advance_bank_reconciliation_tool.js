@@ -78,17 +78,13 @@ frappe.ui.form.on("Advance Bank Reconciliation Tool", {
 		});
 		frm.change_custom_button_type("Get Unreconciled Entries", null, "primary");
 
-		// Add new buttons for background validation features
+		// Add validation buttons
 		frm.add_custom_button(__("Check Unvalidated Transactions"), function () {
 			frm.trigger("check_unvalidated_transactions");
 		}, __("Validation"));
 
 		frm.add_custom_button(__("Batch Validate Transactions"), function () {
 			frm.trigger("batch_validate_transactions");
-		}, __("Validation"));
-
-		frm.add_custom_button(__("Run Background Validation"), function () {
-			frm.trigger("run_background_validation");
 		}, __("Validation"));
 	},
 
@@ -243,6 +239,13 @@ frappe.ui.form.on("Advance Bank Reconciliation Tool", {
 								message: r.message.message,
 								indicator: "blue"
 							});
+							
+							// Re-fetch the cleared balance and render cards after validation
+							setTimeout(() => {
+								frm.trigger("get_cleared_balance").then(() => {
+									frm.trigger("render_chart");
+								});
+							}, 2000); // Wait 2 seconds for background jobs to complete
 						} else {
 							frappe.msgprint({
 								title: __("Error"),
@@ -254,43 +257,6 @@ frappe.ui.form.on("Advance Bank Reconciliation Tool", {
 				});
 			}
 		);
-	},
-
-	run_background_validation(frm) {
-		if (!frm.doc.bank_account) {
-			frappe.msgprint(__("Please select a bank account first"));
-			return;
-		}
-
-		frappe.call({
-			method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.validate_bank_transactions",
-			args: {
-				from_date: frm.doc.bank_statement_from_date,
-				to_date: frm.doc.bank_statement_to_date,
-				company: frm.doc.company,
-				bank_account: frm.doc.bank_account,
-			},
-			callback: function (r) {
-				if (r.message && r.message.success) {
-					frappe.msgprint({
-						title: __("Background Validation Completed"),
-						message: __("Bank transaction validation has been completed successfully."),
-						indicator: "green"
-					});
-					
-					// Re-fetch the cleared balance and render cards
-					frm.trigger("get_cleared_balance").then(() => {
-						frm.trigger("render_chart");
-					});
-				} else {
-					frappe.msgprint({
-						title: __("Error"),
-						message: __("Failed to complete background validation"),
-						indicator: "red"
-					});
-				}
-			},
-		});
 	},
 
 	render_chart(frm) {

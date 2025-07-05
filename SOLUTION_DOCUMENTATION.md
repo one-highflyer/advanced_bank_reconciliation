@@ -65,18 +65,14 @@ When a bank transaction is updated with new payment entries, the system automati
 
 1. **Check Unvalidated Transactions**
    - Shows summary of transactions needing validation
-   - Provides counts for payment entries and journal entries
+   - Provides counts for payment entries, journal entries, and invoices
    - Color-coded status indicators
 
 2. **Batch Validate Transactions**
-   - Processes multiple unvalidated transactions
+   - Intelligently processes only unvalidated transactions
    - Confirmation dialog before execution
-   - Progress feedback and status messages
-
-3. **Run Background Validation**
-   - Manual trigger for immediate validation
-   - Updates UI after completion
-   - Provides success/error feedback
+   - Progress feedback and auto-refresh of UI after completion
+   - More efficient than processing all transactions
 
 ## Usage Instructions
 
@@ -104,8 +100,8 @@ The system works automatically when users:
 5. Monitor the background jobs in the system
 
 #### Manual Validation
-1. Use "Run Background Validation" for immediate processing
-2. Use "Get Unreconciled Entries" for traditional validation
+1. Use "Batch Validate Transactions" for intelligent processing of unvalidated transactions
+2. Use "Get Unreconciled Entries" for traditional validation and UI refresh
 
 ## Technical Implementation Details
 
@@ -188,8 +184,9 @@ Common issues and solutions:
 ### For Users
 - **Reduced Manual Work**: Automatic clearance date setting
 - **Improved Accuracy**: Consistent validation logic
-- **Better User Experience**: No more duplicate transactions in matches
+- **Better User Experience**: No more duplicate transactions in matches, streamlined interface
 - **Real-time Processing**: Background validation doesn't interrupt workflow
+- **Intelligent Processing**: Only validates transactions that actually need it
 
 ### For Administrators
 - **Monitoring Tools**: Clear visibility into validation status
