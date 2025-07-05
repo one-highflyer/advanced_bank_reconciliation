@@ -77,6 +77,11 @@ frappe.ui.form.on("Advance Bank Reconciliation Tool", {
 			frm.trigger("validate_bank_transactions");
 		});
 		frm.change_custom_button_type("Get Unreconciled Entries", null, "primary");
+
+		// Add validation button
+		frm.add_custom_button(__("Batch Validate Transactions"), function () {
+			frm.trigger("batch_validate_transactions");
+		}, __("Validation"));
 	},
 
 	bank_account: function (frm) {
@@ -162,6 +167,51 @@ frappe.ui.form.on("Advance Bank Reconciliation Tool", {
 				},
 			});
 		}
+	},
+
+
+	batch_validate_transactions(frm) {
+		if (!frm.doc.bank_account) {
+			frappe.msgprint(__("Please select a bank account first"));
+			return;
+		}
+
+		frappe.confirm(
+			__("This will queue background validation jobs for unvalidated transactions in the selected period. Continue?"),
+			function () {
+				frappe.call({
+					method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.batch_validate_unvalidated_transactions",
+					args: {
+						bank_account: frm.doc.bank_account,
+						from_date: frm.doc.bank_statement_from_date,
+						to_date: frm.doc.bank_statement_to_date,
+						limit: 100,
+					},
+					callback: function (r) {
+						if (r.message && r.message.success) {
+							frappe.msgprint({
+								title: __("Batch Validation Started"),
+								message: r.message.message,
+								indicator: "blue"
+							});
+							
+							// Re-fetch the cleared balance and render cards after validation
+							setTimeout(() => {
+								frm.trigger("get_cleared_balance").then(() => {
+									frm.trigger("render_chart");
+								});
+							}, 2000); // Wait 2 seconds for background jobs to complete
+						} else {
+							frappe.msgprint({
+								title: __("Error"),
+								message: r.message?.error || __("Failed to start batch validation"),
+								indicator: "red"
+							});
+						}
+					},
+				});
+			}
+		);
 	},
 
 	render_chart(frm) {
