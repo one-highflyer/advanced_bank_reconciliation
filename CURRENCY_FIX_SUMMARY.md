@@ -8,35 +8,37 @@
 
 **Root Cause**: The `get_pe_matching_query` function was using `paid_amount` field which is always in the company's base currency, not the bank account's currency.
 
-**Solution**: Modified the query to calculate amounts in the bank account's currency by:
-- Using exchange rates (`source_exchange_rate` and `target_exchange_rate`) to convert base currency amounts to account currency
-- For **Receive payments** (deposits): Using `received_amount / target_exchange_rate` to convert from base currency to bank account currency
-- For **Pay payments** (withdrawals): Using `paid_amount / source_exchange_rate` to convert from base currency to bank account currency  
-- Adding safety checks for zero division with `COALESCE` and `NULLIF`
+**Solution**: Simplified the logic significantly by using the correct amount fields that ERPNext already stores in the bank account's currency:
+- For **Receive payments** (deposits): Use `received_amount` field directly (already in bank account currency)
+- For **Pay payments** (withdrawals): Use `paid_amount` field directly (already in bank account currency)
+- No complex exchange rate calculations needed - ERPNext stores the amounts correctly
 - Adding tolerance for amount matching (0.01) to handle minor rounding differences
 
-**Key Fix for Receive Payments**: The issue was specifically with Receive-type payment entries where the `received_amount` (stored in base currency) needed to be converted to the bank account's currency using the correct exchange rate and direction.
+**Key Insight**: ERPNext Payment Entry already stores amounts in the correct currencies. We just needed to pick the right field based on payment type!
 
 ### 2. Cleared Balance Calculation Currency Issue
 
 **Problem**: The `get_cleared_balance` function was calculating balances using base currency amounts instead of bank account currency amounts.
 
 **Solution**: Updated the cleared balance query to:
-- Convert payment entry amounts to bank account currency using exchange rates
-- Use the same conversion logic as the matching query for consistency
+- Use `received_amount` for Receive payments where bank account is `paid_to`
+- Use `paid_amount` for Pay payments where bank account is `paid_from`
+- Simplified logic matching the payment entry query
 
 ## Technical Changes Made
 
 ### File: `advance_bank_reconciliation_tool.py`
 
 #### 1. Updated `get_pe_matching_query` function (lines 811-886)
-- Added currency conversion logic for multi-currency scenarios
-- Modified amount comparison to use account currency amounts
+- Simplified to use correct amount fields based on payment type
+- For Receive payments: Use `received_amount` when `paid_to = bank_account`
+- For Pay payments: Use `paid_amount` when `paid_from = bank_account`
 - Added tolerance-based matching instead of exact matching
-- Improved query to handle both base currency and foreign currency accounts
+- Removed complex exchange rate calculations
 
 #### 2. Updated `get_cleared_balance` function (lines 1193-1226)
-- Modified payment entries query to convert amounts to account currency
+- Simplified payment entries query to use same logic as matching query
+- Use `received_amount` for Receive payments, `paid_amount` for Pay payments
 - Ensured consistency with the matching query logic
 
 #### 3. Journal Entry Query (already correct)
@@ -60,14 +62,15 @@ To verify the fixes work correctly, test with:
 
 ## Notes
 
-- Exchange rates are retrieved from Payment Entry fields (`source_exchange_rate`, `target_exchange_rate`)
+- **Simplified Approach**: No exchange rate calculations needed - ERPNext already stores amounts in the correct currencies
 - The solution maintains backward compatibility with single-currency setups
 - Tolerance-based matching (0.01) helps handle minor rounding differences in currency conversions
-- **Specific to Receive Payments**: The fix ensures that when a customer pays in USD to a USD bank account (with LKR base currency), the payment entry amount is correctly converted back to USD for bank reconciliation matching
-- Added safety checks (`COALESCE` and `NULLIF`) to prevent division by zero errors with exchange rates
+- **Key Insight**: Payment Entry fields already contain the correct currency amounts:
+  - `received_amount`: Amount received in the bank account's currency (for Receive payments)
+  - `paid_amount`: Amount paid from the bank account's currency (for Pay payments)
 
-## Exchange Rate Logic
+## Field Usage Logic
 
-- **For Receive payments**: `received_amount` (base currency) ÷ `target_exchange_rate` = Bank account currency amount
-- **For Pay payments**: `paid_amount` (base currency) ÷ `source_exchange_rate` = Bank account currency amount
-- **Exchange rate direction**: Assumes rates are stored as conversion factors from base currency to account currency
+- **For Receive payments**: Use `received_amount` when `payment_type = 'Receive'` AND `paid_to = bank_account`
+- **For Pay payments**: Use `paid_amount` when `payment_type = 'Pay'` AND `paid_from = bank_account`
+- **Currency matching**: Payment entry amounts are now displayed in the same currency as bank transactions

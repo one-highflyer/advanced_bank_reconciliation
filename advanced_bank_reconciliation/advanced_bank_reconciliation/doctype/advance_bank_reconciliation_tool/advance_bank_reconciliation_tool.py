@@ -821,39 +821,18 @@ def get_pe_matching_query(
 	# get matching payment entries query
 	# Handle multi-currency scenarios by calculating amounts in bank account currency
 	
+	# Simplified logic: 
+	# - For Receive payments: use received_amount (already in bank account currency)
+	# - For Pay payments: use paid_amount (already in bank account currency)
 	if transaction.deposit > 0.0:
+		# For deposits (bank transaction deposits), we want Receive payments where bank is paid_to
 		currency_field = "paid_to_account_currency as currency"
-		# For deposits (Receive payments): money coming into bank account
-		# For Receive payments, the bank account is paid_to, use received_amount
-		# Convert base currency amount to account currency by dividing by exchange rate
-		amount_field = f"""
-			CASE 
-				WHEN paid_to = %(bank_account)s THEN 
-					CASE 
-						WHEN paid_to_account_currency = (SELECT default_currency FROM `tabCompany` WHERE name = company) 
-						THEN received_amount
-						ELSE COALESCE(received_amount / NULLIF(target_exchange_rate, 0), received_amount)
-					END
-				ELSE received_amount
-			END
-		"""
+		amount_field = "CASE WHEN payment_type = 'Receive' AND paid_to = %(bank_account)s THEN received_amount ELSE 0 END"
 		amount_comparison = amount_field
 	else:
+		# For withdrawals (bank transaction withdrawals), we want Pay payments where bank is paid_from
 		currency_field = "paid_from_account_currency as currency"
-		# For withdrawals (Pay payments): money going out of bank account  
-		# For Pay payments, the bank account is paid_from, use paid_amount
-		# Convert base currency amount to account currency by dividing by exchange rate
-		amount_field = f"""
-			CASE 
-				WHEN paid_from = %(bank_account)s THEN 
-					CASE 
-						WHEN paid_from_account_currency = (SELECT default_currency FROM `tabCompany` WHERE name = company)
-						THEN paid_amount
-						ELSE COALESCE(paid_amount / NULLIF(source_exchange_rate, 0), paid_amount)
-					END
-				ELSE paid_amount
-			END
-		"""
+		amount_field = "CASE WHEN payment_type = 'Pay' AND paid_from = %(bank_account)s THEN paid_amount ELSE 0 END"
 		amount_comparison = amount_field
 	
 	filter_by_date = f"AND posting_date between '{from_date}' and '{to_date}'"
@@ -1197,20 +1176,14 @@ def get_cleared_balance(bank_account, from_date, till_date):
 		select
 			btp.payment_document,
 			pe.name as payment_entry,
-			if(pe.paid_to=%(account)s, 
-				CASE 
-					WHEN pe.paid_to_account_currency = (SELECT default_currency FROM `tabCompany` WHERE name = pe.company) 
-					THEN pe.received_amount
-					ELSE COALESCE(pe.received_amount / NULLIF(pe.target_exchange_rate, 0), pe.received_amount)
-				END, 
-				0) as debit,
-			if(pe.paid_from=%(account)s, 
-				CASE 
-					WHEN pe.paid_from_account_currency = (SELECT default_currency FROM `tabCompany` WHERE name = pe.company) 
-					THEN pe.paid_amount
-					ELSE COALESCE(pe.paid_amount / NULLIF(pe.source_exchange_rate, 0), pe.paid_amount)
-				END, 
-				0) as credit,
+			CASE 
+				WHEN pe.payment_type = 'Receive' AND pe.paid_to = %(account)s THEN pe.received_amount
+				ELSE 0 
+			END as debit,
+			CASE 
+				WHEN pe.payment_type = 'Pay' AND pe.paid_from = %(account)s THEN pe.paid_amount
+				ELSE 0 
+			END as credit,
 			pe.posting_date, 
 			ifnull(pe.party,if(pe.paid_from=%(account)s,pe.paid_to,pe.paid_from)) as against_account, 
 			pe.clearance_date,
