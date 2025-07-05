@@ -1,48 +1,44 @@
 import frappe
+import logging
+from erpnext.accounts.doctype.bank_transaction.bank_transaction import BankTransaction
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils import logger, getdate
 import json
 
+logger = frappe.logger("bank_rec")
+logger.setLevel(logging.INFO)
 
-class BankTransaction(Document):
+
+class ExtendedBankTransaction(BankTransaction):
+
+	def before_update_after_submit(self):
+		super().before_update_after_submit()
+		logger.info("before_update_after_submit: %s", self.name)
+		# Fetch the current state of the document from the database
+		existing_doc = frappe.get_doc(self.doctype, self.name)
+		# Store the current state of the child table
+		self._previous_payments = existing_doc.get("payment_entries")
+
 	def on_update_after_submit(self):
-		# Call parent's on_update_after_submit if it exists
-		try:
-			super().on_update_after_submit()
-		except AttributeError:
-			pass
+		logger.info("on_update_after_submit: %s", self.name)
+		logger.info("self.payment_entries: %s vs %s", self.payment_entries, self._previous_payments)
+		self.process_removed_payment_entries()
 		
-		# Trigger background validation when bank transaction is updated
-		self.trigger_background_validation()
-	
-	def trigger_background_validation(self):
-		"""Trigger background validation when bank transaction is updated with payment entries"""
-		try:
-			# Only trigger validation if this transaction has payment entries
-			if self.payment_entries:
-				frappe.enqueue(
-					"advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.validate_bank_transaction_async",
-					bank_transaction_name=self.name,
-					queue='long',
-					timeout=300,
-					job_name="validate_bank_transaction_%s" % self.name
-				)
-				logger.info("Triggered background validation for bank transaction %s", self.name)
-		except Exception as e:
-			logger.error("Failed to trigger background validation for bank transaction %s: %s", self.name, str(e), exc_info=True)
-	
+		# Trigger background validation if payment entries were added or modified
+		if self.payment_entries and len(self.payment_entries) > 0:
+			self.trigger_background_validation()
+
 	def process_removed_payment_entries(self):
 		"""Process any payment entries that were removed from the bank transaction"""
 		try:
 			# Get the previous document state
-			if hasattr(self, '_doc_before_save'):
-				previous_payments = self._doc_before_save.get('payment_entries', [])
+			if hasattr(self, '_previous_payments') and self._previous_payments:
 				current_payments = self.payment_entries or []
 				
 				# Find removed payments
 				current_payment_keys = {(p.payment_document, p.payment_entry) for p in current_payments}
-				removed_payments = [p for p in previous_payments if (p.payment_document, p.payment_entry) not in current_payment_keys]
+				removed_payments = [p for p in self._previous_payments if (p.payment_document, p.payment_entry) not in current_payment_keys]
 				
 				# Clear clearance dates for removed payments
 				for previous_payment in removed_payments:
@@ -85,3 +81,53 @@ class BankTransaction(Document):
 				
 		except Exception as e:
 			logger.error("Error clearing clearance date for %s %s: %s", document_type, document_name, str(e), exc_info=True)
+
+	def trigger_background_validation(self):
+		"""Trigger background validation when bank transaction is updated with payment entries"""
+		try:
+			# Only trigger validation if this transaction has payment entries
+			if self.payment_entries:
+				frappe.enqueue(
+					"advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.validate_bank_transaction_async",
+					bank_transaction_name=self.name,
+					queue='long',
+					timeout=300,
+					job_name="validate_bank_transaction_%s" % self.name
+				)
+				logger.info("Triggered background validation for bank transaction %s", self.name)
+		except Exception as e:
+			logger.error("Failed to trigger background validation for bank transaction %s: %s", self.name, str(e), exc_info=True)
+
+	def add_payment_entries(self, vouchers):
+		"Add the vouchers with zero allocation. Save() will perform the allocations and clearance"
+		if 0.0 >= self.unallocated_amount:
+			frappe.throw(
+				frappe._("Bank Transaction {0} is already fully reconciled").format(
+					self.name
+				)
+			)
+
+		added = False
+		for voucher in vouchers:
+			# Can't add same voucher twice
+			found = False
+			for pe in self.payment_entries:
+				if (
+					pe.payment_document == voucher["payment_doctype"]
+					and pe.payment_entry == voucher["payment_name"]
+				):
+					found = True
+
+			print("Voucher: %s", voucher)
+			if not found:
+				pe = {
+					"payment_document": voucher["payment_doctype"],
+					"payment_entry": voucher["payment_name"],
+					"allocated_amount": voucher["amount"],
+				}
+				self.append("payment_entries", pe)
+				added = True
+
+		# runs on_update_after_submit
+		if added:
+			self.save()
