@@ -78,11 +78,7 @@ frappe.ui.form.on("Advance Bank Reconciliation Tool", {
 		});
 		frm.change_custom_button_type("Get Unreconciled Entries", null, "primary");
 
-		// Add validation buttons
-		frm.add_custom_button(__("Check Unvalidated Transactions"), function () {
-			frm.trigger("check_unvalidated_transactions");
-		}, __("Validation"));
-
+		// Add validation button
 		frm.add_custom_button(__("Batch Validate Transactions"), function () {
 			frm.trigger("batch_validate_transactions");
 		}, __("Validation"));
@@ -173,47 +169,6 @@ frappe.ui.form.on("Advance Bank Reconciliation Tool", {
 		}
 	},
 
-	check_unvalidated_transactions(frm) {
-		if (!frm.doc.bank_account) {
-			frappe.msgprint(__("Please select a bank account first"));
-			return;
-		}
-
-		frappe.call({
-			method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_unvalidated_transactions_summary",
-			args: {
-				bank_account: frm.doc.bank_account,
-				from_date: frm.doc.bank_statement_from_date,
-				to_date: frm.doc.bank_statement_to_date,
-			},
-			callback: function (r) {
-				if (r.message && r.message.success) {
-					const data = r.message;
-					const total = data.total_unvalidated;
-					
-					if (total === 0) {
-						frappe.msgprint({
-							title: __("Validation Status"),
-							message: __("All transactions in the selected period are properly validated."),
-							indicator: "green"
-						});
-					} else {
-						frappe.msgprint({
-							title: __("Unvalidated Transactions Found"),
-							message: __("Found {0} unvalidated transactions:<br>- Payment Entries: {1}<br>- Journal Entries: {2}<br>- Invoices: {3}<br><br>Consider running batch validation to fix these.", [total, data.unvalidated_payment_entries, data.unvalidated_journal_entries, data.unvalidated_invoices]),
-							indicator: "orange"
-						});
-					}
-				} else {
-					frappe.msgprint({
-						title: __("Error"),
-						message: r.message?.error || __("Failed to check unvalidated transactions"),
-						indicator: "red"
-					});
-				}
-			},
-		});
-	},
 
 	batch_validate_transactions(frm) {
 		if (!frm.doc.bank_account) {

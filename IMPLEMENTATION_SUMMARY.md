@@ -30,7 +30,6 @@ I've successfully implemented a comprehensive solution to resolve the bank recon
 - `validate_bank_transaction_async()` - Queues individual transactions for validation
 - `validate_single_bank_transaction()` - Core validation logic for single transactions with **invoice support**
 - `batch_validate_unvalidated_transactions()` - Processes multiple transactions including **all document types**
-- `get_unvalidated_transactions_summary()` - Enhanced reporting with **invoice counts**
 
 **Enhanced Features:**
 - **Complete document type support**: Payment Entries, Journal Entries, Sales Invoices, Purchase Invoices
@@ -42,10 +41,8 @@ I've successfully implemented a comprehensive solution to resolve the bank recon
 **File:** `advanced_bank_reconciliation/doctype/advance_bank_reconciliation_tool/advance_bank_reconciliation_tool.js`
 
 **New Features:**
-- "Check Unvalidated Transactions" button for monitoring **all document types**
 - "Batch Validate Transactions" button for intelligent processing of unvalidated transactions
-- **Enhanced reporting** showing separate counts for Payment Entries, Journal Entries, and Invoices
-- **Streamlined interface** with focused, non-redundant functionality
+- **Streamlined interface** leveraging ERPNext's existing bank reconciliation reports for transaction summaries
 - Enhanced user feedback and status reporting
 - **Auto-refresh** of UI after batch validation completion
 
@@ -159,11 +156,8 @@ except Exception as e:
 
 ### Manual Operations
 
-#### Enhanced Monitoring
-1. Open Advanced Bank Reconciliation Tool
-2. Select bank account and date range
-3. Click "Check Unvalidated Transactions" in Validation menu
-4. Review the **enhanced summary report** showing all document types
+#### Transaction Monitoring
+Use ERPNext's standard Bank Reconciliation Statement and Bank Clearance Summary reports to monitor transaction status and clearance dates.
 
 #### Batch Validation
 1. Open Advanced Bank Reconciliation Tool
@@ -227,7 +221,7 @@ except Exception as e:
 - ✅ **Elimination of duplicate transactions** in potential matches for all document types
 - ✅ **Reduced manual validation** steps across all supported documents
 - ✅ **Improved reconciliation efficiency** with universal support
-- ✅ **Enhanced monitoring** with detailed document type breakdown
+- ✅ **Simplified interface** leveraging ERPNext's existing reports for monitoring
 
 ### For Administrators
 - ✅ **Enhanced debugging** with complete stack traces

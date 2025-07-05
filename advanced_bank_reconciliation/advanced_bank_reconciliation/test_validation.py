@@ -138,52 +138,6 @@ def test_batch_validation():
         return False
 
 
-def test_unvalidated_summary():
-    """
-    Test the unvalidated transactions summary functionality
-    """
-    print("Testing unvalidated transactions summary...")
-    
-    # Get a sample bank account
-    sample_bank_account = frappe.db.sql("""
-        SELECT name 
-        FROM `tabBank Account` 
-        WHERE is_company_account = 1
-        LIMIT 1
-    """, as_dict=True)
-    
-    if not sample_bank_account:
-        print("No suitable bank accounts found for testing")
-        return False
-    
-    bank_account = sample_bank_account[0]['name']
-    print(f"Testing summary with bank account: {bank_account}")
-    
-    try:
-        from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool import get_unvalidated_transactions_summary
-        
-        from_date = add_days(today(), -30)
-        to_date = today()
-        
-        result = get_unvalidated_transactions_summary(
-            bank_account=bank_account,
-            from_date=from_date,
-            to_date=to_date
-        )
-        
-        if result.get("success"):
-            print("✓ Unvalidated transactions summary completed successfully")
-            print(f"  Unvalidated Payment Entries: {result.get('unvalidated_payment_entries')}")
-            print(f"  Unvalidated Journal Entries: {result.get('unvalidated_journal_entries')}")
-            print(f"  Total Unvalidated: {result.get('total_unvalidated')}")
-            return True
-        else:
-            print(f"✗ Summary failed: {result.get('error')}")
-            return False
-            
-    except Exception as e:
-        print(f"✗ Summary failed: {str(e)}")
-        return False
 
 
 def run_all_tests():
@@ -198,7 +152,6 @@ def run_all_tests():
         ("Single Transaction Validation", test_single_transaction_validation),
         ("Async Validation", test_async_validation),
         ("Batch Validation", test_batch_validation),
-        ("Unvalidated Summary", test_unvalidated_summary),
     ]
     
     passed = 0
