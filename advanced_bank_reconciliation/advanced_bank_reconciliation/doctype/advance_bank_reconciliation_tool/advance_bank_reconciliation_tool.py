@@ -1652,149 +1652,70 @@ def validate_single_bank_transaction(bank_transaction_name):
 	try:
 		logger.info("Starting validation for bank transaction: %s", bank_transaction_name)
 		
-		# Get bank transaction details
+		# Load the bank transaction document
 		bank_transaction = frappe.get_doc("Bank Transaction", bank_transaction_name)
 		
-		if not bank_transaction:
-			logger.error("Bank transaction %s not found", bank_transaction_name)
-			return
-			
 		if bank_transaction.docstatus != 1:
 			logger.info("Bank transaction %s is not submitted, skipping validation", bank_transaction_name)
 			return
 			
-		# Get bank account's GL account
+		# Get bank account's GL account for Sales Invoice validation
 		bank_gl_account = frappe.db.get_value("Bank Account", bank_transaction.bank_account, "account")
-		company = frappe.db.get_value("Bank Account", bank_transaction.bank_account, "company")
-		
-		# Validate payment entries linked to this bank transaction
-		payment_entries = frappe.db.sql(
-			"""
-			SELECT 
-				btp.payment_document,
-				btp.payment_entry,
-				btp.allocated_amount,
-				pe.payment_type,
-				CASE 
-					WHEN pe.payment_type = 'Receive' AND pe.paid_to = %(bank_gl_account)s THEN pe.received_amount
-					WHEN pe.payment_type = 'Pay' AND pe.paid_from = %(bank_gl_account)s THEN pe.paid_amount
-					ELSE 0 
-				END as payment_amount,
-				pe.clearance_date
-			FROM `tabBank Transaction Payments` as btp
-			INNER JOIN `tabPayment Entry` as pe ON btp.payment_entry = pe.name
-			WHERE 
-				btp.parent = %(bank_transaction_name)s
-				AND btp.payment_document = 'Payment Entry'
-				AND pe.docstatus = 1
-			""",
-			{
-				"bank_gl_account": bank_gl_account,
-				"bank_transaction_name": bank_transaction_name,
-			},
-			as_dict=True
-		)
-		
-		logger.info("Found %s payment entries for bank transaction %s", len(payment_entries), bank_transaction_name)
 		
 		clearance_date_set = False
-		for entry in payment_entries:
-			should_set_clearance = False
-			
-			if bank_transaction.deposit > 0.0:
-				if entry.payment_type == "Receive" and entry.allocated_amount == entry.payment_amount:
-					should_set_clearance = True
-				elif entry.payment_type == "Pay" and entry.allocated_amount == -entry.payment_amount:
-					should_set_clearance = True
-			else:
-				if entry.payment_type == "Receive" and entry.allocated_amount == -entry.payment_amount:
-					should_set_clearance = True
-				elif entry.payment_type == "Pay" and entry.allocated_amount == entry.payment_amount:
-					should_set_clearance = True
-			
-			if should_set_clearance and (not entry.clearance_date or getdate(entry.clearance_date) != getdate(bank_transaction.date)):
-				logger.info("Setting clearance date for payment entry %s to %s", entry.payment_entry, bank_transaction.date)
-				frappe.db.set_value("Payment Entry", entry.payment_entry, "clearance_date", bank_transaction.date)
-				clearance_date_set = True
 		
-		# Validate journal entries linked to this bank transaction
-		journal_entries = frappe.db.sql(
-			"""
-			SELECT 
-				btp.payment_entry,
-				btp.allocated_amount
-			FROM `tabBank Transaction Payments` as btp
-			WHERE 
-				btp.parent = %(bank_transaction_name)s
-				AND btp.payment_document = 'Journal Entry'
-			""",
-			{
-				"bank_transaction_name": bank_transaction_name,
-			},
-			as_dict=True
-		)
-		
-		logger.info("Found %s journal entries for bank transaction %s", len(journal_entries), bank_transaction_name)
-		
-		for je in journal_entries:
+		# Iterate through all payment entries in the bank transaction
+		for payment_entry in bank_transaction.payment_entries:
 			try:
-				clear_journal_entry(je.payment_entry)
-				clearance_date_set = True
-			except Exception as e:
-				logger.error("Error clearing journal entry %s: %s", je.payment_entry, str(e), exc_info=True)
-		
-		# Validate invoice entries linked to this bank transaction
-		invoice_entries = frappe.db.sql(
-			"""
-			SELECT 
-				btp.payment_document,
-				btp.payment_entry,
-				btp.allocated_amount
-			FROM `tabBank Transaction Payments` as btp
-			WHERE 
-				btp.parent = %(bank_transaction_name)s
-				AND btp.payment_document IN ('Sales Invoice', 'Purchase Invoice')
-			""",
-			{
-				"bank_transaction_name": bank_transaction_name,
-			},
-			as_dict=True
-		)
-		
-		logger.info("Found %s invoice entries for bank transaction %s", len(invoice_entries), bank_transaction_name)
-		
-		for inv in invoice_entries:
-			try:
-				if inv.payment_document == "Sales Invoice":
-					# Handle Sales Invoice - set clearance date on Sales Invoice Payment child table
-					sales_invoice_payments = frappe.db.sql(
-						"""
-						SELECT name, clearance_date 
-						FROM `tabSales Invoice Payment` 
-						WHERE parent = %s AND account = %s
-						""",
-						(inv.payment_entry, bank_gl_account),
-						as_dict=True
+				logger.debug("Processing %s: %s", payment_entry.payment_document, payment_entry.payment_entry)
+				
+				# Load the actual payment document
+				payment_doc = frappe.get_doc(payment_entry.payment_document, payment_entry.payment_entry)
+				
+				if payment_entry.payment_document == "Payment Entry":
+					# Validate payment entry clearance logic
+					should_set_clearance = validate_payment_entry_clearance(
+						bank_transaction, payment_entry, payment_doc, bank_gl_account
 					)
 					
-					for sip in sales_invoice_payments:
-						current_clearance_date = sip.clearance_date
-						if not current_clearance_date or getdate(current_clearance_date) != getdate(bank_transaction.date):
-							frappe.db.set_value("Sales Invoice Payment", sip.name, "clearance_date", bank_transaction.date)
-							logger.info("Setting clearance date for Sales Invoice Payment %s to %s", sip.name, bank_transaction.date)
-							clearance_date_set = True
+					if should_set_clearance and (not payment_doc.clearance_date or getdate(payment_doc.clearance_date) != getdate(bank_transaction.date)):
+						payment_doc.clearance_date = bank_transaction.date
+						payment_doc.save()
+						logger.info("Set clearance date for Payment Entry %s to %s", payment_doc.name, bank_transaction.date)
+						clearance_date_set = True
 				
-				elif inv.payment_document == "Purchase Invoice":
+				elif payment_entry.payment_document == "Journal Entry":
+					# Handle journal entry clearance
+					clear_journal_entry(payment_doc.name)
+					clearance_date_set = True
+				
+				elif payment_entry.payment_document == "Sales Invoice":
+					# Handle Sales Invoice - set clearance date on Sales Invoice Payment child table
+					invoice_updated = False
+					for sales_payment in payment_doc.payments:
+						if sales_payment.account == bank_gl_account:
+							if not sales_payment.clearance_date or getdate(sales_payment.clearance_date) != getdate(bank_transaction.date):
+								sales_payment.clearance_date = bank_transaction.date
+								logger.info("Set clearance date for Sales Invoice Payment %s to %s", sales_payment.name, bank_transaction.date)
+								invoice_updated = True
+								clearance_date_set = True
+					
+					# Save the document to persist child table changes
+					if invoice_updated:
+						payment_doc.save()
+				
+				elif payment_entry.payment_document == "Purchase Invoice":
 					# Handle Purchase Invoice - set clearance date directly on the document
-					meta = frappe.get_meta(inv.payment_document)
-					if meta.has_field("clearance_date"):
-						current_clearance_date = frappe.db.get_value(inv.payment_document, inv.payment_entry, "clearance_date")
-						if not current_clearance_date or getdate(current_clearance_date) != getdate(bank_transaction.date):
-							frappe.db.set_value(inv.payment_document, inv.payment_entry, "clearance_date", bank_transaction.date)
-							logger.info("Setting clearance date for %s %s to %s", inv.payment_document, inv.payment_entry, bank_transaction.date)
+					if hasattr(payment_doc, 'clearance_date'):
+						if not payment_doc.clearance_date or getdate(payment_doc.clearance_date) != getdate(bank_transaction.date):
+							payment_doc.clearance_date = bank_transaction.date
+							payment_doc.save()
+							logger.info("Set clearance date for Purchase Invoice %s to %s", payment_doc.name, bank_transaction.date)
 							clearance_date_set = True
+			
 			except Exception as e:
-				logger.error("Error setting clearance date for %s %s: %s", inv.payment_document, inv.payment_entry, str(e), exc_info=True)
+				logger.error("Error processing %s %s: %s", payment_entry.payment_document, payment_entry.payment_entry, str(e), exc_info=True)
+				continue
 		
 		if clearance_date_set:
 			logger.info("Successfully validated bank transaction %s", bank_transaction_name)
@@ -1808,6 +1729,41 @@ def validate_single_bank_transaction(bank_transaction_name):
 		logger.error("Error validating bank transaction %s: %s", bank_transaction_name, str(e), exc_info=True)
 		frappe.db.rollback()
 		raise
+
+
+def validate_payment_entry_clearance(bank_transaction, payment_entry, payment_doc, bank_gl_account):
+	"""
+	Validate whether a payment entry should have its clearance date set
+	Based on payment type, direction, and allocated vs payment amounts
+	"""
+	try:
+		# Get the payment amount based on payment type and bank account
+		if payment_doc.payment_type == "Receive" and payment_doc.paid_to == bank_gl_account:
+			payment_amount = payment_doc.received_amount
+		elif payment_doc.payment_type == "Pay" and payment_doc.paid_from == bank_gl_account:
+			payment_amount = payment_doc.paid_amount
+		else:
+			return False
+		
+		# Check if allocated amount matches payment amount and direction
+		if bank_transaction.deposit > 0.0:
+			# Bank deposit (money coming in)
+			if payment_doc.payment_type == "Receive" and payment_entry.allocated_amount == payment_amount:
+				return True
+			elif payment_doc.payment_type == "Pay" and payment_entry.allocated_amount == -payment_amount:
+				return True
+		else:
+			# Bank withdrawal (money going out)  
+			if payment_doc.payment_type == "Receive" and payment_entry.allocated_amount == -payment_amount:
+				return True
+			elif payment_doc.payment_type == "Pay" and payment_entry.allocated_amount == payment_amount:
+				return True
+		
+		return False
+		
+	except Exception as e:
+		logger.error("Error validating payment entry clearance for %s: %s", payment_doc.name, str(e), exc_info=True)
+		return False
 
 
 def validate_bank_transactions_for_account(bank_account, from_date=None, to_date=None):
