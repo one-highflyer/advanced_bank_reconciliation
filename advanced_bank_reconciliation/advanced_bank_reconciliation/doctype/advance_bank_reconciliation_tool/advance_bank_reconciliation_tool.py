@@ -1369,69 +1369,401 @@ def validate_bank_transactions(from_date, to_date, company, bank_account):
 	for jle_name in jle_names:
 		clear_journal_entry(jle_name)
 
-	# jle_entries = frappe.db.sql(
-	# 	"""
-	# 	select 
-	# 				bt.name,
-	# 				btp.payment_entry,
-	# 				IF(bt.deposit > 0.0, btp.allocated_amount, -btp.allocated_amount) as allocated_amount
-	# 		from `tabBank Transaction` as bt
-	# 				inner join `tabBank Transaction Payments` as btp on bt.name = btp.parent
-	# 		where btp.payment_document = "Journal Entry"
-	# 						and bt.bank_account = %(bank_account)s
-	# 						and bt.docstatus = 1
-	# 						and bt.unallocated_amount = 0.0
-	# 						and bt.date <= %(to_date)s
-	# 						and bt.date >= %(from_date)s
-	# 	""",
-	# 	{
-	# 		"bank_account": bank_account,
-	# 		"from_date": from_date,
-	# 		"to_date": to_date
-	# 	},
-	# 	as_dict=True
-	# )
-
-	# # Get all the reconciled payment entries
-	# query = (
-	# 	frappe.qb.from_(bt_payment)
-	# 		.select(
-	# 			bt_payment.payment_entry
-	# 		)
-	# 		.inner_join(bank_transaction).on(bt_payment.parent == bank_transaction.name)
-	# 		.where(bt_payment.payment_document == "Payment Entry")
-	# 		.where(bank_transaction.company == company)
-	# 		.where(bank_transaction.bank_account == bank_account)
-	# 		.where(bank_transaction.unallocated_amount == 0.0)
-	# 		.where(bank_transaction.docstatus == 1)
-	# )
-	# reconciled_payment_entries = [d.payment_entry for d in query.run(as_dict=True)]
-	# logger.info(f"Found {len(reconciled_payment_entries)} reconciled entries")
-
-	# bank_gl_account = frappe.db.get_value("Bank Account", bank_account, "account")
-	# # Get incorrectly cleared payment entries
-	# query = (
-	# 	frappe.qb.from_(payment_entry)
-	# 		.select(
-	# 			payment_entry.name
-	# 		)
-	# 		.where(payment_entry.clearance_date.notnull())
-	# 		.where((payment_entry.paid_from == bank_gl_account) | (payment_entry.paid_to == bank_gl_account))
-	# 		.where(payment_entry.company == company)
-	# 		.where(payment_entry.docstatus == 1)
-	# )
-
-	# if len(reconciled_payment_entries) > 0:
-	# 		query = query.where(payment_entry.name.notin(reconciled_payment_entries))
-
-	# incorrectly_cleared_entries = [d.name for d in query.run(as_dict=True)]
-	# logger.info(f"Found {len(incorrectly_cleared_entries)} incorrectly cleared entries")
-	
-	# for entry in incorrectly_cleared_entries:
-	# 	frappe.db.set_value("Payment Entry", entry, "clearance_date", None)
-	# 	logger.info(f"Resetting clearance date for {entry}")
-
 	return {"success": True}
+
+
+@frappe.whitelist()
+def validate_bank_transaction_async(bank_transaction_name):
+	"""
+	Validate a single bank transaction asynchronously using frappe.enqueue
+	"""
+	try:
+		frappe.enqueue(
+			"advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.validate_single_bank_transaction",
+			bank_transaction_name=bank_transaction_name,
+			queue='long',
+			timeout=300,
+			job_name=f"validate_bank_transaction_{bank_transaction_name}"
+		)
+		logger.info(f"Enqueued validation job for bank transaction {bank_transaction_name}")
+		return {"success": True, "message": f"Validation queued for bank transaction {bank_transaction_name}"}
+	except Exception as e:
+		logger.error(f"Failed to enqueue validation for bank transaction {bank_transaction_name}: {str(e)}")
+		return {"success": False, "error": str(e)}
+
+
+@frappe.whitelist()
+def batch_validate_unvalidated_transactions(bank_account, from_date=None, to_date=None, limit=50):
+	"""
+	Find and validate bank transactions that might have missed automatic validation
+	This is useful for maintenance and catching up on transactions that weren't validated
+	"""
+	try:
+		logger.info(f"Starting batch validation for bank account {bank_account}")
+		
+		# Get company for the bank account
+		company = frappe.db.get_value("Bank Account", bank_account, "company")
+		bank_gl_account = frappe.db.get_value("Bank Account", bank_account, "account")
+		
+		if not company or not bank_gl_account:
+			return {"success": False, "error": f"Invalid bank account {bank_account}"}
+		
+		# Set default date range if not provided
+		if not from_date:
+			from_date = frappe.utils.add_days(frappe.utils.today(), -30)  # Last 30 days
+		if not to_date:
+			to_date = frappe.utils.today()
+		
+		# Find bank transactions with payment entries that don't have clearance dates set
+		unvalidated_transactions = frappe.db.sql(
+			"""
+			SELECT DISTINCT bt.name
+			FROM `tabBank Transaction` bt
+			INNER JOIN `tabBank Transaction Payments` btp ON bt.name = btp.parent
+			INNER JOIN `tabPayment Entry` pe ON btp.payment_entry = pe.name
+			WHERE 
+				bt.bank_account = %(bank_account)s
+				AND bt.company = %(company)s
+				AND bt.docstatus = 1
+				AND bt.unallocated_amount = 0.0
+				AND bt.date >= %(from_date)s
+				AND bt.date <= %(to_date)s
+				AND btp.payment_document = 'Payment Entry'
+				AND (pe.clearance_date IS NULL OR pe.clearance_date != bt.date)
+				AND ((bt.deposit > 0 AND pe.payment_type = 'Receive' AND pe.paid_to = %(bank_gl_account)s)
+					OR (bt.withdrawal > 0 AND pe.payment_type = 'Pay' AND pe.paid_from = %(bank_gl_account)s))
+			LIMIT %(limit)s
+			""",
+			{
+				"bank_account": bank_account,
+				"company": company,
+				"bank_gl_account": bank_gl_account,
+				"from_date": from_date,
+				"to_date": to_date,
+				"limit": limit,
+			},
+			as_dict=True
+		)
+		
+		# Also find journal entry transactions that might need validation
+		unvalidated_je_transactions = frappe.db.sql(
+			"""
+			SELECT DISTINCT bt.name
+			FROM `tabBank Transaction` bt
+			INNER JOIN `tabBank Transaction Payments` btp ON bt.name = btp.parent
+			INNER JOIN `tabJournal Entry` je ON btp.payment_entry = je.name
+			WHERE 
+				bt.bank_account = %(bank_account)s
+				AND bt.company = %(company)s
+				AND bt.docstatus = 1
+				AND bt.unallocated_amount = 0.0
+				AND bt.date >= %(from_date)s
+				AND bt.date <= %(to_date)s
+				AND btp.payment_document = 'Journal Entry'
+				AND (je.clearance_date IS NULL OR je.clearance_date != bt.date)
+			LIMIT %(limit)s
+			""",
+			{
+				"bank_account": bank_account,
+				"company": company,
+				"from_date": from_date,
+				"to_date": to_date,
+				"limit": limit,
+			},
+			as_dict=True
+		)
+		
+		# Combine both lists and remove duplicates
+		all_transactions = list({t['name']: t for t in (unvalidated_transactions + unvalidated_je_transactions)}.values())
+		
+		logger.info(f"Found {len(all_transactions)} unvalidated transactions for batch processing")
+		
+		if not all_transactions:
+			return {"success": True, "message": "No unvalidated transactions found", "processed_count": 0}
+		
+		# Process transactions in batches using frappe.enqueue
+		processed_count = 0
+		for transaction in all_transactions:
+			try:
+				result = validate_bank_transaction_async(transaction['name'])
+				if result.get("success"):
+					processed_count += 1
+				else:
+					logger.error(f"Failed to queue validation for transaction {transaction['name']}")
+			except Exception as e:
+				logger.error(f"Error processing transaction {transaction['name']}: {str(e)}")
+				continue
+		
+		return {
+			"success": True, 
+			"message": f"Queued validation for {processed_count} transactions", 
+			"processed_count": processed_count,
+			"total_found": len(all_transactions)
+		}
+		
+	except Exception as e:
+		logger.error(f"Error in batch validation: {str(e)}")
+		return {"success": False, "error": str(e)}
+
+
+@frappe.whitelist()
+def get_unvalidated_transactions_summary(bank_account, from_date=None, to_date=None):
+	"""
+	Get a summary of transactions that might need validation
+	Useful for reporting and monitoring purposes
+	"""
+	try:
+		# Get company for the bank account
+		company = frappe.db.get_value("Bank Account", bank_account, "company")
+		bank_gl_account = frappe.db.get_value("Bank Account", bank_account, "account")
+		
+		if not company or not bank_gl_account:
+			return {"success": False, "error": f"Invalid bank account {bank_account}"}
+		
+		# Set default date range if not provided
+		if not from_date:
+			from_date = frappe.utils.add_days(frappe.utils.today(), -30)  # Last 30 days
+		if not to_date:
+			to_date = frappe.utils.today()
+		
+		# Count payment entry transactions without clearance dates
+		unvalidated_pe_count = frappe.db.sql(
+			"""
+			SELECT COUNT(DISTINCT bt.name) as count
+			FROM `tabBank Transaction` bt
+			INNER JOIN `tabBank Transaction Payments` btp ON bt.name = btp.parent
+			INNER JOIN `tabPayment Entry` pe ON btp.payment_entry = pe.name
+			WHERE 
+				bt.bank_account = %(bank_account)s
+				AND bt.company = %(company)s
+				AND bt.docstatus = 1
+				AND bt.unallocated_amount = 0.0
+				AND bt.date >= %(from_date)s
+				AND bt.date <= %(to_date)s
+				AND btp.payment_document = 'Payment Entry'
+				AND (pe.clearance_date IS NULL OR pe.clearance_date != bt.date)
+			""",
+			{
+				"bank_account": bank_account,
+				"company": company,
+				"from_date": from_date,
+				"to_date": to_date,
+			},
+			as_dict=True
+		)[0]['count']
+		
+		# Count journal entry transactions without clearance dates
+		unvalidated_je_count = frappe.db.sql(
+			"""
+			SELECT COUNT(DISTINCT bt.name) as count
+			FROM `tabBank Transaction` bt
+			INNER JOIN `tabBank Transaction Payments` btp ON bt.name = btp.parent
+			INNER JOIN `tabJournal Entry` je ON btp.payment_entry = je.name
+			WHERE 
+				bt.bank_account = %(bank_account)s
+				AND bt.company = %(company)s
+				AND bt.docstatus = 1
+				AND bt.unallocated_amount = 0.0
+				AND bt.date >= %(from_date)s
+				AND bt.date <= %(to_date)s
+				AND btp.payment_document = 'Journal Entry'
+				AND (je.clearance_date IS NULL OR je.clearance_date != bt.date)
+			""",
+			{
+				"bank_account": bank_account,
+				"company": company,
+				"from_date": from_date,
+				"to_date": to_date,
+			},
+			as_dict=True
+		)[0]['count']
+		
+		return {
+			"success": True,
+			"bank_account": bank_account,
+			"from_date": from_date,
+			"to_date": to_date,
+			"unvalidated_payment_entries": unvalidated_pe_count,
+			"unvalidated_journal_entries": unvalidated_je_count,
+			"total_unvalidated": unvalidated_pe_count + unvalidated_je_count
+		}
+		
+	except Exception as e:
+		logger.error(f"Error getting unvalidated transactions summary: {str(e)}")
+		return {"success": False, "error": str(e)}
+
+
+def validate_single_bank_transaction(bank_transaction_name):
+	"""
+	Validate and set clearance dates for a single bank transaction
+	This function is designed to be called asynchronously via frappe.enqueue
+	"""
+	try:
+		logger.info(f"Starting validation for bank transaction: {bank_transaction_name}")
+		
+		# Get bank transaction details
+		bank_transaction = frappe.get_doc("Bank Transaction", bank_transaction_name)
+		
+		if not bank_transaction:
+			logger.error(f"Bank transaction {bank_transaction_name} not found")
+			return
+			
+		if bank_transaction.docstatus != 1:
+			logger.info(f"Bank transaction {bank_transaction_name} is not submitted, skipping validation")
+			return
+			
+		# Get bank account's GL account
+		bank_gl_account = frappe.db.get_value("Bank Account", bank_transaction.bank_account, "account")
+		company = frappe.db.get_value("Bank Account", bank_transaction.bank_account, "company")
+		
+		# Validate payment entries linked to this bank transaction
+		payment_entries = frappe.db.sql(
+			"""
+			SELECT 
+				btp.payment_document,
+				btp.payment_entry,
+				btp.allocated_amount,
+				pe.payment_type,
+				CASE 
+					WHEN pe.payment_type = 'Receive' AND pe.paid_to = %(bank_gl_account)s THEN pe.received_amount
+					WHEN pe.payment_type = 'Pay' AND pe.paid_from = %(bank_gl_account)s THEN pe.paid_amount
+					ELSE 0 
+				END as payment_amount,
+				pe.clearance_date
+			FROM `tabBank Transaction Payments` as btp
+			INNER JOIN `tabPayment Entry` as pe ON btp.payment_entry = pe.name
+			WHERE 
+				btp.parent = %(bank_transaction_name)s
+				AND btp.payment_document = 'Payment Entry'
+				AND pe.docstatus = 1
+			""",
+			{
+				"bank_gl_account": bank_gl_account,
+				"bank_transaction_name": bank_transaction_name,
+			},
+			as_dict=True
+		)
+		
+		logger.info(f"Found {len(payment_entries)} payment entries for bank transaction {bank_transaction_name}")
+		
+		clearance_date_set = False
+		for entry in payment_entries:
+			should_set_clearance = False
+			
+			if bank_transaction.deposit > 0.0:
+				if entry.payment_type == "Receive" and entry.allocated_amount == entry.payment_amount:
+					should_set_clearance = True
+				elif entry.payment_type == "Pay" and entry.allocated_amount == -entry.payment_amount:
+					should_set_clearance = True
+			else:
+				if entry.payment_type == "Receive" and entry.allocated_amount == -entry.payment_amount:
+					should_set_clearance = True
+				elif entry.payment_type == "Pay" and entry.allocated_amount == entry.payment_amount:
+					should_set_clearance = True
+			
+			if should_set_clearance and (not entry.clearance_date or getdate(entry.clearance_date) != getdate(bank_transaction.date)):
+				logger.info(f"Setting clearance date for payment entry {entry.payment_entry} to {bank_transaction.date}")
+				frappe.db.set_value("Payment Entry", entry.payment_entry, "clearance_date", bank_transaction.date)
+				clearance_date_set = True
+		
+		# Validate journal entries linked to this bank transaction
+		journal_entries = frappe.db.sql(
+			"""
+			SELECT 
+				btp.payment_entry,
+				btp.allocated_amount
+			FROM `tabBank Transaction Payments` as btp
+			WHERE 
+				btp.parent = %(bank_transaction_name)s
+				AND btp.payment_document = 'Journal Entry'
+			""",
+			{
+				"bank_transaction_name": bank_transaction_name,
+			},
+			as_dict=True
+		)
+		
+		logger.info(f"Found {len(journal_entries)} journal entries for bank transaction {bank_transaction_name}")
+		
+		for je in journal_entries:
+			try:
+				clear_journal_entry(je.payment_entry)
+				clearance_date_set = True
+			except Exception as e:
+				logger.error(f"Error clearing journal entry {je.payment_entry}: {str(e)}")
+		
+		if clearance_date_set:
+			logger.info(f"Successfully validated bank transaction {bank_transaction_name}")
+		else:
+			logger.info(f"No clearance dates needed to be set for bank transaction {bank_transaction_name}")
+			
+		# Commit the changes
+		frappe.db.commit()
+		
+	except Exception as e:
+		logger.error(f"Error validating bank transaction {bank_transaction_name}: {str(e)}")
+		frappe.db.rollback()
+		raise
+
+
+def validate_bank_transactions_for_account(bank_account, from_date=None, to_date=None):
+	"""
+	Validate all bank transactions for a specific bank account within a date range
+	This is a utility function that can be called programmatically
+	"""
+	try:
+		# Get company for the bank account
+		company = frappe.db.get_value("Bank Account", bank_account, "company")
+		
+		if not company:
+			logger.error(f"Could not find company for bank account {bank_account}")
+			return
+		
+		# Set default date range if not provided
+		if not from_date:
+			from_date = frappe.utils.add_days(frappe.utils.today(), -30)  # Last 30 days
+		if not to_date:
+			to_date = frappe.utils.today()
+		
+		# Get all unallocated bank transactions in the date range
+		bank_transactions = frappe.db.sql(
+			"""
+			SELECT name 
+			FROM `tabBank Transaction`
+			WHERE 
+				bank_account = %(bank_account)s
+				AND company = %(company)s
+				AND docstatus = 1
+				AND date >= %(from_date)s
+				AND date <= %(to_date)s
+				AND unallocated_amount = 0.0
+			ORDER BY date
+			""",
+			{
+				"bank_account": bank_account,
+				"company": company,
+				"from_date": from_date,
+				"to_date": to_date,
+			},
+			as_dict=True
+		)
+		
+		logger.info(f"Found {len(bank_transactions)} bank transactions to validate for account {bank_account}")
+		
+		# Validate each transaction
+		for bt in bank_transactions:
+			try:
+				validate_single_bank_transaction(bt.name)
+			except Exception as e:
+				logger.error(f"Error validating bank transaction {bt.name}: {str(e)}")
+				continue
+		
+		return {"success": True, "validated_count": len(bank_transactions)}
+		
+	except Exception as e:
+		logger.error(f"Error validating bank transactions for account {bank_account}: {str(e)}")
+		return {"success": False, "error": str(e)}
+
 
 def clear_journal_entry(journal_entry_name):
 	# First we need to get the allocations for this payment entry in the bank transactions	
