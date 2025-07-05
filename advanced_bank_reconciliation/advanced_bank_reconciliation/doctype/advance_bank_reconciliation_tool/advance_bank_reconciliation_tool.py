@@ -819,10 +819,40 @@ def get_pe_matching_query(
 	to_reference_date,
 ):
 	# get matching payment entries query
+	# Handle multi-currency scenarios by calculating amounts in bank account currency
+	
+	# Get the bank account currency
+	bank_account_currency = frappe.db.get_value("Account", "%(bank_account)s", "account_currency")
+	
 	if transaction.deposit > 0.0:
 		currency_field = "paid_to_account_currency as currency"
+		# For deposits (money coming into bank account), calculate amount in bank account currency
+		amount_field = f"""
+			CASE 
+				WHEN paid_to = %(bank_account)s THEN 
+					CASE 
+						WHEN paid_to_account_currency = (SELECT default_currency FROM `tabCompany` WHERE name = company) THEN received_amount
+						ELSE received_amount / target_exchange_rate
+					END
+				ELSE received_amount
+			END
+		"""
+		amount_comparison = amount_field
 	else:
 		currency_field = "paid_from_account_currency as currency"
+		# For withdrawals (money going out of bank account), calculate amount in bank account currency
+		amount_field = f"""
+			CASE 
+				WHEN paid_from = %(bank_account)s THEN 
+					CASE 
+						WHEN paid_from_account_currency = (SELECT default_currency FROM `tabCompany` WHERE name = company) THEN paid_amount
+						ELSE paid_amount / source_exchange_rate
+					END
+				ELSE paid_amount
+			END
+		"""
+		amount_comparison = amount_field
+	
 	filter_by_date = f"AND posting_date between '{from_date}' and '{to_date}'"
 	order_by = " posting_date"
 	filter_by_reference_no = ""
@@ -835,11 +865,14 @@ def get_pe_matching_query(
 		SELECT
 			(CASE WHEN reference_no=%(reference_no)s THEN 1 ELSE 0 END
 			+ CASE WHEN (party_type = %(party_type)s AND party = %(party)s ) THEN 1 ELSE 0 END
-			+ CASE WHEN paid_amount = %(amount)s THEN 1 ELSE 0 END
+			+ CASE WHEN ABS(({amount_comparison}) - %(amount)s) < 0.01 THEN 1 ELSE 0 END
 			+ 1 ) AS rank,
 			'Payment Entry' as doctype,
 			name,
-			IF(payment_type = 'Pay', {'-paid_amount' if transaction.deposit > 0.0 else 'paid_amount'}, {'paid_amount' if transaction.deposit > 0.0 else '-paid_amount'}) AS paid_amount,
+			IF(payment_type = 'Pay', 
+				{f'-({amount_field})' if transaction.deposit > 0.0 else f'({amount_field})'},
+				{f'({amount_field})' if transaction.deposit > 0.0 else f'-({amount_field})'}
+			) AS paid_amount,
 			reference_no,
 			reference_date,
 			party,
@@ -853,7 +886,7 @@ def get_pe_matching_query(
 			AND payment_type IN ('Pay', 'Receive', 'Internal Transfer')
 			AND ifnull(clearance_date, '') = ""
 			AND (paid_from = %(bank_account)s OR paid_to = %(bank_account)s) 
-			AND paid_amount {'= %(amount)s' if exact_match else '> 0.0'}
+			AND {f'({amount_comparison}) {"= %(amount)s" if exact_match else "> 0.0"}'}
 			{filter_by_date}
 			{filter_by_reference_no}
 		order by{order_by}
@@ -1161,8 +1194,18 @@ def get_cleared_balance(bank_account, from_date, till_date):
 		select
 			btp.payment_document,
 			pe.name as payment_entry,
-			if(pe.paid_to=%(account)s, pe.received_amount, 0) as debit,
-			if(pe.paid_from=%(account)s, pe.paid_amount, 0) as credit,
+			if(pe.paid_to=%(account)s, 
+				CASE 
+					WHEN pe.paid_to_account_currency = (SELECT default_currency FROM `tabCompany` WHERE name = pe.company) THEN pe.received_amount
+					ELSE pe.received_amount / pe.target_exchange_rate
+				END, 
+				0) as debit,
+			if(pe.paid_from=%(account)s, 
+				CASE 
+					WHEN pe.paid_from_account_currency = (SELECT default_currency FROM `tabCompany` WHERE name = pe.company) THEN pe.paid_amount
+					ELSE pe.paid_amount / pe.source_exchange_rate
+				END, 
+				0) as credit,
 			pe.posting_date, 
 			ifnull(pe.party,if(pe.paid_from=%(account)s,pe.paid_to,pe.paid_from)) as against_account, 
 			pe.clearance_date,
