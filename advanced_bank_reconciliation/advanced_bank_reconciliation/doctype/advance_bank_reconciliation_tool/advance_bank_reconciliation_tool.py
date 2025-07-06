@@ -1399,6 +1399,10 @@ def batch_validate_unvalidated_transactions(bank_account, from_date=None, to_dat
 	This is useful for maintenance and catching up on transactions that weren't validated
 	"""
 	try:
+		try:
+			limit = int(limit)
+		except (ValueError, TypeError):
+			limit = 50
 		logger.info("Starting batch validation for bank account %s", bank_account)
 		
 		# Get company for the bank account
@@ -1416,7 +1420,7 @@ def batch_validate_unvalidated_transactions(bank_account, from_date=None, to_dat
 		
 		# Find bank transactions with payment entries that don't have clearance dates set
 		unvalidated_transactions = frappe.db.sql(
-			"""
+			f"""
 			SELECT DISTINCT bt.name
 			FROM `tabBank Transaction` bt
 			INNER JOIN `tabBank Transaction Payments` btp ON bt.name = btp.parent
@@ -1432,7 +1436,7 @@ def batch_validate_unvalidated_transactions(bank_account, from_date=None, to_dat
 				AND (pe.clearance_date IS NULL OR pe.clearance_date != bt.date)
 				AND ((bt.deposit > 0 AND pe.payment_type = 'Receive' AND pe.paid_to = %(bank_gl_account)s)
 					OR (bt.withdrawal > 0 AND pe.payment_type = 'Pay' AND pe.paid_from = %(bank_gl_account)s))
-			LIMIT %(limit)s
+			LIMIT {limit}
 			""",
 			{
 				"bank_account": bank_account,
@@ -1440,14 +1444,13 @@ def batch_validate_unvalidated_transactions(bank_account, from_date=None, to_dat
 				"bank_gl_account": bank_gl_account,
 				"from_date": from_date,
 				"to_date": to_date,
-				"limit": limit,
 			},
 			as_dict=True
 		)
 		
 		# Also find journal entry transactions that might need validation
 		unvalidated_je_transactions = frappe.db.sql(
-			"""
+			f"""
 			SELECT DISTINCT bt.name
 			FROM `tabBank Transaction` bt
 			INNER JOIN `tabBank Transaction Payments` btp ON bt.name = btp.parent
@@ -1461,21 +1464,20 @@ def batch_validate_unvalidated_transactions(bank_account, from_date=None, to_dat
 				AND bt.date <= %(to_date)s
 				AND btp.payment_document = 'Journal Entry'
 				AND (je.clearance_date IS NULL OR je.clearance_date != bt.date)
-			LIMIT %(limit)s
+			LIMIT {limit}
 			""",
 			{
 				"bank_account": bank_account,
 				"company": company,
 				"from_date": from_date,
 				"to_date": to_date,
-				"limit": limit,
 			},
 			as_dict=True
 		)
 		
 		# Find invoice transactions that might need validation
 		unvalidated_invoice_transactions = frappe.db.sql(
-			"""
+			f"""
 			SELECT DISTINCT bt.name
 			FROM `tabBank Transaction` bt
 			INNER JOIN `tabBank Transaction Payments` btp ON bt.name = btp.parent
@@ -1487,14 +1489,13 @@ def batch_validate_unvalidated_transactions(bank_account, from_date=None, to_dat
 				AND bt.date >= %(from_date)s
 				AND bt.date <= %(to_date)s
 				AND btp.payment_document IN ('Sales Invoice', 'Purchase Invoice')
-			LIMIT %(limit)s
+			LIMIT {limit}
 			""",
 			{
 				"bank_account": bank_account,
 				"company": company,
 				"from_date": from_date,
 				"to_date": to_date,
-				"limit": limit,
 			},
 			as_dict=True
 		)
