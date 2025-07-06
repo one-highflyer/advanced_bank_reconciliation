@@ -1399,7 +1399,10 @@ def batch_validate_unvalidated_transactions(bank_account, from_date=None, to_dat
 	This is useful for maintenance and catching up on transactions that weren't validated
 	"""
 	try:
-		limit = int(limit)
+		try:
+			limit = int(limit)
+		except (ValueError, TypeError):
+			limit = 50
 		logger.info("Starting batch validation for bank account %s", bank_account)
 		
 		# Get company for the bank account
