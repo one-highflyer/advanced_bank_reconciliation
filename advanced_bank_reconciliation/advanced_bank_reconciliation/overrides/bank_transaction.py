@@ -62,7 +62,6 @@ class ExtendedBankTransaction(BankTransaction):
                 str(e),
                 exc_info=True,
             )
-            raise e
 
     def clear_document_clearance_date(self, document_type, document_name):
         """
