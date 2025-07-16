@@ -1,25 +1,25 @@
-# Copyright (c) 2024, High Flyer and contributors
+# Copyright (c) 2024, HighFlyer and contributors
 # For license information, please see license.txt
 import json
 
-import logging
 import frappe
-from frappe import _
-from frappe.model.document import Document
-from frappe.query_builder.custom import ConstantColumn
-from frappe.utils import cint, flt, getdate
-
+from advanced_bank_reconciliation.utils.logger import get_logger
 from erpnext import get_default_cost_center
-from erpnext.accounts.doctype.bank_transaction.bank_transaction import get_total_allocated_amount
+from erpnext.accounts.doctype.bank_transaction.bank_transaction import (
+	get_total_allocated_amount,
+)
 from erpnext.accounts.report.bank_reconciliation_statement.bank_reconciliation_statement import (
 	get_amounts_not_reflected_in_system,
 	get_entries,
 )
 from erpnext.accounts.utils import get_balance_on
 from erpnext.setup.utils import get_exchange_rate
+from frappe import _
+from frappe.model.document import Document
+from frappe.query_builder.custom import ConstantColumn
+from frappe.utils import cint, flt, getdate
 
-logger = frappe.logger("bank_rec", allow_site=True)
-logger.setLevel(logging.INFO)
+logger = get_logger()
 
 class AdvanceBankReconciliationTool(Document):
 	pass
@@ -311,6 +311,7 @@ def create_journal_entry_bts(
 
 	journal_entry.insert()
 	journal_entry.submit()
+	logger.info("Created journal entry %s for the unallocated amount %s of bank transaction %s", journal_entry.name, unallocated_amount, bank_transaction.name)
 
 	paid_amount = unallocated_amount
 

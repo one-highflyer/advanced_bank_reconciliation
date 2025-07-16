@@ -695,7 +695,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 
 	add_payment_entry(values) {
 		frappe.call({
-			method: "erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.create_payment_entry_bts",
+			method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.create_payment_entry_bts",
 			args: {
 				bank_transaction_name: this.bank_transaction.name,
 				reference_number: values.reference_number,
@@ -720,7 +720,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 
 	add_journal_entry(values) {
 		frappe.call({
-			method: "erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.create_journal_entry_bts",
+			method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.create_journal_entry_bts",
 			args: {
 				bank_transaction_name: this.bank_transaction.name,
 				reference_number: values.reference_number,
