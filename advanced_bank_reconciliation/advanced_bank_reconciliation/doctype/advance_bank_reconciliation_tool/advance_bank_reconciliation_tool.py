@@ -178,7 +178,7 @@ def create_journal_entry_bts(
 	bank_transaction = frappe.db.get_values(
 		"Bank Transaction",
 		bank_transaction_name,
-		fieldname=["name", "deposit", "withdrawal", "bank_account", "currency"],
+		fieldname=["name", "deposit", "withdrawal", "bank_account", "currency", "unallocated_amount"],
 		as_dict=True,
 	)[0]
 	company_account = frappe.get_value("Bank Account", bank_transaction.bank_account, "account")
@@ -205,12 +205,22 @@ def create_journal_entry_bts(
 		else False
 	)
 
+	# Use unallocated_amount for the journal entry
+	unallocated_amount = bank_transaction.unallocated_amount
+	# Determine direction (deposit or withdrawal)
+	if bank_transaction.deposit > 0.0:
+		deposit = unallocated_amount
+		withdrawal = 0.0
+	else:
+		deposit = 0.0
+		withdrawal = unallocated_amount
+
 	accounts = []
 	second_account_dict = {
 		"account": second_account,
 		"account_currency": second_account_currency,
-		"credit_in_account_currency": bank_transaction.deposit,
-		"debit_in_account_currency": bank_transaction.withdrawal,
+		"credit_in_account_currency": deposit,
+		"debit_in_account_currency": withdrawal,
 		"party_type": party_type,
 		"party": party,
 		"cost_center": get_default_cost_center(company),
@@ -220,19 +230,19 @@ def create_journal_entry_bts(
 		"account": company_account,
 		"account_currency": company_account_currency,
 		"bank_account": bank_transaction.bank_account,
-		"credit_in_account_currency": bank_transaction.withdrawal,
-		"debit_in_account_currency": bank_transaction.deposit,
+		"credit_in_account_currency": withdrawal,
+		"debit_in_account_currency": deposit,
 		"cost_center": get_default_cost_center(company),
 	}
 
 	# convert transaction amount to company currency
 	if is_multi_currency:
 		exc_rate = get_exchange_rate(bank_transaction.currency, company_default_currency, posting_date)
-		withdrawal_in_company_currency = flt(exc_rate * abs(bank_transaction.withdrawal))
-		deposit_in_company_currency = flt(exc_rate * abs(bank_transaction.deposit))
+		withdrawal_in_company_currency = flt(exc_rate * abs(withdrawal))
+		deposit_in_company_currency = flt(exc_rate * abs(deposit))
 	else:
-		withdrawal_in_company_currency = bank_transaction.withdrawal
-		deposit_in_company_currency = bank_transaction.deposit
+		withdrawal_in_company_currency = withdrawal
+		deposit_in_company_currency = deposit
 
 	# if second account is of foreign currency, convert and set debit and credit fields.
 	if second_account_currency != company_default_currency:
@@ -302,10 +312,7 @@ def create_journal_entry_bts(
 	journal_entry.insert()
 	journal_entry.submit()
 
-	if bank_transaction.deposit > 0.0:
-		paid_amount = bank_transaction.deposit
-	else:
-		paid_amount = bank_transaction.withdrawal
+	paid_amount = unallocated_amount
 
 	vouchers = json.dumps(
 		[
