@@ -209,7 +209,6 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 								rows.push(this.vouchers[index]);
 							}
 						});
-						console.log('Selected rows', rows);
 						this.show_selected_transactions(rows);
 					}
 				}
