@@ -1,0 +1,27 @@
+{
+  "name": "advanced-bank-reconciliation-frontend",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@tailwindcss/typography": "^0.5.9",
+    "autoprefixer": "^10.4.13",
+    "feather-icons": "^4.28.0",
+    "frappe-ui": "^0.1.168",
+    "tailwindcss": "^3.2.7",
+    "vue": "^3.5.14",
+    "vue-router": "^4.2.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue-jsx": "^3.0.1",
+    "@vitejs/plugin-vue": "^4.2.3",
+    "vite": "^4.4.9",
+    "prettier": "2.8.4",
+    "typescript": "^5.0.2"
+  }
+}
