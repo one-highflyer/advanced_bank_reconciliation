@@ -6,7 +6,7 @@ import {
   uploadBankStatement,
   autoReconcileVouchers,
   batchValidateUnvalidatedTransactions
-} from '@/services/bankReconciliation'
+} from '../services/bankReconciliation'
 
 /**
  * Composable for managing bank reconciliation data and operations
@@ -49,6 +49,7 @@ export function useBankReconciliation() {
     error.value = null
     
     try {
+      console.log('getUnreconciledEntries', filters)
       // Update both resources with the same filters
       unreconciledTransactions.update({ params: filters })
       reconciliationSummary.update({ params: filters })

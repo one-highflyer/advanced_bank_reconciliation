@@ -7,22 +7,10 @@
 import { call, createResource, createListResource } from 'frappe-ui'
 
 /**
- * Get unreconciled bank transactions
- * @param {Object} filters - Filter parameters
- * @returns {Promise<Array>} Array of bank transactions
- */
-export async function getUnreconciledTransactions(filters = {}) {
-  return call({
-    method: 'advanced_bank_reconciliation.advance_bank_reconciliation_tool.get_unreconciled_transactions',
-    args: filters
-  }).then(r => r.message || [])
-}
-
-/**
  * Create a resource for unreconciled transactions with caching
  */
 export const unreconciledTransactions = createResource({
-  url: 'advanced_bank_reconciliation.advance_bank_reconciliation_tool.get_unreconciled_transactions',
+  url: 'erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.get_bank_transactions',
   cache: ['UnreconciledTransactions'],
   makeParams(filters = {}) {
     return filters
@@ -30,6 +18,8 @@ export const unreconciledTransactions = createResource({
   validate(filters) {
     if (!filters.company) throw 'Company is required'
     if (!filters.bank_account) throw 'Bank account is required'
+    if (!filters.from_date) throw 'From date is required'
+    if (!filters.to_date) throw 'To date is required'
   }
 })
 
@@ -297,16 +287,11 @@ export async function getCompanies() {
 /**
  * Create a resource for companies
  */
-export const companies = createResource({
-  url: 'frappe.client.get_list',
-  cache: ['Companies'],
-  makeParams() {
-    return {
-      doctype: 'Company',
-      fields: ['name', 'company_name'],
-      order_by: 'name'
-    }
-  }
+export const companies = createListResource({
+  doctype: 'Company',
+  fields: ['name', 'company_name'],
+  order_by: 'name',
+  auto: false
 })
 
 /**
@@ -333,48 +318,21 @@ export async function getBankAccounts(company) {
 /**
  * Create a resource for bank accounts
  */
-export const bankAccounts = createResource({
-  url: 'frappe.client.get_list',
-  cache: ['BankAccounts'],
-  makeParams({ company }) {
-    return {
-      doctype: 'Account',
-      filters: {
-        company: company,
-        account_type: 'Bank',
-        is_group: 0
-      },
-      fields: ['name', 'account_name', 'account', 'company'],
-      order_by: 'account_name'
-    }
-  },
-  validate({ company }) {
-    if (!company) throw 'Company is required'
+export const bankAccounts = createListResource({
+  doctype: 'Bank Account',
+  fields: ['name', 'account_name', 'account', 'company'],
+  order_by: 'account_name',
+  auto: false,
+  filters: {
+    is_company_account: 1
   }
 })
-
-/**
- * Get reconciliation summary
- * @param {Object} filters - Summary filters
- * @returns {Promise<Object>} Summary data
- */
-export async function getReconciliationSummary(filters) {
-  return call({
-    method: 'advanced_bank_reconciliation.advance_bank_reconciliation_tool.get_reconciliation_summary',
-    args: filters
-  }).then(r => r.message || {
-    openingBalance: 0,
-    clearedBalance: 0,
-    difference: 0,
-    currency: 'USD'
-  })
-}
 
 /**
  * Create a resource for reconciliation summary
  */
 export const reconciliationSummary = createResource({
-  url: 'advanced_bank_reconciliation.advance_bank_reconciliation_tool.get_reconciliation_summary',
+  url: 'advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_reconciled_bank_transactions',
   cache: ['ReconciliationSummary'],
   makeParams(filters) {
     return filters

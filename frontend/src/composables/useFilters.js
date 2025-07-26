@@ -1,5 +1,5 @@
-import { ref, computed, watch } from 'vue'
-import { companies, bankAccounts } from '@/services/bankReconciliation'
+import { ref, computed, watch, onMounted } from 'vue'
+import { companies, bankAccounts } from '../services/bankReconciliation'
 
 /**
  * Composable for managing filter data and state
@@ -9,6 +9,7 @@ export function useFilters() {
   // Reactive state
   const selectedCompany = ref('')
   const selectedBankAccount = ref('')
+  const dateRange = ref({ from: '', to: '' })
   const error = ref(null)
 
   // Computed properties
@@ -53,7 +54,12 @@ export function useFilters() {
     
     error.value = null
     try {
-      bankAccounts.update({ params: { company } })
+      bankAccounts.update({
+        filters: {
+          company: company,
+          is_company_account: 1
+        }
+      })
       await bankAccounts.fetch()
     } catch (err) {
       error.value = err.message || 'Failed to load bank accounts'
@@ -72,6 +78,10 @@ export function useFilters() {
     selectedBankAccount.value = account
   }
 
+  const setDateRange = (range) => {
+    dateRange.value = range
+  }
+
   const clearError = () => {
     error.value = null
   }
@@ -87,16 +97,21 @@ export function useFilters() {
   // Watch for company changes to reset bank account
   watch(selectedCompany, (newCompany) => {
     if (newCompany) {
+      console.log('Loading bank accounts for company:', newCompany);
       loadBankAccounts(newCompany)
-    } else {
-      selectedBankAccount.value = ''
     }
+    selectedBankAccount.value = ''
+  })
+
+  onMounted(async () => {
+    await loadCompanies()
   })
 
   return {
     // State
     selectedCompany,
     selectedBankAccount,
+    dateRange,
     error,
     
     // Computed
@@ -111,6 +126,7 @@ export function useFilters() {
     loadBankAccounts,
     setCompany,
     setBankAccount,
+    setDateRange,
     clearError,
     reset
   }

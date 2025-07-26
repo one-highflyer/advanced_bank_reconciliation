@@ -18,7 +18,6 @@
               @click="uploadStatement"
               :loading="uploading"
             >
-              <FeatherIcon name="upload" class="w-4 h-4 mr-2" />
               Upload Statement
             </Button>
             <Button
@@ -26,7 +25,6 @@
               @click="autoReconcile"
               :loading="autoReconciling"
             >
-              <FeatherIcon name="refresh-cw" class="w-4 h-4 mr-2" />
               Auto Reconcile
             </Button>
           </div>
@@ -38,10 +36,6 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       <!-- Filters Panel -->
       <FiltersPanel
-        v-model:company="filters.company"
-        v-model:bankAccount="filters.bankAccount"
-        v-model:dateRange="filters.dateRange"
-        v-model:useReferenceDate="filters.useReferenceDate"
         @filter-change="handleFilterChange"
       />
 
@@ -119,11 +113,12 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import FiltersPanel from '@/components/FiltersPanel.vue'
+import { Button } from 'frappe-ui'
+import FiltersPanel from '../components/FiltersPanel.vue'
 import NumberCard from '@/components/NumberCard.vue'
 import TransactionsTable from '@/components/TransactionsTable.vue'
 import ReconciliationDialog from '@/components/ReconciliationDialog.vue'
-import { useBankReconciliation } from '@/composables/useBankReconciliation'
+import { useBankReconciliation } from '../composables/useBankReconciliation'
 
 // Component setup
 const {
@@ -138,25 +133,20 @@ const {
   reconcileTransaction
 } = useBankReconciliation()
 
-// Local state
-const filters = reactive({
-  company: '',
-  bankAccount: '',
-  dateRange: {
-    from: '',
-    to: ''
-  },
-  useReferenceDate: false
-})
-
 const showReconciled = ref(false)
 const showReconciliationDialog = ref(false)
 const selectedTransaction = ref(null)
 const selectedVouchers = ref([])
 
 // Event handlers
-const handleFilterChange = () => {
-  getUnreconciledEntries(filters)
+const handleFilterChange = (filters) => {
+  console.log('handleFilterChange', filters)
+  getUnreconciledEntries({
+    company: filters.company,
+    bank_account: filters.bankAccount,
+    from_date: filters.fromDate,
+    to_date: filters.toDate
+  })
 }
 
 const handleSelectionChange = (selection) => {
@@ -171,12 +161,6 @@ const handleReconcile = (transaction) => {
 const handleReconciled = () => {
   showReconciliationDialog.value = false
   selectedTransaction.value = null
-  // Refresh data
-  getUnreconciledEntries(filters)
+  handleFilterChange({})
 }
-
-// Initialize on mount
-onMounted(() => {
-  getUnreconciledEntries(filters)
-})
 </script> 

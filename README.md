@@ -164,17 +164,7 @@ const emit = defineEmits([
 
 ### API Integration
 
-All backend calls are made through the `frappe.call()` function:
-
-```javascript
-// services/bankReconciliation.js
-export async function getUnreconciledTransactions(filters = {}) {
-  return frappe.call({
-    method: 'advanced_bank_reconciliation.advance_bank_reconciliation_tool.get_unreconciled_transactions',
-    args: filters
-  }).then(r => r.message || [])
-}
-```
+All backend calls are made using the `createResource` utility from `frappe-ui` for better state management and caching:
 
 ### State Management
 

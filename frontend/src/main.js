@@ -9,7 +9,7 @@ import {
   ListView, 
   Dialog, 
   FeatherIcon, 
-  Select, 
+  Autocomplete, 
   setConfig, 
   frappeRequest, 
   resourcesPlugin 
@@ -26,6 +26,6 @@ app.component('Button', Button)
 app.component('ListView', ListView)
 app.component('Dialog', Dialog)
 app.component('FeatherIcon', FeatherIcon)
-app.component('Select', Select)
+app.component('Autocomplete', Autocomplete)
 
 app.mount('#app')
