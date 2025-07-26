@@ -7,3 +7,6 @@ node_modules
 __pycache__
 
 advanced_bank_reconciliation/public/dist
+
+advanced_bank_reconciliation/public/bank-reconciliation/
+advanced_bank_reconciliation/www/bank-reconciliation.html

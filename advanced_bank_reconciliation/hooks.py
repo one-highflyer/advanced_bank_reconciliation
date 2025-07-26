@@ -4,7 +4,17 @@ app_publisher = "HighFlyer"
 app_description = "Advanced bank reconciliation for ERPNext"
 app_email = "hello@highflyerglobal.com"
 app_license = "gpl-3.0"
-# required_apps = []
+
+required_apps = ["erpnext"]
+
+add_to_apps_screen = [
+    {
+        "name": "advanced_bank_reconciliation",
+        "logo": "/assets/advanced_bank_reconciliation/advanced_bank_reconciliation.png",
+        "title": "Advanced Bank Reconciliation",
+        "route": "/bank-reconciliation",
+    }
+]
 
 # Includes in <head>
 # ------------------
@@ -231,8 +241,6 @@ get_matching_queries = [
     "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_matching_queries"
 ]
 
-required_apps = ["erpnext"]
-
 fixtures = [
     {
         "dt": "Custom Field",
@@ -244,5 +252,12 @@ fixtures = [
                 ["bank_statement_date_format"],
             ],
         ],
+    },
+]
+
+website_route_rules = [
+    {
+        "from_route": "/bank-reconciliation/<path:app_path>",
+        "to_route": "bank-reconciliation",
     },
 ]
