@@ -100,9 +100,9 @@ const handleFilterChange = () => {
   console.log('handleFilterChange', selectedCompany.value, selectedBankAccount.value, dateRange.value.from, dateRange.value.to)
   emit('filter-change', {
     company: selectedCompany.value,
-    bankAccount: selectedBankAccount.value,
-    fromDate: dateRange.value.from,
-    toDate: dateRange.value.to
+    bank_account: selectedBankAccount.value,
+    from_date: dateRange.value.from,
+    to_date: dateRange.value.to
   })
 }
 

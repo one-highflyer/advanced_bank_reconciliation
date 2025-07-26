@@ -6,10 +6,27 @@ import { companies, bankAccounts } from '../services/bankReconciliation'
  * Following the same pattern as helpdesk app
  */
 export function useFilters() {
+  // Helper function to format date as YYYY-MM-DD
+  const formatDate = (date) => {
+    return date.toISOString().split('T')[0]
+  }
+
+  // Get default date range: today and 1 month ago
+  const getDefaultDateRange = () => {
+    const today = new Date()
+    const oneMonthAgo = new Date()
+    oneMonthAgo.setMonth(today.getMonth() - 1)
+    
+    return {
+      from: formatDate(oneMonthAgo),
+      to: formatDate(today)
+    }
+  }
+
   // Reactive state
   const selectedCompany = ref('')
   const selectedBankAccount = ref('')
-  const dateRange = ref({ from: '', to: '' })
+  const dateRange = ref(getDefaultDateRange())
   const error = ref(null)
 
   // Computed properties

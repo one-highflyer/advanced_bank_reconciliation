@@ -22,15 +22,6 @@
         </span>
       </template>
 
-      <template #cell-status="{ row }">
-        <span 
-          class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-          :class="statusClasses(row.status)"
-        >
-          {{ row.status }}
-        </span>
-      </template>
-
       <template #cell-actions="{ row }">
         <div class="flex items-center space-x-2">
           <Button
@@ -145,7 +136,8 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { formatDate, formatCurrency } from '@/utils/formatters'
+import { ListView, Button, Dialog } from 'frappe-ui'
+import { formatDate, formatCurrency } from '../utils/formatters'
 
 // Props
 const props = defineProps({
@@ -169,33 +161,28 @@ const selectedTransaction = ref(null)
 // Table columns configuration
 const columns = computed(() => [
   {
-    key: 'date',
+    rowKey: 'date',
     label: 'Date',
     sortable: true
   },
   {
-    key: 'description',
+    rowKey: 'description',
     label: 'Description',
     sortable: true
   },
   {
-    key: 'reference',
+    rowKey: 'reference',
     label: 'Reference',
     sortable: true
   },
   {
-    key: 'amount',
+    rowKey: 'amount',
     label: 'Amount',
     sortable: true,
     align: 'right'
   },
   {
-    key: 'status',
-    label: 'Status',
-    sortable: true
-  },
-  {
-    key: 'actions',
+    rowKey: 'actions',
     label: 'Actions',
     sortable: false,
     align: 'center'

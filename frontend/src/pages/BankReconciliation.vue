@@ -13,18 +13,7 @@
             </p>
           </div>
           <div class="flex space-x-3">
-            <Button
-              variant="outline"
-              @click="uploadStatement"
-              :loading="uploading"
-            >
-              Upload Statement
-            </Button>
-            <Button
-              variant="outline"
-              @click="autoReconcile"
-              :loading="autoReconciling"
-            >
+            <Button variant="outline" @click="autoReconcile" :loading="autoReconciling">
               Auto Reconcile
             </Button>
           </div>
@@ -35,30 +24,16 @@
     <!-- Main Content -->
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       <!-- Filters Panel -->
-      <FiltersPanel
-        @filter-change="handleFilterChange"
-      />
+      <FiltersPanel @filter-change="handleFilterChange" />
 
       <!-- Number Cards -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <NumberCard
-          title="Opening Balance"
-          :value="summary.openingBalance"
-          :currency="summary.currency"
-          variant="info"
-        />
-        <NumberCard
-          title="Cleared Balance"
-          :value="summary.clearedBalance"
-          :currency="summary.currency"
-          variant="success"
-        />
-        <NumberCard
-          title="Difference"
-          :value="summary.difference"
-          :currency="summary.currency"
-          :variant="summary.difference === 0 ? 'success' : 'danger'"
-        />
+        <NumberCard title="Opening Balance" :value="summary.openingBalance" :currency="summary.currency"
+          variant="info" />
+        <NumberCard title="Cleared Balance" :value="summary.clearedBalance" :currency="summary.currency"
+          variant="success" />
+        <NumberCard title="Difference" :value="summary.difference" :currency="summary.currency"
+          :variant="summary.difference === 0 ? 'success' : 'danger'" />
       </div>
 
       <!-- Transactions Table -->
@@ -70,44 +45,28 @@
             </h3>
             <div class="flex items-center space-x-4">
               <label class="flex items-center">
-                <input
-                  type="checkbox"
-                  v-model="showReconciled"
-                  class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
+                <input type="checkbox" v-model="showReconciled"
+                  class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
                 <span class="ml-2 text-sm text-gray-700">
                   Show Reconciled
                 </span>
               </label>
-              <Button
-                variant="outline"
-                size="sm"
-                @click="getUnreconciledEntries"
-                :loading="loading"
-              >
+              <Button variant="outline" size="sm" @click="getUnreconciledEntries(filters)">
                 <FeatherIcon name="refresh-cw" class="w-4 h-4 mr-2" />
                 Get Entries
               </Button>
             </div>
           </div>
         </div>
-        
-        <TransactionsTable
-          :transactions="transactions"
-          :loading="loading"
-          @selection-change="handleSelectionChange"
-          @reconcile="handleReconcile"
-        />
+
+        <TransactionsTable :transactions="unreconciledTransactions" :loading="false"
+          @selection-change="handleSelectionChange" @reconcile="handleReconcile" />
       </div>
     </div>
 
     <!-- Reconciliation Dialog -->
-    <ReconciliationDialog
-      v-model="showReconciliationDialog"
-      :bank-transaction="selectedTransaction"
-      :selected-vouchers="selectedVouchers"
-      @reconciled="handleReconciled"
-    />
+    <ReconciliationDialog v-model="showReconciliationDialog" :bank-transaction="selectedTransaction"
+      :selected-vouchers="selectedVouchers" @reconciled="handleReconciled" />
   </div>
 </template>
 
@@ -115,20 +74,18 @@
 import { ref, reactive, onMounted } from 'vue'
 import { Button } from 'frappe-ui'
 import FiltersPanel from '../components/FiltersPanel.vue'
-import NumberCard from '@/components/NumberCard.vue'
-import TransactionsTable from '@/components/TransactionsTable.vue'
-import ReconciliationDialog from '@/components/ReconciliationDialog.vue'
+import NumberCard from '../components/NumberCard.vue'
+import TransactionsTable from '../components/TransactionsTable.vue'
+import ReconciliationDialog from '../components/ReconciliationDialog.vue'
 import { useBankReconciliation } from '../composables/useBankReconciliation'
 
 // Component setup
 const {
-  transactions,
+  unreconciledTransactions,
+  reconciledTransactions,
   summary,
-  loading,
-  uploading,
   autoReconciling,
   getUnreconciledEntries,
-  uploadStatement,
   autoReconcile,
   reconcileTransaction
 } = useBankReconciliation()
@@ -137,16 +94,13 @@ const showReconciled = ref(false)
 const showReconciliationDialog = ref(false)
 const selectedTransaction = ref(null)
 const selectedVouchers = ref([])
+const filters = ref({})
 
 // Event handlers
-const handleFilterChange = (filters) => {
-  console.log('handleFilterChange', filters)
-  getUnreconciledEntries({
-    company: filters.company,
-    bank_account: filters.bankAccount,
-    from_date: filters.fromDate,
-    to_date: filters.toDate
-  })
+const handleFilterChange = (newFilters) => {
+  console.log('Handling filter change', filters)
+  filters.value = newFilters
+  getUnreconciledEntries(newFilters)
 }
 
 const handleSelectionChange = (selection) => {
@@ -161,6 +115,6 @@ const handleReconcile = (transaction) => {
 const handleReconciled = () => {
   showReconciliationDialog.value = false
   selectedTransaction.value = null
-  handleFilterChange({})
+  getUnreconciledEntries(filters.value)
 }
-</script> 
+</script>

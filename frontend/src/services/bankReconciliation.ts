@@ -6,20 +6,10 @@
 
 import { call, createResource, createListResource } from 'frappe-ui'
 
-/**
- * Create a resource for unreconciled transactions with caching
- */
-export const unreconciledTransactions = createResource({
+export const pendingTransactions = createResource({
   url: 'erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.get_bank_transactions',
-  cache: ['UnreconciledTransactions'],
-  makeParams(filters = {}) {
-    return filters
-  },
-  validate(filters) {
-    if (!filters.company) throw 'Company is required'
-    if (!filters.bank_account) throw 'Bank account is required'
-    if (!filters.from_date) throw 'From date is required'
-    if (!filters.to_date) throw 'To date is required'
+  makeParams({ bank_account, from_date, to_date }) {
+    return { bank_account, from_date, to_date }
   }
 })
 
@@ -200,15 +190,13 @@ export async function validateBankTransactionAsync(transactionName) {
 
 /**
  * Get account balance
- * @param {string} account - Account name
+ * @param {string} bank_account - Bank account name
  * @param {string} company - Company name
+ * @param {string} till_date - Till date
  * @returns {Promise<Object>} Account balance information
  */
-export async function getAccountBalance(account, company) {
-  return call({
-    method: 'erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.get_account_balance',
-    args: { account, company }
-  }).then(r => r.message)
+export async function getAccountBalance(bank_account: string, company: string, till_date: string) {
+  return call('erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.get_account_balance', { bank_account, company, till_date })
 }
 
 /**
@@ -329,19 +317,18 @@ export const bankAccounts = createListResource({
 })
 
 /**
- * Create a resource for reconciliation summary
+ * Get reconciled transactions
+ * @param filters - Filters for the transactions
+ * @returns {Promise<Object>} Reconciled transactions
  */
-export const reconciliationSummary = createResource({
-  url: 'advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_reconciled_bank_transactions',
-  cache: ['ReconciliationSummary'],
-  makeParams(filters) {
-    return filters
-  },
-  validate(filters) {
-    if (!filters.company) throw 'Company is required'
-    if (!filters.bank_account) throw 'Bank account is required'
-  }
-})
+export function getReconciledTransactions(filters: {
+  bank_account: string
+  from_date: string
+  to_date: string,
+  company: string
+}) {
+  return call('advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_reconciled_bank_transactions', filters)
+}
 
 /**
  * Get reconciliation report
@@ -370,4 +357,4 @@ export const reconciliationReport = createResource({
     if (!filters.from_date) throw 'From date is required'
     if (!filters.to_date) throw 'To date is required'
   }
-}) 
+})
