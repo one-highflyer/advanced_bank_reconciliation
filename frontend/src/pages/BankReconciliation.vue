@@ -51,8 +51,7 @@
                   Show Reconciled
                 </span>
               </label>
-              <Button variant="outline" size="sm" @click="getUnreconciledEntries(filters)">
-                <FeatherIcon name="refresh-cw" class="w-4 h-4 mr-2" />
+              <Button variant="outline" size="sm" @click="getUnreconciledEntries(filters)" icon-left="refresh-cw">
                 Get Entries
               </Button>
             </div>
