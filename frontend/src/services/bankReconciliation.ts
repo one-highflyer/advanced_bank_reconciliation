@@ -14,7 +14,35 @@ export const pendingTransactions = createResource({
 })
 
 /**
- * Get linked vouchers for a bank transaction
+ * Search for vouchers that can be matched against a bank transaction
+ */
+export async function searchVouchers({
+  bankTransactionName,
+  documentTypes,
+  fromDate,
+  toDate,
+  exactMatch = false,
+  filterByReferenceDate = false,
+  fromReferenceDate = null,
+  toReferenceDate = null
+}) {
+  return call(
+    'advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_linked_payments',
+    {
+      bank_transaction_name: bankTransactionName,
+      document_types: documentTypes,
+      from_date: fromDate,
+      to_date: toDate,
+      filter_by_reference_date: filterByReferenceDate,
+      from_reference_date: fromReferenceDate,
+      to_reference_date: toReferenceDate,
+      exact_match: exactMatch
+    }
+  )
+}
+
+/**
+ * Get linked vouchers for a bank transaction (legacy function - use searchVouchers instead)
  * @param {Object} args - Arguments for voucher search
  * @returns {Promise<Object>} Object containing vouchers by type
  */
@@ -47,7 +75,7 @@ export const linkedVouchers = createResource({
  */
 export async function reconcileVouchers(bankTransactionName, vouchers) {
   return call({
-    method: 'advanced_bank_reconciliation.advance_bank_reconciliation_tool.reconcile_vouchers',
+    method: 'advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.reconcile_vouchers',
     args: {
       bank_transaction_name: bankTransactionName,
       vouchers: vouchers
@@ -75,25 +103,51 @@ export const reconcileVouchersResource = createResource({
 
 /**
  * Create payment entries for unpaid invoices
+ * @param {string} bankTransactionName - Bank transaction name
  * @param {Array} invoices - Array of unpaid invoices
- * @returns {Promise<Array>} Array of created payment entries
+ * @param {boolean} autoReconcile - Whether to auto-reconcile after creation
+ * @returns {Promise<Object>} Created payment entries result
  */
-export async function createPaymentEntriesForInvoices(invoices) {
+export async function createPaymentEntriesForInvoices(bankTransactionName, invoices, autoReconcile = false) {
   return call({
-    method: 'advanced_bank_reconciliation.advance_bank_reconciliation_tool.create_payment_entries_for_invoices',
-    args: { invoices }
-  }).then(r => r.message || [])
+    method: 'advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.create_payment_entries_for_invoices',
+    args: {
+      bank_transaction_name: bankTransactionName,
+      invoices: invoices,
+      auto_reconcile: autoReconcile
+    }
+  }).then(r => r.message)
 }
 
 /**
- * Create a new payment entry
- * @param {Object} paymentData - Payment entry data
- * @returns {Promise<Object>} Created payment entry
+ * Create a new payment entry for a bank transaction
  */
-export async function createPaymentEntry(paymentData) {
+export async function createPaymentEntry({
+  bankTransactionName,
+  referenceNumber,
+  referenceDate,
+  partyType,
+  party,
+  postingDate,
+  modeOfPayment,
+  project = null,
+  costCenter = null,
+  allowEdit = false
+}) {
   return call({
-    method: 'advanced_bank_reconciliation.advance_bank_reconciliation_tool.create_payment_entry_bts',
-    args: paymentData
+    method: 'advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.create_payment_entry_bts',
+    args: {
+      bank_transaction_name: bankTransactionName,
+      reference_number: referenceNumber,
+      reference_date: referenceDate,
+      party_type: partyType,
+      party: party,
+      posting_date: postingDate,
+      mode_of_payment: modeOfPayment,
+      project: project,
+      cost_center: costCenter,
+      allow_edit: allowEdit
+    }
   }).then(r => r.message)
 }
 
@@ -115,14 +169,34 @@ export const createPaymentEntryResource = createResource({
 })
 
 /**
- * Create a new journal entry
- * @param {Object} journalData - Journal entry data
- * @returns {Promise<Object>} Created journal entry
+ * Create a new journal entry for a bank transaction
  */
-export async function createJournalEntry(journalData) {
+export async function createJournalEntry({
+  bankTransactionName,
+  referenceNumber,
+  referenceDate,
+  partyType = null,
+  party = null,
+  postingDate,
+  modeOfPayment = null,
+  entryType,
+  secondAccount,
+  allowEdit = false
+}) {
   return call({
-    method: 'advanced_bank_reconciliation.advance_bank_reconciliation_tool.create_journal_entry_bts',
-    args: journalData
+    method: 'advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.create_journal_entry_bts',
+    args: {
+      bank_transaction_name: bankTransactionName,
+      reference_number: referenceNumber,
+      reference_date: referenceDate,
+      party_type: partyType,
+      party: party,
+      posting_date: postingDate,
+      mode_of_payment: modeOfPayment,
+      entry_type: entryType,
+      second_account: secondAccount,
+      allow_edit: allowEdit
+    }
   }).then(r => r.message)
 }
 
@@ -140,6 +214,35 @@ export const createJournalEntryResource = createResource({
     if (!journalData.accounts || journalData.accounts.length === 0) throw 'Accounts are required'
   }
 })
+
+/**
+ * Update bank transaction details
+ */
+export async function updateBankTransaction({
+  bankTransactionName,
+  referenceNumber = null,
+  partyType = null,
+  party = null
+}) {
+  return call({
+    method: 'erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.update_bank_transaction',
+    args: {
+      bank_transaction_name: bankTransactionName,
+      reference_number: referenceNumber,
+      party_type: partyType,
+      party: party
+    }
+  }).then(r => r.message)
+}
+
+/**
+ * Get available document types for bank reconciliation
+ */
+export async function getDocumentTypesForReconciliation() {
+  return call({
+    method: 'advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_doctypes_for_bank_reconciliation'
+  }).then(r => r.message || [])
+}
 
 /**
  * Validate bank transactions
@@ -234,7 +337,22 @@ export async function getBankTransactionDetails(transactionName) {
     args: {
       doctype: 'Bank Transaction',
       filters: { name: transactionName },
-      fieldname: ['*']
+      fieldname: [
+        'date',
+        'deposit',
+        'withdrawal',
+        'currency',
+        'description',
+        'name',
+        'bank_account',
+        'company',
+        'reference_number',
+        'party_type',
+        'party',
+        'unallocated_amount',
+        'allocated_amount',
+        'transaction_type'
+      ]
     }
   }).then(r => r.message)
 }

@@ -1,174 +1,179 @@
 <template>
-  <Dialog
-    :model-value="modelValue"
-    @update:model-value="$emit('update:modelValue', $event)"
-    title="Reconcile Transaction"
-    size="xl"
-    @close="handleClose"
+  <Dialog 
+    v-model="show" 
+    :options="{
+      title: 'Reconcile the Bank Transaction',
+      size: '7xl'
+    }"
   >
-    <div v-if="bankTransaction" class="space-y-6">
-      <!-- Transaction Summary -->
-      <div class="bg-gray-50 rounded-lg p-4">
-        <h4 class="text-sm font-medium text-gray-900 mb-3">
-          Bank Transaction Details
-        </h4>
-        <div class="grid grid-cols-3 gap-4 text-sm">
+    <template #body-content>
+      <div class="space-y-6">
+        <!-- Action Selection Section -->
+        <div class="grid grid-cols-2 gap-4">
           <div>
-            <span class="text-gray-500">Date:</span>
-            <span class="ml-2 font-medium">{{ formatDate(bankTransaction.date) }}</span>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Action</label>
+            <FormControl
+              type="select"
+              v-model="actionMode"
+              :options="actionOptions"
+              @change="onActionModeChange"
+            />
           </div>
-          <div>
-            <span class="text-gray-500">Amount:</span>
-            <span class="ml-2 font-medium">{{ formatCurrency(bankTransaction.amount, bankTransaction.currency) }}</span>
-          </div>
-          <div>
-            <span class="text-gray-500">Description:</span>
-            <span class="ml-2 font-medium">{{ bankTransaction.description }}</span>
+          <div v-if="actionMode === 'Create Voucher'">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Document Type</label>
+            <FormControl
+              type="select"
+              v-model="documentType"
+              :options="documentTypeOptions"
+            />
           </div>
         </div>
-      </div>
 
-      <!-- Reconciliation Type Selection -->
-      <div>
-        <h4 class="text-sm font-medium text-gray-900 mb-3">
-          Reconciliation Type
-        </h4>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <button
-            v-for="type in reconciliationTypes"
-            :key="type.value"
-            @click="selectedType = type.value"
-            class="p-4 border rounded-lg text-left transition-colors"
-            :class="selectedType === type.value ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'"
-          >
-            <div class="flex items-center">
-              <FeatherIcon :name="type.icon" class="w-5 h-5 mr-3" />
-              <div>
-                <div class="font-medium text-gray-900">{{ type.label }}</div>
-                <div class="text-sm text-gray-500">{{ type.description }}</div>
+        <!-- Match Against Voucher Section -->
+        <div v-if="actionMode === 'Match Against Voucher'" class="space-y-4">
+          <!-- Filters Section -->
+          <div class="border rounded-lg p-4 bg-gray-50">
+            <h3 class="text-sm font-medium text-gray-900 mb-3">Filters</h3>
+            
+            <!-- Document Type Checkboxes -->
+            <div class="grid grid-cols-3 gap-4 mb-4">
+              <div v-for="docType in availableDocTypes" :key="docType.value">
+                <label class="flex items-center">
+                  <input
+                    type="checkbox"
+                    v-model="selectedDocTypes"
+                    :value="docType.value"
+                    @change="onFilterChange"
+                    class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                  />
+                  <span class="ml-2 text-sm text-gray-700">{{ docType.label }}</span>
+                </label>
               </div>
             </div>
-          </button>
-        </div>
-      </div>
 
-      <!-- Voucher Selection -->
-      <div v-if="selectedType === 'match'">
-        <div class="flex justify-between items-center mb-3">
-          <h4 class="text-sm font-medium text-gray-900">
-            Select Vouchers to Reconcile
-          </h4>
-          <Button
-            size="sm"
-            variant="outline"
-            @click="searchVouchers"
-            :loading="searchingVouchers"
-          >
-            <FeatherIcon name="search" class="w-4 h-4 mr-1" />
-            Search Vouchers
-          </Button>
-        </div>
-
-        <!-- Voucher Categories -->
-        <div class="space-y-4">
-          <!-- Payment Entries -->
-          <div v-if="vouchers.payments.length > 0">
-            <h5 class="text-sm font-medium text-gray-700 mb-2">
-              Payment Entries
-            </h5>
-            <VoucherSelectionTable
-              :vouchers="vouchers.payments"
-              :selected="selectedVouchers"
-              @selection-change="handleVoucherSelection"
-            />
+            <!-- Additional Filters -->
+            <div class="grid grid-cols-3 gap-4">
+              <div>
+                <label class="flex items-center">
+                  <input
+                    type="checkbox"
+                    v-model="exactMatch"
+                    @change="onFilterChange"
+                    class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                  />
+                  <span class="ml-2 text-sm text-gray-700">Show Only Exact Amount</span>
+                </label>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">From Date</label>
+                <FormControl
+                  type="date"
+                  v-model="fromDate"
+                  @change="onFilterChange"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">To Date</label>
+                <FormControl
+                  type="date"
+                  v-model="toDate"
+                  @change="onFilterChange"
+                />
+              </div>
+            </div>
           </div>
 
-          <!-- Journal Entries -->
-          <div v-if="vouchers.journals.length > 0">
-            <h5 class="text-sm font-medium text-gray-700 mb-2">
-              Journal Entries
-            </h5>
-            <VoucherSelectionTable
-              :vouchers="vouchers.journals"
-              :selected="selectedVouchers"
-              @selection-change="handleVoucherSelection"
-            />
+          <!-- Selected Vouchers Summary -->
+          <div v-if="selectedVouchers.length > 0" class="border rounded-lg p-4 bg-blue-50">
+            <div class="text-center">
+              <h5 class="font-bold text-blue-900">
+                Total ({{ selectedVouchers.length }} selected): {{ formatCurrency(voucherTotal, transaction?.currency) }}
+              </h5>
+            </div>
           </div>
 
-          <!-- Unpaid Invoices -->
-          <div v-if="vouchers.invoices.length > 0">
-            <h5 class="text-sm font-medium text-gray-700 mb-2">
-              Unpaid Invoices
-            </h5>
-            <VoucherSelectionTable
-              :vouchers="vouchers.invoices"
-              :selected="selectedVouchers"
-              @selection-change="handleVoucherSelection"
-            />
+          <!-- Voucher Selection Table -->
+          <div v-if="showVoucherTable" class="border rounded-lg">
+            <div class="p-3 bg-gray-50 border-b">
+              <h4 class="text-sm font-medium text-gray-900">
+                Available Vouchers ({{ availableVouchers.length }} found)
+              </h4>
+            </div>
+            <div class="max-h-96 overflow-y-auto">
+              <VoucherSelectionTable
+                :vouchers="availableVouchers"
+                :loading="loadingVouchers"
+                v-model:selected="selectedVouchers"
+                @selection-change="onVoucherSelectionChange"
+              />
+            </div>
+          </div>
+
+          <!-- No Matching Vouchers Message -->
+          <div v-else-if="!loadingVouchers && searchAttempted" class="text-center py-8">
+            <div class="text-gray-500">No Matching Vouchers Found</div>
           </div>
         </div>
 
-        <!-- Allocation Summary -->
-        <div v-if="selectedVouchers.length > 0" class="bg-blue-50 rounded-lg p-4 mt-4">
-          <h5 class="text-sm font-medium text-gray-900 mb-2">
-            Allocation Summary
-          </h5>
+        <!-- Create Voucher Section -->
+        <div v-if="actionMode === 'Create Voucher'" class="space-y-4">
+          <div class="border rounded-lg p-4">
+            <h3 class="text-sm font-medium text-gray-900 mb-3">Voucher Details</h3>
+            <!-- Voucher creation form fields will go here -->
+            <div class="text-gray-500">Voucher creation form coming soon...</div>
+          </div>
+        </div>
+
+        <!-- Update Bank Transaction Section -->
+        <div v-if="actionMode === 'Update Bank Transaction'" class="space-y-4">
+          <div class="border rounded-lg p-4">
+            <h3 class="text-sm font-medium text-gray-900 mb-3">Update Transaction</h3>
+            <!-- Transaction update form fields will go here -->
+            <div class="text-gray-500">Transaction update form coming soon...</div>
+          </div>
+        </div>
+
+        <!-- Bank Transaction Details (Read-only) -->
+        <div class="border rounded-lg p-4 bg-gray-50">
+          <h3 class="text-sm font-medium text-gray-900 mb-3">Transaction Details</h3>
           <div class="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <span class="text-gray-500">Total Selected:</span>
-              <span class="ml-2 font-medium">{{ formatCurrency(totalSelected, bankTransaction.currency) }}</span>
+              <label class="font-medium text-gray-700">Date:</label>
+              <span class="ml-2 text-gray-900">{{ formatDate(transaction?.date) }}</span>
             </div>
             <div>
-              <span class="text-gray-500">Remaining:</span>
-              <span class="ml-2 font-medium" :class="remainingAmount === 0 ? 'text-green-600' : 'text-red-600'">
-                {{ formatCurrency(remainingAmount, bankTransaction.currency) }}
+              <label class="font-medium text-gray-700">Amount:</label>
+              <span class="ml-2 text-gray-900" :class="amountClass">
+                {{ formatCurrency(transactionAmount, transaction?.currency) }}
               </span>
+            </div>
+            <div class="col-span-2">
+              <label class="font-medium text-gray-700">Description:</label>
+              <span class="ml-2 text-gray-900">{{ transaction?.description }}</span>
+            </div>
+            <div>
+              <label class="font-medium text-gray-700">Allocated:</label>
+              <span class="ml-2 text-gray-900">{{ formatCurrency(allocatedAmount, transaction?.currency) }}</span>
+            </div>
+            <div>
+              <label class="font-medium text-gray-700">Unallocated:</label>
+              <span class="ml-2 text-gray-900">{{ formatCurrency(unallocatedAmount, transaction?.currency) }}</span>
             </div>
           </div>
         </div>
       </div>
+    </template>
 
-      <!-- Create Payment Entry Form -->
-      <div v-if="selectedType === 'create_payment'">
-        <CreatePaymentEntryForm
-          :bank-transaction="bankTransaction"
-          @created="handlePaymentCreated"
-        />
-      </div>
-
-      <!-- Create Journal Entry Form -->
-      <div v-if="selectedType === 'create_journal'">
-        <CreateJournalEntryForm
-          :bank-transaction="bankTransaction"
-          @created="handleJournalCreated"
-        />
-      </div>
-    </div>
-
-    <!-- Dialog Footer -->
-    <template #footer>
-      <div class="flex justify-end space-x-3">
-        <Button
-          variant="outline"
-          @click="handleClose"
-        >
-          Cancel
-        </Button>
-        
-        <Button
-          v-if="selectedType === 'match' && canReconcile"
+    <template #actions>
+      <div class="flex gap-2">
+        <Button variant="ghost" @click="handleCancel">Cancel</Button>
+        <Button 
+          variant="solid" 
+          :loading="processing"
           @click="handleReconcile"
-          :loading="reconciling"
+          :disabled="!canReconcile"
         >
-          Reconcile
-        </Button>
-        
-        <Button
-          v-if="selectedType === 'update'"
-          @click="handleUpdate"
-          :loading="updating"
-        >
-          Update Transaction
+          {{ actionMode === 'Match Against Voucher' ? 'Reconcile' : actionMode === 'Create Voucher' ? 'Create & Reconcile' : 'Update' }}
         </Button>
       </div>
     </template>
@@ -176,12 +181,11 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
-import { formatDate, formatCurrency } from '@/utils/formatters'
+import { ref, computed, watch, onMounted } from 'vue'
+import { Dialog, Button, FormControl } from 'frappe-ui'
+import { formatDate, formatCurrency } from '../utils/formatters'
 import VoucherSelectionTable from './VoucherSelectionTable.vue'
-import CreatePaymentEntryForm from './CreatePaymentEntryForm.vue'
-import CreateJournalEntryForm from './CreateJournalEntryForm.vue'
-import { useReconciliation } from '@/composables/useReconciliation'
+import { useReconciliation } from '../composables/useReconciliation'
 
 // Props
 const props = defineProps({
@@ -189,132 +193,275 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
-  bankTransaction: {
+  transaction: {
     type: Object,
     default: null
   },
-  selectedVouchers: {
-    type: Array,
-    default: () => []
+  company: {
+    type: String,
+    default: ''
+  },
+  bankAccount: {
+    type: String,
+    default: ''
   }
 })
 
 // Emits
-const emit = defineEmits(['update:modelValue', 'reconciled'])
+const emit = defineEmits(['update:modelValue', 'reconciled', 'error'])
 
 // Composables
 const { 
-  vouchers, 
-  searchingVouchers, 
-  reconciling, 
-  updating,
   searchVouchers, 
   reconcileVouchers, 
-  updateTransaction 
+  createPaymentEntriesForInvoices,
+  isLoading: processing 
 } = useReconciliation()
 
-// Local state
-const selectedType = ref('match')
-const selectedVouchers = ref([])
-
-// Reconciliation types
-const reconciliationTypes = [
-  {
-    value: 'match',
-    label: 'Match Against Voucher',
-    description: 'Select existing vouchers to reconcile',
-    icon: 'link'
-  },
-  {
-    value: 'create_payment',
-    label: 'Create Payment Entry',
-    description: 'Create a new payment entry',
-    icon: 'plus-circle'
-  },
-  {
-    value: 'create_journal',
-    label: 'Create Journal Entry',
-    description: 'Create a new journal entry',
-    icon: 'file-text'
-  },
-  {
-    value: 'update',
-    label: 'Update Transaction',
-    description: 'Update transaction details',
-    icon: 'edit'
-  }
-]
-
-// Computed
-const totalSelected = computed(() => {
-  return selectedVouchers.value.reduce((sum, voucher) => sum + voucher.amount, 0)
+// Dialog visibility
+const show = computed({
+  get: () => props.modelValue,
+  set: (value) => emit('update:modelValue', value)
 })
 
-const remainingAmount = computed(() => {
-  if (!props.bankTransaction) return 0
-  return Math.abs(props.bankTransaction.amount) - totalSelected.value
+// Form state
+const actionMode = ref('Match Against Voucher')
+const documentType = ref('Payment Entry')
+const selectedDocTypes = ref(['payment_entry', 'journal_entry'])
+const exactMatch = ref(false)
+const fromDate = ref('')
+const toDate = ref('')
+
+// Voucher data
+const availableVouchers = ref([])
+const selectedVouchers = ref([])
+const loadingVouchers = ref(false)
+const searchAttempted = ref(false)
+
+// Action and document type options
+const actionOptions = [
+  { label: 'Match Against Voucher', value: 'Match Against Voucher' },
+  { label: 'Create Voucher', value: 'Create Voucher' },
+  { label: 'Update Bank Transaction', value: 'Update Bank Transaction' }
+]
+
+const documentTypeOptions = [
+  { label: 'Payment Entry', value: 'Payment Entry' },
+  { label: 'Journal Entry', value: 'Journal Entry' }
+]
+
+const availableDocTypes = [
+  { label: 'Payment Entry', value: 'payment_entry' },
+  { label: 'Journal Entry', value: 'journal_entry' },
+  { label: 'Unpaid Sales Invoice', value: 'unpaid_sales_invoice' },
+  { label: 'Unpaid Purchase Invoice', value: 'unpaid_purchase_invoice' }
+]
+
+// Computed properties
+const transactionAmount = computed(() => {
+  if (!props.transaction) return 0
+  return (props.transaction.deposit || 0) - (props.transaction.withdrawal || 0)
+})
+
+const amountClass = computed(() => {
+  return transactionAmount.value > 0 ? 'text-green-600' : 'text-red-600'
+})
+
+const allocatedAmount = computed(() => {
+  return props.transaction?.allocated_amount || 0
+})
+
+const unallocatedAmount = computed(() => {
+  if (!props.transaction) return 0
+  return (props.transaction.unallocated_amount || transactionAmount.value) - voucherTotal.value
+})
+
+const voucherTotal = computed(() => {
+  return selectedVouchers.value.reduce((total, voucher) => {
+    return total + (voucher.amount || 0)
+  }, 0)
+})
+
+const showVoucherTable = computed(() => {
+  return availableVouchers.value.length > 0 && !loadingVouchers.value
 })
 
 const canReconcile = computed(() => {
-  return selectedVouchers.value.length > 0 && Math.abs(remainingAmount.value) < 0.01
+  if (actionMode.value === 'Match Against Voucher') {
+    return selectedVouchers.value.length > 0
+  }
+  return true // For other modes, we'll validate based on form completion
+})
+
+watch(props.transaction, () => {
+  console.log('Transaction changed:', props.transaction)
 })
 
 // Methods
-const handleClose = () => {
-  emit('update:modelValue', false)
-  selectedType.value = 'match'
+const onActionModeChange = () => {
+  // Reset state when action mode changes
   selectedVouchers.value = []
+  availableVouchers.value = []
+  searchAttempted.value = false
 }
 
-const handleVoucherSelection = (selection) => {
+const onFilterChange = async () => {
+  if (actionMode.value === 'Match Against Voucher') {
+    await searchForVouchers()
+  }
+}
+
+const onVoucherSelectionChange = (selection) => {
   selectedVouchers.value = selection
+  console.log('Selected vouchers:', selectedVouchers.value)
+}
+
+const searchForVouchers = async () => {
+  if (!props.transaction) {
+    return
+  }
+
+  // Clear vouchers if no document types are selected
+  if (selectedDocTypes.value.length === 0) {
+    availableVouchers.value = []
+    selectedVouchers.value = []
+    searchAttempted.value = true
+    return
+  }
+
+  loadingVouchers.value = true
+  searchAttempted.value = true
+  
+  try {
+    const result = await searchVouchers({
+      bankTransactionName: props.transaction.name,
+      documentTypes: selectedDocTypes.value,
+      fromDate: fromDate.value,
+      toDate: toDate.value,
+      exactMatch: exactMatch.value,
+      filterByReferenceDate: false
+    })
+    
+    availableVouchers.value = result || []
+    // Clear any previously selected vouchers when search results change
+    selectedVouchers.value = []
+    console.log('Found vouchers:', availableVouchers.value.length)
+  } catch (error) {
+    console.error('Error searching vouchers:', error)
+    emit('error', error)
+  } finally {
+    loadingVouchers.value = false
+  }
 }
 
 const handleReconcile = async () => {
-  if (!props.bankTransaction || selectedVouchers.value.length === 0) return
-  
   try {
-    await reconcileVouchers(props.bankTransaction.name, selectedVouchers.value)
-    emit('reconciled')
-    handleClose()
+    if (actionMode.value === 'Match Against Voucher') {
+      await processVoucherMatching()
+    } else if (actionMode.value === 'Create Voucher') {
+      // TODO: Implement voucher creation
+      console.log('Create voucher not implemented yet')
+    } else if (actionMode.value === 'Update Bank Transaction') {
+      // TODO: Implement transaction update
+      console.log('Update transaction not implemented yet')
+    }
   } catch (error) {
-    console.error('Reconciliation failed:', error)
+    console.error('Reconciliation error:', error)
+    emit('error', error)
   }
 }
 
-const handleUpdate = async () => {
-  if (!props.bankTransaction) return
-  
-  try {
-    await updateTransaction(props.bankTransaction.name)
-    emit('reconciled')
-    handleClose()
-  } catch (error) {
-    console.error('Update failed:', error)
+const processVoucherMatching = async () => {
+  if (selectedVouchers.value.length === 0) {
+    return
+  }
+
+  // Separate unpaid invoices from regular vouchers
+  const unpaidInvoices = selectedVouchers.value.filter(v => 
+    v.doctype === 'Unpaid Sales Invoice' || v.doctype === 'Unpaid Purchase Invoice'
+  )
+  const regularVouchers = selectedVouchers.value.filter(v => 
+    v.doctype !== 'Unpaid Sales Invoice' && v.doctype !== 'Unpaid Purchase Invoice'
+  )
+
+  console.log('Processing reconciliation:', {
+    unpaidInvoices: unpaidInvoices.length,
+    regularVouchers: regularVouchers.length
+  })
+
+  // Process unpaid invoices first if any
+  if (unpaidInvoices.length > 0) {
+    const invoiceData = unpaidInvoices.map(invoice => ({
+      doctype: invoice.doctype,
+      name: invoice.name,
+      allocated_amount: invoice.amount
+    }))
+
+    await createPaymentEntriesForInvoices(
+      props.transaction.name,
+      invoiceData,
+      regularVouchers.length === 0 // auto-reconcile if no regular vouchers
+    )
+  }
+
+  // Process regular vouchers if any
+  if (regularVouchers.length > 0) {
+    const voucherData = regularVouchers.map(voucher => ({
+      payment_doctype: voucher.doctype,
+      payment_name: voucher.name,
+      amount: voucher.amount
+    }))
+
+    await reconcileVouchers(props.transaction.name, voucherData)
+  }
+
+  // Emit success
+  emit('reconciled', { 
+    transaction_name: props.transaction.name,
+    vouchers_processed: selectedVouchers.value.length
+  })
+}
+
+const handleCancel = () => {
+  show.value = false
+}
+
+const initializeDialog = () => {
+  if (props.transaction) {
+    // Set default date range based on transaction date
+    const transactionDate = new Date(props.transaction.date)
+    const fromDateObj = new Date(transactionDate)
+    fromDateObj.setDate(fromDateObj.getDate() - 30) // 30 days before
+    const toDateObj = new Date(transactionDate)
+    toDateObj.setDate(toDateObj.getDate() + 30) // 30 days after
+
+    fromDate.value = fromDateObj.toISOString().split('T')[0]
+    toDate.value = toDateObj.toISOString().split('T')[0]
+
+    // Reset state
+    selectedVouchers.value = []
+    availableVouchers.value = []
+    searchAttempted.value = false
+    
+    // Initial search for vouchers
+    setTimeout(() => {
+      if (actionMode.value === 'Match Against Voucher') {
+        searchForVouchers()
+      }
+    }, 300)
   }
 }
 
-const handlePaymentCreated = (payment) => {
-  emit('reconciled')
-  handleClose()
-}
-
-const handleJournalCreated = (journal) => {
-  emit('reconciled')
-  handleClose()
-}
-
-// Watch for dialog open to search vouchers
-watch(() => props.modelValue, (newValue) => {
-  if (newValue && props.bankTransaction && selectedType.value === 'match') {
-    searchVouchers(props.bankTransaction)
+// Watchers
+watch(() => props.transaction, () => {
+  if (props.transaction && show.value) {
+    initializeDialog()
   }
-})
+}, { immediate: true })
 
-// Watch for type changes
-watch(selectedType, (newType) => {
-  if (newType === 'match' && props.bankTransaction) {
-    searchVouchers(props.bankTransaction)
+watch(show, (newValue) => {
+  if (newValue && props.transaction) {
+    initializeDialog()
   }
 })
 </script> 

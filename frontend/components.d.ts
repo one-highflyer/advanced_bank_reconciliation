@@ -8,6 +8,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    BankReconciliationExample: typeof import('./src/components/BankReconciliationExample.vue')['default']
     CreateJournalEntryForm: typeof import('./src/components/CreateJournalEntryForm.vue')['default']
     CreatePaymentEntryForm: typeof import('./src/components/CreatePaymentEntryForm.vue')['default']
     FiltersPanel: typeof import('./src/components/FiltersPanel.vue')['default']

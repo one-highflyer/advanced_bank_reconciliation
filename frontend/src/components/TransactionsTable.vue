@@ -2,6 +2,10 @@
   <div class="overflow-x-auto py-4 px-2">
     <ListView :columns="columns" :rows="transformedTransactions" :options="{
       selectable: false,
+      emptyState: { 
+        title: 'No transactions found', 
+        description: 'Try adjusting your filters or upload a bank statement.' 
+      }
     }" row-key="name" @selection-change="$emit('selection-change', $event)">
       <template #cell="{ item, row, column }">
         <!-- Date column -->
@@ -51,22 +55,12 @@
       </template>
     </ListView>
 
-    <!-- Empty State -->
-    <div v-if="!loading && transformedTransactions.length === 0" class="text-center py-12">
-      <FeatherIcon name="inbox" class="mx-auto h-12 w-12 text-gray-400" />
-      <h3 class="mt-2 text-sm font-medium text-gray-900">
-        No transactions found
-      </h3>
-      <p class="mt-1 text-sm text-gray-500">
-        Try adjusting your filters or upload a bank statement.
-      </p>
-    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import { ListView, Button, Dialog, FeatherIcon } from 'frappe-ui'
+import { ListView, Button } from 'frappe-ui'
 import { formatDate, formatCurrency } from '../utils/formatters'
 
 // Props
@@ -89,7 +83,6 @@ const selectedTransaction = ref(null)
 
 // Watch for changes in transactions prop
 watch(() => props.transactions, (newTransactions, oldTransactions) => {
-  console.log('TransactionsTable: transactions changed')
   console.log('New transactions length:', newTransactions?.length)
 
   if (newTransactions?.length > 0) {

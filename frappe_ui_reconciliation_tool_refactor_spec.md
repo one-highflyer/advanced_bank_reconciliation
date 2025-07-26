@@ -291,18 +291,18 @@ export async function getLinkedVouchers({
   filterByReferenceDate
 }) {
   return frappe.call({
-    method: "advanced_bank_reconciliation.advance_bank_reconciliation_tool.get_linked_payments",
+         method: "advanced_bank_reconciliation.advance_bank_reconciliation_tool.get_linked_payments",
     args: { bank_transaction_name: bankTransactionName, document_types: documentTypes, ... }
   })
-}
+     }
 ```
-
+     
 **Reconciliation Processing**:
 ```javascript
 // services/bankReconciliation.js
 export async function reconcileVouchers(bankTransactionName, vouchers) {
-  return frappe.call({
-    method: "advanced_bank_reconciliation.advance_bank_reconciliation_tool.reconcile_vouchers", 
+       return frappe.call({
+         method: "advanced_bank_reconciliation.advance_bank_reconciliation_tool.reconcile_vouchers",
     args: { bank_transaction_name: bankTransactionName, vouchers }
   })
 }

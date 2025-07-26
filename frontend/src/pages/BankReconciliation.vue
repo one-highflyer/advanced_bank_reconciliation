@@ -64,7 +64,7 @@
     </div>
 
     <!-- Reconciliation Dialog -->
-    <ReconciliationDialog v-model="showReconciliationDialog" :bank-transaction="selectedTransaction"
+    <ReconciliationDialog v-model="showReconciliationDialog" :transaction="selectedTransaction"
       :selected-vouchers="selectedVouchers" @reconciled="handleReconciled" />
   </div>
 </template>
@@ -107,6 +107,7 @@ const handleSelectionChange = (selection) => {
 }
 
 const handleReconcile = (transaction) => {
+  console.log('Selected transaction for reconciliation', transaction)
   selectedTransaction.value = transaction
   showReconciliationDialog.value = true
 }
