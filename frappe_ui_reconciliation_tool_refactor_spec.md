@@ -10,442 +10,587 @@
 
 ---
 
-## 2. High-Level Architecture - Standalone Vue Application
+## 2. High-Level Architecture - Vue Component Integration
 
-Following the **helpdesk app pattern**, create a standalone Vue application outside the Frappe desk:
+**Updated Approach**: Instead of a completely standalone application, we're implementing Vue 3 components that integrate with the existing Frappe framework while maintaining the modern development experience.
 
 ```
 advanced_bank_reconciliation/
-├─ frontend/                    # Standalone Vue app (frappe-ui-starter)
+├─ frontend/                    # Vue 3 components and build setup
 │  ├─ src/
-│  │  ├─ components/           # Reusable UI widgets
-│  │  ├─ pages/               # Application pages/views
+│  │  ├─ components/           # Vue 3 components using frappe-ui
+│  │  │  ├─ TransactionsTable.vue         # Main unreconciled transactions table
+│  │  │  ├─ ReconciliationDialog.vue      # Complex reconciliation workflow dialog
+│  │  │  ├─ VoucherSelectionTable.vue     # Voucher matching interface
+│  │  │  ├─ FiltersPanel.vue              # Date and account filters
+│  │  │  ├─ NumberCards.vue               # Balance summary cards
+│  │  │  └─ ActionButtons.vue             # Utility action buttons
 │  │  ├─ composables/         # Vue composables wrapping frappe.call
-│  │  ├─ services/            # API abstractions (bank reconciliation endpoints)
-│  │  ├─ stores/              # Pinia stores for state management
-│  │  ├─ utils/               # Utility functions (currency, dates, etc.)
-│  │  ├─ router/              # Vue router configuration
-│  │  ├─ App.vue              # Root component
-│  │  └─ main.js              # App entrypoint
-│  ├─ public/                 # Static assets
-│  ├─ vite.config.js          # Vite configuration with Frappe proxy
+│  │  │  ├─ useReconciliation.js          # Core reconciliation logic
+│  │  │  ├─ useBankTransactions.js        # Transaction data management
+│  │  │  └─ useVoucherMatching.js         # Voucher search and selection
+│  │  ├─ services/            # API abstractions
+│  │  │  ├─ bankReconciliation.js         # Main reconciliation APIs
+│  │  │  ├─ voucherMatching.js            # Voucher search APIs
+│  │  │  └─ validation.js                 # Validation APIs
+│  │  ├─ utils/               # Utility functions
+│  │  │  ├─ formatters.js                 # Currency, date formatting
+│  │  │  ├─ constants.js                  # Document types, statuses
+│  │  │  └─ helpers.js                    # Common helper functions
+│  │  └─ main.js              # Component registration and exports
+│  ├─ vite.config.js          # Vite configuration
 │  ├─ tailwind.config.js      # TailwindCSS configuration
-│  ├─ package.json            # Frontend dependencies
-│  └─ index.html              # Entry HTML
-├─ package.json               # Root workspace manager (like helpdesk)
+│  └─ package.json            # Frontend dependencies
 └─ advanced_bank_reconciliation/  # Python backend (unchanged)
 ```
 
 ### Technology Stack
-*   **Build tool:** Vite (fast, tree-shaking, matches frappe-ui-starter).
-*   **Language:** JavaScript/TypeScript + Vue 3 (Composition API).
-*   **Component Library:** **frappe-ui** (official Frappe Vue components).
-*   **Styling:** TailwindCSS + Frappe design tokens.
-*   **Data table:** Use `Table` component from **frappe-ui** with extensions as needed.
-*   **Charts & cards:** Leverage `frappe-ui` components (`NumberCard`, `Chart`).
-*   **State management:** Pinia stores for complex state, Vue 3 reactivity for component state.
-*   **Routing:** Vue Router for SPA navigation.
+*   **Build tool:** Vite for component building and development server
+*   **Language:** JavaScript + Vue 3 (Composition API with `<script setup>`)
+*   **Component Library:** **frappe-ui** components (ListView, Dialog, Button, etc.)
+*   **Styling:** TailwindCSS + Frappe design tokens
+*   **Data table:** `ListView` component from **frappe-ui** with custom templates
+*   **Dialogs:** `Dialog` component from **frappe-ui** with complex form fields
+*   **State management:** Vue 3 reactivity + composables for complex workflows
 
-### Benefits of Standalone Architecture
-- **Independent Development**: Frontend can be developed/deployed separately
-- **Modern Tooling**: Full Vite dev server with HMR
-- **Clean Separation**: Clear API boundary between frontend and backend
-- **Scalability**: Easier to scale frontend independently
-- **Reusability**: Components can be shared across other apps
+### Integration Strategy
+- Components are built as Vue 3 modules that can be imported into existing Frappe pages
+- Maintains compatibility with Frappe's bundling system
+- Uses `frappe.call()` for all server communication
+- Preserves existing user permissions and authentication
 
 ---
 
-## 3. Application Setup & Integration
+## 3. Core Component Architecture
 
-### Initial Setup using frappe-ui-starter
+### TransactionsTable Component
 
-```bash
-cd apps/advanced_bank_reconciliation
-npx degit netchampfaris/frappe-ui-starter frontend
-cd frontend
-yarn install
+**File**: `frontend/src/components/TransactionsTable.vue`
+
+**Responsibilities**:
+- Display unreconciled bank transactions in a `ListView` from frappe-ui
+- Provide checkbox selection for bulk operations
+- Individual "Reconcile" button per row that triggers reconciliation dialog
+- Handle transaction state updates after reconciliation
+
+**Key Features**:
+- Column configuration: Date, Description, Reference, Amount, Actions
+- Amount formatting with color coding (green for deposits, red for withdrawals)
+- Row selection handling with emit events
+- Loading states and empty state handling
+- Responsive design for mobile devices
+
+**Events Emitted**:
+- `@reconcile` - When individual reconcile button is clicked, passes transaction data
+- `@selection-change` - When row checkboxes are changed, passes selected transactions
+- `@refresh` - When table data needs to be refreshed
+
+### ReconciliationDialog Component  
+
+**File**: `frontend/src/components/ReconciliationDialog.vue`
+
+**Responsibilities**:
+- **Primary**: Handle complex reconciliation workflows equivalent to `DialogManager` class
+- Display bank transaction details in read-only form
+- Provide three main action modes: Match Against Voucher, Create Voucher, Update Bank Transaction
+- Handle voucher search, selection, and batch reconciliation
+- Manage unpaid invoice processing with sequential workflow
+
+**Dialog Structure**:
+```
+┌─ Reconciliation Dialog ────────────────────────────────────────┐
+│                                                                │
+│ Action: [Match Against Voucher ▼] | Document Type: [Payment ▼] │
+│                                                                │
+│ ┌─ Filters Section (when matching) ──────────────────────────┐ │
+│ │ □ Payment Entry  □ Journal Entry  □ Unpaid Invoices       │ │
+│ │ □ Exact Match    From: [date]     To: [date]              │ │
+│ └─────────────────────────────────────────────────────────────┘ │
+│                                                                │
+│ ┌─ Voucher Selection Table (when matching) ──────────────────┐ │
+│ │ □ Document Type | Name | Date | Amount | Reference | Party │ │
+│ │ ✓ Payment Entry | PE-001 | 2024-01-15 | $1000 | REF123   │ │  
+│ │ □ Unpaid Invoice| SI-001 | 2024-01-14 | $500  | INV456   │ │
+│ └─────────────────────────────────────────────────────────────┘ │
+│                                                                │
+│ ┌─ Selected Summary ──────────────────────────────────────────┐ │
+│ │ Total (2 selected): $1,500.00                              │ │
+│ └─────────────────────────────────────────────────────────────┘ │
+│                                                                │
+│ ┌─ Bank Transaction Details ─────────────────────────────────┐ │
+│ │ Date: 2024-01-15    Amount: $1,500.00                     │ │
+│ │ Description: Payment received                               │ │
+│ │ Allocated: $0.00    Unallocated: $1,500.00               │ │
+│ └─────────────────────────────────────────────────────────────┘ │
+│                                                                │
+│                                    [Cancel] [Reconcile]        │
+└────────────────────────────────────────────────────────────────┘
 ```
 
-### Root Workspace Configuration
+**Key Workflow States**:
 
-Create `package.json` in app root (following helpdesk pattern):
-```json
-{
-  "private": true,
-  "scripts": {
-    "dev": "cd frontend && yarn dev",
-    "build": "cd frontend && yarn build"
-  },
-  "workspaces": ["frontend"]
+1. **Match Against Voucher Mode**:
+   - Shows filters for document types (Payment Entry, Journal Entry, Unpaid Invoices)
+   - Displays voucher selection table with checkboxes
+   - Handles mixed selection of regular vouchers and unpaid invoices
+   - Shows running total of selected amounts
+   - Updates allocated/unallocated amounts in real-time
+
+2. **Create Voucher Mode**:
+   - Document type selection (Payment Entry vs Journal Entry)
+   - Form fields for new voucher creation (party, reference, dates, etc.)
+   - Conditional fields based on document type
+   - "Edit in Full Page" option to open standard Frappe forms
+
+3. **Update Bank Transaction Mode**:
+   - Form to update transaction reference, party information
+   - Direct update without creating vouchers
+
+**Complex Reconciliation Logic**:
+- **Unpaid Invoice Handling**: Automatically create payment entries for unpaid invoices before reconciliation
+- **Sequential Processing**: Process unpaid invoices first, then reconcile with regular vouchers
+- **Auto-reconcile Logic**: When only unpaid invoices selected, auto-reconcile after payment creation
+- **Mixed Processing**: Handle combinations of unpaid invoice and voucher reconciliation
+- **Error Handling**: Proper rollback and error messaging for failed operations
+
+**State Management**:
+- `selectedTransaction` - Currently selected bank transaction
+- `voucherFilters` - Active filters for voucher search
+- `selectedVouchers` - Array of selected vouchers for reconciliation
+- `actionMode` - Current dialog mode (match/create/update)
+- `loadingStates` - Loading indicators for async operations
+
+### VoucherSelectionTable Component
+
+**File**: `frontend/src/components/VoucherSelectionTable.vue`
+
+**Responsibilities**:
+- Display matching vouchers in a selectable table format
+- Handle checkbox selection with running totals
+- Distinguish between voucher types (Payment Entry, Journal Entry, Unpaid Invoices)
+- Provide inline filtering and sorting capabilities
+- Show voucher-specific information (party, reference, amounts)
+
+**Key Features**:
+- Uses `ListView` from frappe-ui with checkbox selection
+- Custom row templates for different voucher types
+- Real-time total calculation for selected vouchers
+- Visual indicators for unpaid invoices vs regular vouchers
+- Responsive column layout
+
+---
+
+## 4. Integration Between Components
+
+### TransactionsTable → ReconciliationDialog Flow
+
+```javascript
+// In parent component (main reconciliation page)
+<template>
+  <TransactionsTable 
+    :transactions="unreconciled" 
+    @reconcile="openReconciliationDialog"
+  />
+  
+  <ReconciliationDialog
+    v-model="showDialog"
+    :transaction="selectedTransaction"
+    @reconciled="handleReconciliationComplete"
+  />
+</template>
+
+<script setup>
+const showDialog = ref(false)
+const selectedTransaction = ref(null)
+
+const openReconciliationDialog = (transaction) => {
+  selectedTransaction.value = transaction
+  showDialog.value = true
+}
+
+const handleReconciliationComplete = (result) => {
+  // Refresh transaction tables and number cards
+  refreshData()
+  showDialog.value = false
+  frappe.show_alert(__("Bank Transaction {0} reconciled successfully", [result.transaction_name]))
+}
+</script>
+```
+
+### ReconciliationDialog Internal Flow
+
+```javascript
+// ReconciliationDialog.vue internal structure
+<script setup>
+const props = defineProps(['transaction', 'modelValue'])
+const emit = defineEmits(['update:modelValue', 'reconciled'])
+
+// Core composables for business logic
+const { 
+  searchVouchers, 
+  reconcileVouchers, 
+  createPaymentEntry,
+  createJournalEntry 
+} = useReconciliation()
+
+const { 
+  selectedVouchers, 
+  voucherTotal, 
+  handleVoucherSelection 
+} = useVoucherSelection()
+
+// Dialog state management
+const actionMode = ref('Match Against Voucher')
+const showVoucherTable = computed(() => actionMode.value === 'Match Against Voucher')
+
+// Main reconciliation action
+const handleReconcile = async () => {
+  if (actionMode.value === 'Match Against Voucher') {
+    await processVoucherMatching()
+  } else if (actionMode.value === 'Create Voucher') {
+    await processVoucherCreation()
+  }
+  emit('reconciled', { transaction_name: props.transaction.name })
+}
+
+// Complex voucher matching with unpaid invoice handling
+const processVoucherMatching = async () => {
+  const unpaidInvoices = selectedVouchers.value.filter(v => v.doctype.includes('Unpaid'))
+  const regularVouchers = selectedVouchers.value.filter(v => !v.doctype.includes('Unpaid'))
+  
+  if (unpaidInvoices.length > 0) {
+    // Create payment entries for unpaid invoices first
+    await createPaymentEntriesForInvoices(unpaidInvoices)
+  }
+  
+  if (regularVouchers.length > 0) {
+    // Reconcile regular vouchers
+    await reconcileVouchers(props.transaction.name, regularVouchers)
+  }
+}
+</script>
+```
+
+---
+
+## 5. API Integration & Data Flow
+
+### Core Reconciliation APIs
+
+The Vue components integrate with these existing server-side methods:
+
+**Voucher Search & Matching**:
+```javascript
+// services/voucherMatching.js
+export async function getLinkedVouchers({
+  bankTransactionName,
+  documentTypes,
+  fromDate,
+  toDate,
+  exactMatch,
+  filterByReferenceDate
+}) {
+  return frappe.call({
+    method: "advanced_bank_reconciliation.advance_bank_reconciliation_tool.get_linked_payments",
+    args: { bank_transaction_name: bankTransactionName, document_types: documentTypes, ... }
+  })
 }
 ```
 
-### Frontend Application Routes
+**Reconciliation Processing**:
+```javascript
+// services/bankReconciliation.js
+export async function reconcileVouchers(bankTransactionName, vouchers) {
+  return frappe.call({
+    method: "advanced_bank_reconciliation.advance_bank_reconciliation_tool.reconcile_vouchers", 
+    args: { bank_transaction_name: bankTransactionName, vouchers }
+  })
+}
 
-The standalone app will be served at `/advanced-bank-reconciliation` with routes:
-- `/advanced-bank-reconciliation/` - Main reconciliation tool
-- `/advanced-bank-reconciliation/reports` - Reconciliation reports  
-- `/advanced-bank-reconciliation/history` - Transaction history
-
-### Integration with Frappe Backend
-
-1. **API Communication**: All backend calls via `frappe.call()` from the Vue app
-2. **Authentication**: Inherits Frappe session authentication  
-3. **Permissions**: Respects Frappe user permissions and roles
-4. **CSRF Protection**: Handled automatically by frappe-ui-starter setup
-
-### Development Workflow
-
-```bash
-# Start Frappe development server
-bench start
-
-# In another terminal, start Vue dev server
-cd apps/advanced_bank_reconciliation
-yarn dev
+export async function createPaymentEntriesForInvoices(bankTransactionName, invoices) {
+  return frappe.call({
+    method: "advanced_bank_reconciliation.advance_bank_reconciliation_tool.create_payment_entries_for_invoices",
+    args: { bank_transaction_name: bankTransactionName, invoices }
+  })
+}
 ```
 
-The Vue app runs on port 8080 and proxies API calls to the Frappe server on port 8000.
+### Composables for Business Logic
 
-### Production Deployment
-
-```bash
-# Build the frontend
-cd apps/advanced_bank_reconciliation
-yarn build
-
-# Assets are copied to advanced_bank_reconciliation/public/frontend/
-# Served by Frappe at /advanced-bank-reconciliation
+**useReconciliation Composable**:
+```javascript
+// composables/useReconciliation.js
+export function useReconciliation() {
+  const isLoading = ref(false)
+  const error = ref(null)
+  
+  const reconcileTransaction = async (transaction, vouchers) => {
+    isLoading.value = true
+    try {
+      // Handle complex reconciliation logic
+      const unpaidInvoices = vouchers.filter(v => v.is_unpaid_invoice)
+      const regularVouchers = vouchers.filter(v => !v.is_unpaid_invoice)
+      
+      let result = null
+      if (unpaidInvoices.length > 0) {
+        result = await createPaymentEntriesForInvoices(transaction.name, unpaidInvoices)
+      }
+      
+      if (regularVouchers.length > 0) {
+        result = await reconcileVouchers(transaction.name, regularVouchers)
+      }
+      
+      return result
+    } catch (err) {
+      error.value = err
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+  
+  return { reconcileTransaction, isLoading, error }
+}
 ```
-
-### Access from Frappe Desk
-
-Add navigation link in the app's desk/workspace configuration or create a custom button that opens the standalone app in a new tab/window.
 
 ---
 
-## 4. Core Vue Components
+## 6. Complex Workflow Handling
 
-| Component | Responsibility |
-|-----------|----------------|
-| `AdvanceBankReconciliationPage` | Top-level page, holds filters, renders statistics cards, tables and actions. |
-| `FiltersPanel` | Company, Bank Account, Date range, Reference date toggles. |
-| `NumberCards` | Summary cards (opening balance, cleared balance, difference) with dynamic color coding. |
-| `TransactionsTable` | Unreconciled transactions – rendered with `frappe-ui` Table with checkbox selection. |
-| `ReconciledTransactionsTable` | Already reconciled list (toggle view). |
-| `ReconciliationDialog` | Complex Match/Create/Update workflow; mirrors legacy `DialogManager` with unpaid invoice handling. |
-| `VoucherSelectionTable` | Nested table in dialog for voucher selection with payment/invoice distinction. |
-| `UploadStatementButton` | Opens standard Frappe upload flow via `frappe.call`. |
-| `BatchValidationButton` | Triggers server-side validation jobs with progress feedback. |
-| `AutoReconcileButton` | Automated voucher matching functionality. |
-| `ChartSection` | Balance river chart – re-use existing chart config. |
-| `ActionButtons` | Get Unreconciled Entries, validation actions, etc. |
+### Unpaid Invoice Processing Workflow
 
-Each component lives in its own folder with a `.vue` file (SFC), optional scoped CSS, and tests.
+The reconciliation dialog must handle the complex logic from `dialog_manager.js` for unpaid invoices:
 
----
+1. **Detection Phase**:
+   - Identify unpaid invoices in voucher selection (document type contains "Unpaid")
+   - Separate from regular vouchers (Payment Entry, Journal Entry)
 
-## 5. API Endpoints Integration
+2. **Processing Phase**:
+   - If unpaid invoices selected: Create payment entries first via `create_payment_entries_for_invoices`
+   - If only unpaid invoices: Auto-reconcile after payment creation
+   - If mixed selection: Create payments, then reconcile all vouchers together
 
-The Vue frontend must integrate with these existing server-side methods:
+3. **Error Handling**:
+   - Rollback payment entries if reconciliation fails
+   - Show specific error messages for each failure type
+   - Maintain transaction state consistency
 
-### Core Reconciliation APIs
-- `advanced_bank_reconciliation.advance_bank_reconciliation_tool.get_linked_payments` - Get vouchers matching bank transaction
-- `advanced_bank_reconciliation.advance_bank_reconciliation_tool.reconcile_vouchers` - Match selected vouchers with bank transaction
-- `advanced_bank_reconciliation.advance_bank_reconciliation_tool.create_payment_entries_for_invoices` - Create payment entries for unpaid invoices
-- `advanced_bank_reconciliation.advance_bank_reconciliation_tool.create_payment_entry_bts` - Create new payment entry
-- `advanced_bank_reconciliation.advance_bank_reconciliation_tool.create_journal_entry_bts` - Create new journal entry
+### Dialog State Transitions
 
-### Validation & Processing APIs
-- `advanced_bank_reconciliation.advance_bank_reconciliation_tool.validate_bank_transactions` - Validate transactions in date range
-- `advanced_bank_reconciliation.advance_bank_reconciliation_tool.batch_validate_unvalidated_transactions` - Batch validation with progress tracking
-- `advanced_bank_reconciliation.advance_bank_reconciliation_tool.validate_bank_transaction_async` - Single transaction async validation
+```
+[Open Dialog] → [Load Transaction Details] → [Show Action Selection]
+     │
+     ├─ [Match Against Voucher] → [Show Filters] → [Search Vouchers] → [Show Selection Table]
+     │                                                   │
+     │                                                   ├─ [Select Vouchers] → [Update Totals]
+     │                                                   │
+     │                                                   └─ [Reconcile] → [Process Mixed Types] → [Complete]
+     │
+     ├─ [Create Voucher] → [Show Form Fields] → [Create & Reconcile] → [Complete]
+     │
+     └─ [Update Transaction] → [Show Update Form] → [Update] → [Complete]
+```
 
-### Data Retrieval APIs
-- `erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.get_account_balance` - Account balances
-- `erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.auto_reconcile_vouchers` - Automated matching
-- `erpnext.accounts.doctype.bank_statement_import.bank_statement_import.upload_bank_statement` - Statement upload
-- `frappe.client.get_value` - Bank transaction details
+### Error Recovery Patterns
 
-## 6. Data Flow & Services
-
-1. **API layer** (`/services`)
-   * `bankReconciliation.api.ts` exports functions that wrap `frappe.call` with `async/await`:
-     ```ts
-     export async function getLinkedVouchers(args: GetLinkedVoucherArgs) {
-       return frappe.call<{ message: VoucherRaw[] }>({
-         method: "advanced_bank_reconciliation.advance_bank_reconciliation_tool.get_linked_payments",
-         args,
-       }).then(r => r.message);
-     }
-     
-     export async function reconcileVouchers(bankTransactionName: string, vouchers: VoucherItem[]) {
-       return frappe.call({
-         method: "advanced_bank_reconciliation.advance_bank_reconciliation_tool.reconcile_vouchers",
-         args: { bank_transaction_name: bankTransactionName, vouchers },
-       });
-     }
-     ```
-2. **Composables**
-   * `useVouchers`, `useBankTransactions`, `useNumberCards`, `useValidation` abstract server calls and provide reactive state + loading/error to components.
-3. **Store (optional)**
-   * A Pinia store (e.g., `useReconciliationStore`) can keep globally selected bank account, date filters, and shared mutations.
+- **Network Failures**: Retry mechanism with exponential backoff
+- **Validation Errors**: Show field-specific error messages, allow correction
+- **Partial Failures**: Handle cases where some vouchers reconcile but others fail
+- **State Corruption**: Reset dialog state and reload transaction data
 
 ---
 
 ## 7. Feature Parity Checklist
 
-### Core Functionality
-- [ ] Fetch & display unreconciled transactions with identical filters (bank statement dates vs reference dates).
-- [ ] Checkbox selection & total allocator identical to `show_selected_transactions`.
-- [ ] Company and Bank Account filtering with proper query filters.
-- [ ] Date range filtering (bank statement dates and reference dates with toggle).
+### Core Dialog Functionality
+- [ ] **Action Mode Selection**: Match Against Voucher, Create Voucher, Update Bank Transaction
+- [ ] **Document Type Filtering**: Payment Entry, Journal Entry, Unpaid Invoices checkboxes
+- [ ] **Date Range Filtering**: From/To date inputs with proper validation
+- [ ] **Exact Match Option**: Toggle for exact amount matching
+- [ ] **Voucher Search**: Real-time search based on filter criteria
 
-### Reconciliation Workflows
-- [ ] **Match Against Voucher**: Complex selection of Payment Entries, Journal Entries, and Unpaid Invoices.
-- [ ] **Create Payment Entry**: New payment entry creation with proper bank account linking.
-- [ ] **Create Journal Entry**: New journal entry creation workflow.
-- [ ] **Update Bank Transaction**: Transaction detail updates.
-- [ ] **Unpaid Invoice Processing**: Automatic payment entry creation for invoices before reconciliation.
-- [ ] **Sequential Processing**: Handle unpaid invoices first, then reconcile with regular vouchers.
+### Voucher Selection & Display
+- [ ] **Voucher Table**: ListView with checkbox selection matching legacy datatable
+- [ ] **Column Configuration**: Document Type, Name, Reference Date, Amount, Reference Number, Party
+- [ ] **Selection Totals**: Real-time calculation and display of selected amounts
+- [ ] **Mixed Type Handling**: Visual distinction between voucher types
+- [ ] **Pagination**: Handle large result sets efficiently
 
-### Validation & Processing
-- [ ] **Batch Validation**: Queue background validation jobs with progress feedback.
-- [ ] **Single Transaction Validation**: Async validation with proper clearance date setting.
-- [ ] **Auto Reconcile**: Automated voucher matching functionality.
-- [ ] **Error Handling**: Proper error messages and rollback handling.
+### Reconciliation Workflows  
+- [ ] **Match Against Voucher**: Complete voucher selection and reconciliation
+- [ ] **Unpaid Invoice Processing**: Automatic payment entry creation workflow
+- [ ] **Sequential Processing**: Unpaid invoices first, then regular vouchers
+- [ ] **Auto-reconcile Logic**: When only unpaid invoices selected
+- [ ] **Mixed Processing**: Combined unpaid invoice and voucher reconciliation
 
-### Data Display & UI
-- [ ] **Number Cards**: Opening balance, cleared balance, difference with dynamic color coding.
-- [ ] **Reconciled Transactions Toggle**: Show/hide already reconciled transactions.
-- [ ] **Upload Statement**: Integration with Frappe's bank statement import.
-- [ ] **Currency Formatting**: Proper currency display with account currency.
-- [ ] **Loading States**: Progress indicators for long-running operations.
+### Voucher Creation Workflows
+- [ ] **Payment Entry Creation**: Complete form with party, reference, dates
+- [ ] **Journal Entry Creation**: Entry type selection, account selection
+- [ ] **Edit in Full Page**: Integration with standard Frappe forms
+- [ ] **Field Validation**: Proper required field handling and validation
 
-### Technical Requirements
-- [ ] **i18n Support**: All user-facing text using `__()` helper.
-- [ ] **Responsive Design**: Mobile-friendly interface.
-- [ ] **Accessibility**: Proper ARIA labels and keyboard navigation.
-- [ ] **Error Boundaries**: Graceful error handling and recovery.
+### Transaction Updates
+- [ ] **Bank Transaction Updates**: Reference number, party type, party updates
+- [ ] **Amount Allocation Tracking**: Real-time allocated/unallocated amount display
+- [ ] **Currency Handling**: Proper currency formatting and calculations
 
----
-
-## 7. Complex Workflow Considerations
-
-### Unpaid Invoice Handling
-The current implementation has sophisticated logic for handling unpaid invoices that must be preserved:
-1. **Detection**: Distinguish between regular vouchers and unpaid invoices in voucher selection.
-2. **Sequential Processing**: Create payment entries for unpaid invoices first, then reconcile.
-3. **Auto-reconcile Logic**: When only unpaid invoices are selected, auto-reconcile after payment creation.
-4. **Combined Processing**: When both unpaid invoices and regular vouchers are selected, create payments first, then reconcile all together.
-
-### State Management Complexity
-- **Inter-component Communication**: Dialog updates must refresh parent table data and number cards.
-- **Transaction State**: Track allocated/unallocated amounts across multiple voucher selections.
-- **Validation State**: Handle async validation job status and progress updates.
-- **Filter State**: Maintain filter settings across component interactions.
-
-### Bundle Loading Strategy
-- **Compatibility**: Maintain existing `frappe.require("advance-bank-reconciliation-tool.bundle.js")` pattern.
-- **Feature Flagging**: Use configuration-based switching between Vue and legacy implementations.
+### UI/UX Requirements
+- [ ] **Loading States**: Progress indicators for all async operations
+- [ ] **Error Handling**: User-friendly error messages and recovery options
+- [ ] **Responsive Design**: Mobile-friendly dialog layout
+- [ ] **Accessibility**: Keyboard navigation and screen reader support
 
 ---
 
-## 8. Incremental Migration Strategy
+## 8. Development Implementation Plan
 
-1. **Phase-0:** Create the standalone Vue frontend using frappe-ui-starter but don't expose routes yet.
-2. **Phase-1:** Develop and test the Vue app alongside existing doctype form. Access via direct URL for testing.
-3. **Phase-2:** Add navigation links in Frappe desk to the standalone app. Both implementations available.
-4. **Phase-3:** Make standalone app the primary interface. Update documentation and user training.
-5. **Phase-4:** Remove legacy JS implementation and old doctype form fields.
+### Phase 1: ReconciliationDialog Core Structure
+- Set up basic dialog component with frappe-ui Dialog
+- Implement action mode selection and conditional field display
+- Add bank transaction details display (read-only section)
+- Create basic form validation and error handling
 
-### Migration Benefits with Standalone Approach
-- **Zero Disruption**: Existing workflow remains untouched during development
-- **Easy Rollback**: Old implementation stays functional as fallback
-- **Gradual Adoption**: Users can choose between old and new interfaces during transition
-- **Independent Testing**: Vue app can be thoroughly tested without affecting current users
+### Phase 2: Voucher Matching Implementation  
+- Implement voucher search with filter system
+- Create VoucherSelectionTable component with ListView
+- Add checkbox selection and total calculation logic
+- Handle voucher type detection and visual distinction
 
-### Migration Safety Measures
-- **API Compatibility**: Ensure all existing API contracts remain unchanged.
-- **Data Validation**: Compare Vue output with legacy implementation during parallel testing.
-- **Rollback Plan**: Quick switching mechanism between Vue and legacy implementations.
+### Phase 3: Complex Reconciliation Logic
+- Implement unpaid invoice detection and processing
+- Add sequential processing workflow (invoices first, then vouchers)
+- Handle auto-reconcile logic for invoice-only selections
+- Implement mixed voucher type reconciliation
 
----
+### Phase 4: Voucher Creation Workflows
+- Add Payment Entry creation form with conditional fields
+- Implement Journal Entry creation with account selection
+- Add "Edit in Full Page" integration with Frappe forms
+- Handle voucher creation validation and error recovery
 
-## 9. Tooling & Developer Experience
+### Phase 5: Integration & Testing
+- Integrate ReconciliationDialog with TransactionsTable
+- Add comprehensive error handling and recovery
+- Implement loading states and progress indicators
+- Perform thorough testing against legacy implementation
 
-### Development Commands
-
-```bash
-# Root workspace commands
-cd apps/advanced_bank_reconciliation
-yarn dev              # Start Vite dev server on port 8080
-yarn build            # Build for production
-
-# Frontend-specific commands  
-cd apps/advanced_bank_reconciliation/frontend
-yarn dev              # Direct Vite dev server
-yarn build            # Production build
-yarn test             # Run tests
-yarn lint             # ESLint + Prettier
-```
-
-### Development Stack
-* **Vite**: Fast dev server with HMR, optimized builds
-* **Vue 3**: Composition API with `<script setup>` syntax
-* **TypeScript**: Optional, can start with JavaScript and migrate gradually
-* **ESLint + Prettier**: Code formatting and quality
-* **Vitest + @vue/test-utils**: Unit and component testing
-* **TailwindCSS**: Utility-first styling with Frappe design tokens
-* **frappe-ui**: Official component library with consistent design
-
-### IDE Setup
-* **VS Code**: Recommended with Volar extension for Vue 3
-* **Vue DevTools**: Browser extension for debugging
-* **TypeScript**: IntelliSense and type checking
+### Phase 6: Polish & Optimization
+- Add accessibility features and keyboard navigation
+- Optimize performance for large datasets
+- Add mobile-responsive design improvements
+- Complete feature parity validation
 
 ---
 
-## 10. Milestones & Timeline
+## 9. Component Integration Example
 
-| Milestone | Deliverable | ETA |
-|-----------|-------------|-----|
-| 1 | Scaffold `frontend/`, Vite, Hello World page | **Week 1** |
-| 2 | Implement FiltersPanel + API services | **Week 2** |
-| 3 | TransactionsTable (read-only) | **Week 3** |
-| 4 | ReconciliationDialog (Match flow) | **Week 4–5** |
-| 5 | Create/Update Voucher flows & unpaid invoice handling | **Week 6** |
-| 6 | Validation workflows & batch processing | **Week 7** |
-| 7 | Charts & NumberCards | **Week 8** |
-| 8 | Parity QA & bug-fix, enable feature flag | **Week 9** |
-| 9 | Remove legacy JS (Phase-3) | **Week 11** |
+### Main Reconciliation Page Structure
 
----
+```vue
+<!-- AdvancedBankReconciliationPage.vue -->
+<template>
+  <div class="reconciliation-page">
+    <!-- Filters and controls -->
+    <FiltersPanel 
+      v-model:company="filters.company"
+      v-model:bank-account="filters.bankAccount"
+      v-model:date-range="filters.dateRange"
+      @filter-change="refreshData"
+    />
+    
+    <!-- Summary cards -->
+    <NumberCards 
+      :opening-balance="balances.opening"
+      :cleared-balance="balances.cleared" 
+      :difference="balances.difference"
+    />
+    
+    <!-- Main transactions table -->
+    <TransactionsTable
+      :transactions="unreconciled"
+      :loading="loading.transactions"
+      @reconcile="openReconciliationDialog"
+      @selection-change="handleBulkSelection"
+    />
+    
+    <!-- Reconciliation dialog -->
+    <ReconciliationDialog
+      v-model="showReconciliationDialog"
+      :transaction="selectedTransaction"
+      :company="filters.company"
+      :bank-account="filters.bankAccount"
+      @reconciled="handleReconciliationComplete"
+      @error="handleReconciliationError"
+    />
+  </div>
+</template>
 
-## 11. Open Questions & Considerations
+<script setup>
+import { ref, reactive, onMounted } from 'vue'
+import { useBankTransactions } from '@/composables/useBankTransactions'
+import { useBalances } from '@/composables/useBalances'
 
-1. **Component Library**: What additional `frappe-ui` Vue components can we adopt to reduce custom code (e.g., Modal, DateRangePicker)?
-2. **Accessibility**: What are the specific accessibility requirements for keyboard navigation and screen readers?
-3. **Mobile Responsiveness**: Should the tool have a mobile-optimized interface or remain desktop-only?
-4. **Performance**: How to handle large datasets (>1000 transactions) efficiently in the Vue table component?
-5. **Testing Strategy**: What level of integration testing is needed for the complex reconciliation workflows?
-6. **Browser Support**: Which browsers and versions need to be supported?
+// Component imports
+import FiltersPanel from '@/components/FiltersPanel.vue'
+import NumberCards from '@/components/NumberCards.vue' 
+import TransactionsTable from '@/components/TransactionsTable.vue'
+import ReconciliationDialog from '@/components/ReconciliationDialog.vue'
 
----
+// Reactive state
+const filters = reactive({
+  company: '',
+  bankAccount: '',
+  dateRange: { from: '', to: '' }
+})
 
-## 12. Testing Strategy
+const showReconciliationDialog = ref(false)
+const selectedTransaction = ref(null)
 
-### Unit Testing
-- **Component Tests**: Vue components with `@vue/test-utils` and Vitest
-- **Service Tests**: API service layer with mocked `frappe.call` responses
-- **Composable Tests**: Vue composables with proper reactive state testing
+// Composables
+const { unreconciled, loading, refreshTransactions } = useBankTransactions(filters)
+const { balances, refreshBalances } = useBalances(filters)
 
-### Integration Testing
-- **Workflow Tests**: End-to-end reconciliation workflows with real API responses
-- **State Management**: Cross-component state updates and communication
-- **Error Handling**: Network failures, validation errors, and recovery
-
-### Regression Testing
-- **Parallel Testing**: Run Vue and legacy implementations side-by-side during transition
-- **Data Validation**: Compare outputs to ensure identical results
-- **Performance Testing**: Ensure Vue implementation matches or exceeds legacy performance
-
-### Manual Testing Scenarios
-1. **Complex Reconciliation**: Mixed voucher types including unpaid invoices
-2. **Batch Validation**: Large datasets with progress tracking
-3. **Error Recovery**: Network interruptions during reconciliation
-4. **State Persistence**: Filter settings and selection state across interactions
-
----
-
-## 13. References
-
-* Legacy implementation: `public/js/advance_bank_reconciliation_tool/dialog_manager.js` & `doctype/advance_bank_reconciliation_tool/*.js`.
-* Similar Vue migration: `woodsmiths_erp_app/page/work_order_creator/work_order_creator.js`.
-* Frappe Vue guide: https://frappeframework.com/docs/user/en/front-end/vue
-* Current API endpoints: `advanced_bank_reconciliation/doctype/advance_bank_reconciliation_tool/advance_bank_reconciliation_tool.py`
-
----
-
----
-
-## 14. Quick Start Guide
-
-### Prerequisites
-- Node.js 18+ and Yarn installed
-- Frappe development environment running
-- Advanced Bank Reconciliation app installed
-
-### Setup Steps
-
-```bash
-# 1. Navigate to the app directory
-cd apps/advanced_bank_reconciliation
-
-# 2. Initialize the frontend using frappe-ui-starter
-npx degit netchampfaris/frappe-ui-starter frontend
-
-# 3. Create root workspace package.json
-cat > package.json << 'EOF'
-{
-  "private": true,
-  "scripts": {
-    "dev": "cd frontend && yarn dev",
-    "build": "cd frontend && yarn build"
-  },
-  "workspaces": ["frontend"]
+// Event handlers
+const openReconciliationDialog = (transaction) => {
+  selectedTransaction.value = transaction
+  showReconciliationDialog.value = true
 }
-EOF
 
-# 4. Install dependencies
-cd frontend
-yarn install
+const handleReconciliationComplete = async (result) => {
+  // Refresh all data after successful reconciliation
+  await Promise.all([
+    refreshTransactions(),
+    refreshBalances()
+  ])
+  
+  showReconciliationDialog.value = false
+  frappe.show_alert(__("Transaction reconciled successfully"))
+}
 
-# 5. Configure development site (in site_config.json)
-echo '{"ignore_csrf": 1}' >> sites/yoursite/site_config.json
+const refreshData = async () => {
+  await Promise.all([
+    refreshTransactions(),
+    refreshBalances()  
+  ])
+}
 
-# 6. Start development
-bench start  # In one terminal
-yarn dev     # In another terminal (from frontend/)
-
-# 7. Access the app
-# Open http://yoursite.localhost:8080/advanced-bank-reconciliation
+onMounted(() => {
+  refreshData()
+})
+</script>
 ```
 
-### Next Steps
-1. Configure routes in `frontend/src/router/index.js`
-2. Set up API services in `frontend/src/services/`
-3. Create page components in `frontend/src/pages/`
-4. Implement reconciliation workflows
+This updated specification provides a clear roadmap for implementing the ReconciliationDialog component while maintaining the complex workflow logic from the legacy implementation. The component-based approach allows for better code organization and testing while preserving all existing functionality.
 
 ---
 
-## 15. Standalone Application Benefits
+## 10. Next Steps
 
-### Developer Experience
-- **Modern Tooling**: Full Vite dev server with instant HMR and optimized builds
-- **Independent Development**: Frontend team can work without backend dependencies
-- **Component Isolation**: Easy to test and develop components in isolation
-- **Hot Module Replacement**: Instant feedback during development
+1. **Implement ReconciliationDialog.vue** - Core dialog component with action modes
+2. **Create VoucherSelectionTable.vue** - Voucher matching and selection interface  
+3. **Integrate with TransactionsTable** - Connect reconcile button to dialog
+4. **Add Composables** - Extract business logic into reusable composables
+5. **Testing** - Comprehensive testing against legacy implementation
+6. **Documentation** - Component documentation and usage examples
 
-### Architecture Benefits  
-- **Clean Separation**: Clear API boundaries between frontend and backend
-- **Scalability**: Easier to scale frontend and backend independently
-- **Deployment Flexibility**: Can deploy frontend to CDN or separate infrastructure
-- **Technology Independence**: Frontend can evolve independently of Frappe core
-
-### User Experience
-- **Performance**: Optimized SPA with code splitting and lazy loading
-- **Responsiveness**: Modern SPA interactions and smooth transitions
-- **Offline Capability**: Potential for service worker and offline functionality
-- **Mobile-First**: Better mobile experience with responsive design
-
-### Maintenance Benefits
-- **Version Control**: Cleaner git history with separated concerns
-- **Testing**: Easier unit testing and component testing
-- **Debugging**: Better dev tools and debugging experience
-- **Documentation**: Component documentation with Storybook/Histoire
-
----
-
-*Document generated and updated based on current implementation analysis. Updated to use standalone Vue application approach with frappe-ui-starter template following the helpdesk app pattern. Feel free to amend as requirements evolve.* 
+The specification now clearly defines the component architecture and integration patterns needed to build a modern Vue 3 interface that matches the complexity and functionality of the legacy jQuery implementation. 
