@@ -1,53 +1,72 @@
 <template>
-  <div class="overflow-x-auto">
+  <div class="overflow-x-auto py-4 px-2">
     <ListView
       :columns="columns"
-      :data="transactions"
-      :loading="loading"
-      :selectable="true"
+      :rows="transformedTransactions"
+      :options="{
+        selectable: false,
+      }"
+      row-key="name"
       @selection-change="$emit('selection-change', $event)"
     >
-      <template #cell-date="{ row }">
-        <span class="text-sm text-gray-900">
-          {{ formatDate(row.date) }}
-        </span>
-      </template>
+      <template #cell="{ item, row, column }">
+        <!-- Date column -->
+        <template v-if="column.key === 'date'">
+          <span class="text-sm text-gray-900">
+            {{ formatDate(row.date) }}
+          </span>
+        </template>
 
-      <template #cell-amount="{ row }">
-        <span 
-          class="text-sm font-medium"
-          :class="row.amount > 0 ? 'text-green-600' : 'text-red-600'"
-        >
-          {{ formatCurrency(row.amount, row.currency) }}
-        </span>
-      </template>
+        <!-- Description column -->
+        <template v-else-if="column.key === 'description'">
+          <span class="text-sm text-gray-900">
+            {{ row.description }}
+          </span>
+        </template>
 
-      <template #cell-actions="{ row }">
-        <div class="flex items-center space-x-2">
-          <Button
-            size="sm"
-            variant="outline"
-            @click="$emit('reconcile', row)"
+        <!-- Reference column -->
+        <template v-else-if="column.key === 'reference'">
+          <span class="text-sm text-gray-900">
+            {{ row.reference }}
+          </span>
+        </template>
+
+        <!-- Amount column -->
+        <template v-else-if="column.key === 'amount'">
+          <span 
+            class="flex justify-end text-sm font-medium"
+            :class="row.amount > 0 ? 'text-green-600' : 'text-red-600'"
           >
-            <FeatherIcon name="link" class="w-4 h-4 mr-1" />
-            Reconcile
-          </Button>
-          
-          <Button
-            size="sm"
-            variant="outline"
-            @click="showTransactionDetails(row)"
-          >
-            <FeatherIcon name="eye" class="w-4 h-4 mr-1" />
-            View
-          </Button>
-        </div>
+            {{ formatCurrency(row.amount, row.currency) }}
+          </span>
+        </template>
+
+        <!-- Actions column -->
+        <template v-else-if="column.key === 'actions'">
+          <div class="flex items-center justify-center">
+            <Button
+              size="sm"
+              variant="solid"
+              icon-right="play"
+              @click="$emit('reconcile', row)"
+            >
+              Reconcile
+            </Button>
+          </div>
+        </template>
+
+        <!-- Default fallback -->
+        <template v-else>
+          <span class="text-sm text-gray-900">
+            {{ item }}
+          </span>
+        </template>
       </template>
     </ListView>
 
     <!-- Empty State -->
     <div 
-      v-if="!loading && transactions.length === 0"
+      v-if="!loading && transformedTransactions.length === 0"
       class="text-center py-12"
     >
       <FeatherIcon 
@@ -135,8 +154,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { ListView, Button, Dialog } from 'frappe-ui'
+import { ref, computed, watch } from 'vue'
+import { ListView, Button, Dialog, FeatherIcon } from 'frappe-ui'
 import { formatDate, formatCurrency } from '../utils/formatters'
 
 // Props
@@ -158,33 +177,61 @@ const emit = defineEmits(['selection-change', 'reconcile'])
 const showDetailsDialog = ref(false)
 const selectedTransaction = ref(null)
 
+// Watch for changes in transactions prop
+watch(() => props.transactions, (newTransactions, oldTransactions) => {
+  console.log('TransactionsTable: transactions changed')
+  console.log('New transactions length:', newTransactions?.length)
+  
+  if (newTransactions?.length > 0) {
+    console.log('First transaction sample:', newTransactions[0])
+    console.log('First transaction keys:', Object.keys(newTransactions[0]))
+  }
+}, { deep: true, immediate: true })
+
+// Transform transactions to match expected format
+const transformedTransactions = computed(() => {
+  if (!props.transactions || !Array.isArray(props.transactions)) {
+    console.log('TransactionsTable: No transactions or not an array')
+    return []
+  }
+  
+  console.log('TransactionsTable: Transforming', props.transactions.length, 'transactions')
+  
+  return props.transactions.map(transaction => {
+    // Calculate amount from deposit/withdrawal
+    const amount = (transaction.deposit || 0) - (transaction.withdrawal || 0)
+    
+    return {
+      ...transaction,
+      amount: amount,
+      reference: transaction.reference_number || transaction.reference || '-',
+      status: 'Unreconciled' // Default status
+    }
+  })
+})
+
 // Table columns configuration
 const columns = computed(() => [
   {
-    rowKey: 'date',
-    label: 'Date',
-    sortable: true
+    key: 'date',
+    label: 'Date'
   },
   {
-    rowKey: 'description',
-    label: 'Description',
-    sortable: true
+    key: 'description',
+    label: 'Description'
   },
   {
-    rowKey: 'reference',
-    label: 'Reference',
-    sortable: true
+    key: 'reference',
+    label: 'Reference'
   },
   {
-    rowKey: 'amount',
+    key: 'amount',
     label: 'Amount',
-    sortable: true,
     align: 'right'
   },
   {
-    rowKey: 'actions',
+    key: 'actions',
     label: 'Actions',
-    sortable: false,
     align: 'center'
   }
 ])

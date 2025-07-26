@@ -54,9 +54,13 @@ export function useBankReconciliation() {
       console.log('pendingTransactions after fetch:', pendingTransactions.data)
       console.log('pendingTransactions.data type:', typeof pendingTransactions.data)
       console.log('pendingTransactions.data length:', pendingTransactions.data?.length)
+      console.log('pendingTransactions.data is array:', Array.isArray(pendingTransactions.data))
+      
       if (pendingTransactions.data?.length > 0) {
-        console.log('Unreconciled entries fetched', pendingTransactions.data[0])
-        return
+        console.log('First unreconciled entry:', pendingTransactions.data[0])
+        console.log('First entry keys:', Object.keys(pendingTransactions.data[0]))
+        console.log('First entry deposit:', pendingTransactions.data[0].deposit)
+        console.log('First entry withdrawal:', pendingTransactions.data[0].withdrawal)
       }
 
       const reconciledTransactionsResponse = await getReconciledTransactions(filters)
