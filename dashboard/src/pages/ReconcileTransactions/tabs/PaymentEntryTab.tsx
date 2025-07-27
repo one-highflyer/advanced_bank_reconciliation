@@ -10,7 +10,6 @@ interface PaymentEntryTabProps {
     toDate: string;
     selectedTransaction: BankTransaction;
     onTransactionSelect: (transaction: MatchedTransaction) => void;
-    selectedTransactions: MatchedTransaction[];
     isTransactionSelected: (doctype: string, docname: string) => boolean;
 }
 

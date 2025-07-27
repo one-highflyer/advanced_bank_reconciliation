@@ -165,6 +165,60 @@ export async function batchValidateUnvalidatedTransactions(
 }
 
 /**
+ * Create payment entries for unpaid invoices
+ */
+export async function createPaymentEntriesForInvoices(
+  bankTransactionName: string,
+  invoices: Array<{
+    doctype: string;
+    name: string;
+    allocated_amount: number;
+  }>,
+  autoReconcile: boolean = false
+): Promise<unknown> {
+  try {
+    const response = await frappe
+      .call()
+      .post('advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.create_payment_entries_for_invoices', {
+        bank_transaction_name: bankTransactionName,
+        invoices: invoices,
+        auto_reconcile: autoReconcile,
+      });
+
+    return response.message;
+  } catch (err) {
+    console.error('Error creating payment entries for invoices:', err);
+    throw err;
+  }
+}
+
+/**
+ * Reconcile vouchers with a bank transaction
+ */
+export async function reconcileVouchers(
+  bankTransactionName: string,
+  vouchers: Array<{
+    payment_doctype: string;
+    payment_name: string;
+    amount: number;
+  }>
+): Promise<unknown> {
+  try {
+    const response = await frappe
+      .call()
+      .post('advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.reconcile_vouchers', {
+        bank_transaction_name: bankTransactionName,
+        vouchers: JSON.stringify(vouchers),
+      });
+
+    return response.message;
+  } catch (err) {
+    console.error('Error reconciling vouchers:', err);
+    throw err;
+  }
+}
+
+/**
  * Auto reconcile vouchers
  */
 export async function autoReconcileVouchers(

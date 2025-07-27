@@ -22,6 +22,11 @@ export default function ReconcileTransactions() {
         setSelectedTransaction(undefined);
     };
 
+    const handleSubmit = () => {
+        console.log('Reconciliation completed, clearing selected transactions');
+        setSelectedTransaction(undefined);
+    };
+
     return (
         <div className="container mx-auto px-4">
             {selectedTransaction ? (
@@ -31,6 +36,7 @@ export default function ReconcileTransactions() {
                     toDate={filters!.toDate}
                     selectedTransaction={selectedTransaction}
                     onCancel={handleCancel}
+                    onSubmit={handleSubmit}
                 />
             ) : (
                 <>

@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatCurrency } from '@/lib/utils';
+import { reconcileVouchers, createPaymentEntriesForInvoices } from '@/lib/services/bankReconciliationService';
 import type { MatchedTransaction } from '@/lib/types';
 import type { BankTransaction } from '@/lib/services/bankReconciliationService';
 
@@ -19,6 +21,8 @@ export function SelectedTransactionsPane({
     onCancel,
     onSubmit
 }: SelectedTransactionsPaneProps) {
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
     // Calculate the sum of selected transaction amounts
     const selectedAmountSum = selectedTransactions.reduce((sum, transaction) => {
         return sum + transaction.remaining_amount;
@@ -30,6 +34,113 @@ export function SelectedTransactionsPane({
 
     // Check if amounts match
     const amountsMatch = Math.abs(selectedAmountSum - bankTransactionAmount) < 0.01; // Allow for small rounding differences
+
+        // Handle reconciliation submission
+    const handleSubmit = async () => {
+        if (!amountsMatch || selectedTransactions.length === 0) {
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            // Separate unpaid invoices from regular vouchers
+            const unpaidInvoices: Array<{
+                doctype: string;
+                name: string;
+                allocated_amount: number;
+            }> = [];
+            const regularVouchers: Array<{
+                payment_doctype: string;
+                payment_name: string;
+                amount: number;
+            }> = [];
+            
+            selectedTransactions.forEach((transaction) => {
+                if (transaction.doctype === "Unpaid Sales Invoice" || transaction.doctype === "Unpaid Purchase Invoice") {
+                    unpaidInvoices.push({
+                        doctype: transaction.doctype,
+                        name: transaction.docname,
+                        allocated_amount: transaction.remaining_amount,
+                    });
+                } else {
+                    regularVouchers.push({
+                        payment_doctype: transaction.doctype,
+                        payment_name: transaction.docname,
+                        amount: transaction.remaining_amount,
+                    });
+                }
+            });
+
+            console.log('Submitting reconciliation for bank transaction:', selectedBankTransaction.name);
+            console.log('Unpaid invoices to process:', unpaidInvoices);
+            console.log('Regular vouchers to reconcile:', regularVouchers);
+
+            // Process unpaid invoices first, then regular vouchers
+            await processUnpaidInvoices(unpaidInvoices, regularVouchers);
+            
+        } catch (error) {
+            console.error('Error during reconciliation:', error);
+            alert(`❌ Error during reconciliation\n\n${(error as Error).message}\n\nPlease check the console for more details.`);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    // Process unpaid invoices first, then regular vouchers (following dialog_manager.js pattern)
+    const processUnpaidInvoices = async (
+        unpaidInvoices: Array<{ doctype: string; name: string; allocated_amount: number }>,
+        regularVouchers: Array<{ payment_doctype: string; payment_name: string; amount: number }>
+    ) => {
+        if (unpaidInvoices.length > 0) {
+            // First, create payment entries for unpaid invoices
+            // Don't auto-reconcile if we have regular vouchers to process too
+            const autoReconcile = regularVouchers.length === 0;
+            
+            console.log('Creating payment entries for unpaid invoices, auto_reconcile:', autoReconcile);
+            const response = await createPaymentEntriesForInvoices(
+                selectedBankTransaction.name,
+                unpaidInvoices,
+                autoReconcile
+            );
+            
+            console.log('Payment entries created for unpaid invoices:', response);
+            
+            if (autoReconcile) {
+                // Payment entries were created and auto-reconciled, we're done
+                showSuccessMessage(unpaidInvoices.length + regularVouchers.length);
+                onSubmit();
+            } else {
+                // Payment entries created but not reconciled, now combine with regular vouchers
+                const responseData = response as { vouchers?: Array<{ payment_doctype: string; payment_name: string; amount: number }> };
+                const createdVouchers = responseData?.vouchers || [];
+                const allVouchers = [...createdVouchers, ...regularVouchers];
+                await reconcileAllVouchers(allVouchers);
+            }
+        } else {
+            // No unpaid invoices, directly process regular vouchers
+            await reconcileAllVouchers(regularVouchers);
+        }
+    };
+
+    // Reconcile all vouchers (both created from unpaid invoices and regular ones)
+    const reconcileAllVouchers = async (vouchers: Array<{ payment_doctype: string; payment_name: string; amount: number }>) => {
+        if (vouchers.length === 0) {
+            console.log('No vouchers to reconcile');
+            return;
+        }
+        
+        console.log('Reconciling all vouchers:', vouchers);
+        const result = await reconcileVouchers(selectedBankTransaction.name, vouchers);
+        
+        console.log('Reconciliation successful:', result);
+        showSuccessMessage(selectedTransactions.length);
+        onSubmit();
+    };
+
+    // Show success message
+    const showSuccessMessage = (transactionCount: number) => {
+        alert(`✅ Reconciliation completed successfully!\n\nBank Transaction: ${selectedBankTransaction.name}\nMatched ${transactionCount} transaction(s)\nTotal Amount: ${formatCurrency(selectedAmountSum, bankTransactionCurrency)}`);
+    };
 
     return (
         <div className="bg-card border rounded-lg p-4 h-fit">
@@ -118,21 +229,22 @@ export function SelectedTransactionsPane({
                 </div>
             )}
 
-            <div className="mt-4 pt-4 border-t space-y-2">
+            <div className="mt-4 pt-4 border-t space-y-2 lg:space-y-0 lg:flex lg:gap-2">
                 {selectedTransactions.length > 0 && (
                     <Button
-                        onClick={onSubmit}
-                        className="w-full"
-                        disabled={!amountsMatch}
+                        onClick={handleSubmit}
+                        className="w-full lg:w-1/2"
+                        disabled={!amountsMatch || isSubmitting}
                         title={!amountsMatch ? "Amounts must match to submit reconciliation" : ""}
                     >
-                        Submit Reconciliation
+                        {isSubmitting ? "Submitting..." : "Submit"}
                     </Button>
                 )}
                 <Button
                     variant="secondary"
                     onClick={onCancel}
-                    className="w-full"
+                    className="w-full lg:w-1/2"
+                    disabled={isSubmitting}
                 >
                     Cancel
                 </Button>

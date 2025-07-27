@@ -17,6 +17,7 @@ interface TransactionMatchingSectionProps {
     toDate: string;
     selectedTransaction: BankTransaction;
     onCancel?: () => void;
+    onSubmit?: () => void;
 }
 
 export function TransactionMatchingSection({ bankAccount, fromDate, toDate, selectedTransaction, onCancel }: TransactionMatchingSectionProps) {
@@ -43,8 +44,9 @@ export function TransactionMatchingSection({ bankAccount, fromDate, toDate, sele
     };
 
     const handleSubmit = () => {
-        // TODO: Implement reconciliation logic
-        console.log('Submitting reconciliation for transactions:', selectedTransactions);
+        // Clear selected transactions and optionally notify parent
+        setSelectedTransactions([]);
+        console.log('Reconciliation completed, clearing selected transactions');
     };
 
     // Helper function to check if a transaction is selected
@@ -101,34 +103,39 @@ export function TransactionMatchingSection({ bankAccount, fromDate, toDate, sele
                                 toDate={toDate}
                                 selectedTransaction={selectedTransaction}
                                 onTransactionSelect={handleTransactionSelect}
-                                selectedTransactions={selectedTransactions}
                                 isTransactionSelected={checkTransactionSelected}
                             />
                         </TabsContent>
 
                         <TabsContent value="journal-entry" className="mt-4">
                             <JournalEntryTab
+                                bankAccount={bankAccount}
+                                fromDate={fromDate}
+                                toDate={toDate}
                                 selectedTransaction={selectedTransaction}
                                 onTransactionSelect={handleTransactionSelect}
-                                selectedTransactions={selectedTransactions}
                                 isTransactionSelected={checkTransactionSelected}
                             />
                         </TabsContent>
 
                         <TabsContent value="sales-invoice" className="mt-4">
                             <SalesInvoiceTab
+                                bankAccount={bankAccount}
+                                fromDate={fromDate}
+                                toDate={toDate}
                                 selectedTransaction={selectedTransaction}
                                 onTransactionSelect={handleTransactionSelect}
-                                selectedTransactions={selectedTransactions}
                                 isTransactionSelected={checkTransactionSelected}
                             />
                         </TabsContent>
 
                         <TabsContent value="purchase-invoice" className="mt-4">
                             <PurchaseInvoiceTab
+                                bankAccount={bankAccount}
+                                fromDate={fromDate}
+                                toDate={toDate}
                                 selectedTransaction={selectedTransaction}
                                 onTransactionSelect={handleTransactionSelect}
-                                selectedTransactions={selectedTransactions}
                                 isTransactionSelected={checkTransactionSelected}
                             />
                         </TabsContent>
@@ -146,9 +153,11 @@ export function TransactionMatchingSection({ bankAccount, fromDate, toDate, sele
 
                         <TabsContent value="unpaid-purchase-invoice" className="mt-4">
                             <UnpaidPurchaseInvoiceTab
+                                bankAccount={bankAccount}
+                                fromDate={fromDate}
+                                toDate={toDate}
                                 selectedTransaction={selectedTransaction}
                                 onTransactionSelect={handleTransactionSelect}
-                                selectedTransactions={selectedTransactions}
                                 isTransactionSelected={checkTransactionSelected}
                             />
                         </TabsContent>
