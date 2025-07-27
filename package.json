@@ -6,9 +6,5 @@
     "build": "cd dashboard && yarn build",
     "test": "cd dashboard && yarn test",
     "lint": "cd frontend && yarn lint"
-  },
-  "workspaces": [
-    "frontend",
-    "dashboard"
-  ]
+  }
 }
