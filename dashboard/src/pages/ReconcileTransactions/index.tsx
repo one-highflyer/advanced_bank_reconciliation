@@ -10,7 +10,7 @@ type Filters = {
     toDate: string;
 }
 
-export default function BankReconciliation() {
+export default function ReconcileTransactions() {
     const [filters, setFilters] = useState<Filters | null>(null);
 
     const handleFiltersChange = (newFilters: Filters) => {
@@ -24,15 +24,7 @@ export default function BankReconciliation() {
     };
 
     return (
-        <div className="container mx-auto px-4 py-8">
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                    Bank Reconciliation
-                </h1>
-                <p className="text-gray-600">
-                    Reconcile your bank transactions with your accounting records
-                </p>
-            </div>
+        <div className="container mx-auto px-4">
 
             <BankReconciliationFilters onFiltersChange={handleFiltersChange} />
 
@@ -46,4 +38,4 @@ export default function BankReconciliation() {
             )}
         </div>
     );
-}
+} 

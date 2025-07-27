@@ -93,7 +93,7 @@ export function BankReconciliationFilters({ onFiltersChange }: BankReconciliatio
   };
 
   return (
-    <div className="bg-background rounded-lg shadow p-6 mb-6">
+    <div className="bg-background rounded-lg shadow border p-6 mb-6">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div>
           <Label htmlFor="company">Company</Label>
