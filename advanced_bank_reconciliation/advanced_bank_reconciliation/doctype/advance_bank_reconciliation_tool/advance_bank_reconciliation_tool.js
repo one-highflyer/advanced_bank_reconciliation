@@ -40,23 +40,9 @@ frappe.ui.form.on("Advance Bank Reconciliation Tool", {
 		frm.disable_save();
 		frappe.require("advance-bank-reconciliation-tool.bundle.js", () => frm.trigger("make_reconciliation_tool"));
 
-		frm.add_custom_button(__("Upload Bank Statement"), () =>
-			frappe.call({
-				method: "erpnext.accounts.doctype.bank_statement_import.bank_statement_import.upload_bank_statement",
-				args: {
-					dt: frm.doc.doctype,
-					dn: frm.doc.name,
-					company: frm.doc.company,
-					bank_account: frm.doc.bank_account,
-				},
-				callback: function (r) {
-					if (!r.exc) {
-						var doc = frappe.model.sync(r.message);
-						frappe.set_route("Form", doc[0].doctype, doc[0].name);
-					}
-				},
-			})
-		);
+		frm.add_custom_button(__("Upload Bank Statement"), () => {
+			frappe.set_route("Form", "Bank Statement Importer");
+		});
 
 		frm.add_custom_button(__("Auto Reconcile"), function () {
 			frappe.call({
