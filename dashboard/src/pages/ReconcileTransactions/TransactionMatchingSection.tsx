@@ -135,9 +135,11 @@ export function TransactionMatchingSection({ bankAccount, fromDate, toDate, sele
 
                         <TabsContent value="unpaid-sales-invoice" className="mt-4">
                             <UnpaidSalesInvoiceTab
+                                bankAccount={bankAccount}
+                                fromDate={fromDate}
+                                toDate={toDate}
                                 selectedTransaction={selectedTransaction}
                                 onTransactionSelect={handleTransactionSelect}
-                                selectedTransactions={selectedTransactions}
                                 isTransactionSelected={checkTransactionSelected}
                             />
                         </TabsContent>

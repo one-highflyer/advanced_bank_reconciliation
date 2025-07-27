@@ -1,12 +1,14 @@
 import frappe from '../frappe';
 
 export interface PaymentEntry {
+    rank: number;
     doctype: string;
     name: string;
     reference_date: string;
-    remaining_amount: number;
+    paid_amount: number;
     reference_number: string;
     party: string;
+    party_type: string;
     currency: string;
 }
 
@@ -43,12 +45,14 @@ export async function getLinkedPaymentEntries(
         // Transform the response to match our interface
         const data = response.message || [];
         return data.map((row: unknown[]) => ({
+            rank: row[0], // Rank
             doctype: row[1], // Document Type
             name: row[2], // Document Name
-            reference_date: row[5] || row[8], // Reference Date (fallback to posting date)
-            remaining_amount: row[3], // Remaining Amount
+            paid_amount: row[3], // Remaining Amount
             reference_number: row[4], // Reference Number
+            reference_date: row[5] || row[8], // Reference Date (fallback to posting date)
             party: row[6], // Party
+            party_type: row[7], // Party Type
             currency: row[9], // Currency
         }));
     } catch (err) {

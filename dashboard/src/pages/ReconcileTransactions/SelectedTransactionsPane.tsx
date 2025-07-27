@@ -84,35 +84,37 @@ export function SelectedTransactionsPane({
                     </p>
                 </div>
             ) : (
-                <div className="space-y-3">
-                    {selectedTransactions.map((transaction) => (
-                        <div
-                            key={transaction.doctype + transaction.docname}
-                            className="border rounded-lg p-3 bg-muted relative"
-                        >
-                            <button
-                                onClick={() => onTransactionRemove(transaction.doctype, transaction.docname)}
-                                className="absolute top-2 right-2 text-muted-foreground hover:text-foreground transition-colors"
-                                title="Remove transaction"
+                <div className="max-h-128 overflow-y-auto border rounded-lg">
+                    <div className="space-y-2 p-3">
+                        {selectedTransactions.map((transaction) => (
+                            <div
+                                key={transaction.doctype + transaction.docname}
+                                className="border rounded-lg p-3 bg-muted relative"
                             >
-                                <X size={16} />
-                            </button>
+                                <button
+                                    onClick={() => onTransactionRemove(transaction.doctype, transaction.docname)}
+                                    className="absolute top-2 right-2 text-muted-foreground hover:text-foreground transition-colors"
+                                    title="Remove transaction"
+                                >
+                                    <X size={16} />
+                                </button>
 
-                            <div className="pr-6">
-                                <div className="font-medium text-sm">
-                                    {transaction.doctype}: {transaction.docname}
-                                </div>
-                                <div className="text-xs text-muted-foreground mt-1">
-                                    <div>Date: {transaction.reference_date}</div>
-                                    <div>Reference: {transaction.reference_number || 'N/A'}</div>
-                                    <div>Party: {transaction.party || 'N/A'}</div>
-                                    <div className={`font-medium ${transaction.remaining_amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                        Amount: {formatCurrency(transaction.remaining_amount, transaction.currency)}
+                                <div className="pr-6">
+                                    <div className="font-medium text-sm">
+                                        {transaction.doctype}: {transaction.docname}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                        <div>Date: {transaction.reference_date}</div>
+                                        <div>Reference: {transaction.reference_number || 'N/A'}</div>
+                                        <div>Party: {transaction.party || 'N/A'}</div>
+                                        <div className={`font-medium ${transaction.remaining_amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                            Amount: {formatCurrency(transaction.remaining_amount, transaction.currency)}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    ))}
+                        ))}
+                    </div>
                 </div>
             )}
 
