@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import type { MatchedTransaction } from './types';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -17,4 +18,15 @@ export function formatCurrency(value: number, currency: string = 'USD'): string 
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+/**
+ * Check if a transaction is selected from a list of selected transactions
+ */
+export function isTransactionSelected(
+  selectedTransactions: MatchedTransaction[],
+  doctype: string,
+  docname: string
+): boolean {
+  return selectedTransactions.some(t => t.doctype === doctype && t.docname === docname);
 }

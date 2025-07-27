@@ -8,34 +8,54 @@ import { UnpaidPurchaseInvoiceTab } from './tabs/UnpaidPurchaseInvoiceTab';
 import { UnpaidSalesInvoiceTab } from './tabs/UnpaidSalesInvoiceTab';
 import { SelectedTransactionsPane } from './SelectedTransactionsPane';
 import type { BankTransaction } from '../../lib/services/bankReconciliationService';
-import { formatCurrency } from '../../lib/utils';
+import { formatCurrency, isTransactionSelected } from '../../lib/utils';
+import type { MatchedTransaction } from '@/lib/types';
 
 interface TransactionMatchingSectionProps {
+    bankAccount: string;
+    fromDate: string;
+    toDate: string;
     selectedTransaction: BankTransaction;
+    onCancel?: () => void;
 }
 
-export function TransactionMatchingSection({ selectedTransaction }: TransactionMatchingSectionProps) {
-    const [selectedTransactions, setSelectedTransactions] = useState<BankTransaction[]>([]);
+export function TransactionMatchingSection({ bankAccount, fromDate, toDate, selectedTransaction, onCancel }: TransactionMatchingSectionProps) {
+    const [selectedTransactions, setSelectedTransactions] = useState<MatchedTransaction[]>([]);
 
-    const handleTransactionSelect = (transaction: BankTransaction) => {
+    const handleTransactionSelect = (transaction: MatchedTransaction) => {
         setSelectedTransactions(prev => {
-            const exists = prev.find(t => t.name === transaction.name);
+            const exists = prev.find(t => t.doctype === transaction.doctype && t.docname === transaction.docname);
             if (exists) {
-                return prev.filter(t => t.name !== transaction.name);
+                return prev.filter(t => !(t.doctype === transaction.doctype && t.docname === transaction.docname));
             } else {
                 return [...prev, transaction];
             }
         });
     };
 
-    const handleTransactionRemove = (transactionName: string) => {
-        setSelectedTransactions(prev => prev.filter(t => t.name !== transactionName));
+    const handleTransactionRemove = (doctype: string, docname: string) => {
+        setSelectedTransactions(prev => prev.filter(t => !(t.doctype === doctype && t.docname === docname)));
+    };
+
+    const handleCancel = () => {
+        setSelectedTransactions([]);
+        onCancel?.();
+    };
+
+    const handleSubmit = () => {
+        // TODO: Implement reconciliation logic
+        console.log('Submitting reconciliation for transactions:', selectedTransactions);
+    };
+
+    // Helper function to check if a transaction is selected
+    const checkTransactionSelected = (doctype: string, docname: string) => {
+        return isTransactionSelected(selectedTransactions, doctype, docname);
     };
 
     return (
         <div className="container mx-auto px-4">
             {/* Transaction Summary */}
-            <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+            <div className="mb-6 p-4 bg-muted rounded-lg">
                 <h2 className="text-xl font-semibold mb-2">Transaction Summary</h2>
                 <div className="grid grid-cols-4 gap-2">
                     <div>
@@ -76,8 +96,13 @@ export function TransactionMatchingSection({ selectedTransaction }: TransactionM
 
                         <TabsContent value="payment-entry" className="mt-4">
                             <PaymentEntryTab
+                                bankAccount={bankAccount}
+                                fromDate={fromDate}
+                                toDate={toDate}
                                 selectedTransaction={selectedTransaction}
                                 onTransactionSelect={handleTransactionSelect}
+                                selectedTransactions={selectedTransactions}
+                                isTransactionSelected={checkTransactionSelected}
                             />
                         </TabsContent>
 
@@ -85,6 +110,8 @@ export function TransactionMatchingSection({ selectedTransaction }: TransactionM
                             <JournalEntryTab
                                 selectedTransaction={selectedTransaction}
                                 onTransactionSelect={handleTransactionSelect}
+                                selectedTransactions={selectedTransactions}
+                                isTransactionSelected={checkTransactionSelected}
                             />
                         </TabsContent>
 
@@ -92,6 +119,8 @@ export function TransactionMatchingSection({ selectedTransaction }: TransactionM
                             <SalesInvoiceTab
                                 selectedTransaction={selectedTransaction}
                                 onTransactionSelect={handleTransactionSelect}
+                                selectedTransactions={selectedTransactions}
+                                isTransactionSelected={checkTransactionSelected}
                             />
                         </TabsContent>
 
@@ -99,6 +128,8 @@ export function TransactionMatchingSection({ selectedTransaction }: TransactionM
                             <PurchaseInvoiceTab
                                 selectedTransaction={selectedTransaction}
                                 onTransactionSelect={handleTransactionSelect}
+                                selectedTransactions={selectedTransactions}
+                                isTransactionSelected={checkTransactionSelected}
                             />
                         </TabsContent>
 
@@ -106,6 +137,8 @@ export function TransactionMatchingSection({ selectedTransaction }: TransactionM
                             <UnpaidSalesInvoiceTab
                                 selectedTransaction={selectedTransaction}
                                 onTransactionSelect={handleTransactionSelect}
+                                selectedTransactions={selectedTransactions}
+                                isTransactionSelected={checkTransactionSelected}
                             />
                         </TabsContent>
 
@@ -113,6 +146,8 @@ export function TransactionMatchingSection({ selectedTransaction }: TransactionM
                             <UnpaidPurchaseInvoiceTab
                                 selectedTransaction={selectedTransaction}
                                 onTransactionSelect={handleTransactionSelect}
+                                selectedTransactions={selectedTransactions}
+                                isTransactionSelected={checkTransactionSelected}
                             />
                         </TabsContent>
                     </Tabs>
@@ -122,7 +157,10 @@ export function TransactionMatchingSection({ selectedTransaction }: TransactionM
                 <div className="w-1/4">
                     <SelectedTransactionsPane
                         selectedTransactions={selectedTransactions}
+                        selectedBankTransaction={selectedTransaction}
                         onTransactionRemove={handleTransactionRemove}
+                        onCancel={handleCancel}
+                        onSubmit={handleSubmit}
                     />
                 </div>
             </div>

@@ -3,13 +3,7 @@ import { BankReconciliationFilters } from '../../components/BankReconciliationFi
 import { TransactionList } from '../../components/TransactionList';
 import { TransactionMatchingSection } from './TransactionMatchingSection';
 import type { BankTransaction } from '../../lib/services/bankReconciliationService';
-
-type Filters = {
-    company: string;
-    bankAccount: string;
-    fromDate: string;
-    toDate: string;
-}
+import type { Filters } from '../../lib/types';
 
 export default function ReconcileTransactions() {
     const [filters, setFilters] = useState<Filters | null>(null);
@@ -24,10 +18,20 @@ export default function ReconcileTransactions() {
         setSelectedTransaction(transaction);
     };
 
+    const handleCancel = () => {
+        setSelectedTransaction(undefined);
+    };
+
     return (
         <div className="container mx-auto px-4">
             {selectedTransaction ? (
-                <TransactionMatchingSection selectedTransaction={selectedTransaction} />
+                <TransactionMatchingSection
+                    bankAccount={filters!.bankAccount}
+                    fromDate={filters!.fromDate}
+                    toDate={filters!.toDate}
+                    selectedTransaction={selectedTransaction}
+                    onCancel={handleCancel}
+                />
             ) : (
                 <>
                     <BankReconciliationFilters onFiltersChange={handleFiltersChange} />

@@ -11,6 +11,7 @@
     "copy-html-entry": "cp ../advanced_bank_reconciliation/public/bank-reconciliation/index.html ../advanced_bank_reconciliation/www/bank-reconciliation.html"
   },
   "dependencies": {
+    "@radix-ui/react-checkbox": "^1.3.2",
     "@radix-ui/react-label": "^2.1.7",
     "@radix-ui/react-navigation-menu": "^1.2.13",
     "@radix-ui/react-select": "^2.2.5",

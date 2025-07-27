@@ -1,25 +1,33 @@
+import type { MatchedTransaction } from '@/lib/types';
 import type { BankTransaction } from '../../../lib/services/bankReconciliationService';
 
 interface SalesInvoiceTabProps {
     selectedTransaction: BankTransaction;
-    onTransactionSelect: (transaction: BankTransaction) => void;
+    onTransactionSelect: (transaction: MatchedTransaction) => void;
+    selectedTransactions: MatchedTransaction[];
+    isTransactionSelected: (doctype: string, docname: string) => boolean;
 }
 
-export function SalesInvoiceTab({ selectedTransaction, onTransactionSelect }: SalesInvoiceTabProps) {
+export function SalesInvoiceTab({ 
+    selectedTransaction, 
+    onTransactionSelect,
+    selectedTransactions,
+    isTransactionSelected 
+}: SalesInvoiceTabProps) {
     return (
         <div className="space-y-4">
             <div className="flex justify-between items-center">
                 <h3 className="text-lg font-semibold">Sales Invoices</h3>
-                <div className="text-sm text-gray-500">
+                <div className="text-sm text-muted-foreground">
                     Matching with transaction: {selectedTransaction.description}
                 </div>
             </div>
             
-            <div className="bg-white border rounded-lg p-4">
-                <p className="text-gray-600">
+            <div className="bg-card border rounded-lg p-4">
+                <p className="text-muted-foreground">
                     Sales Invoice matching content will be implemented here.
                 </p>
-                <p className="text-sm text-gray-500 mt-2">
+                <p className="text-sm text-muted-foreground mt-2">
                     This tab will show sales invoices that can be matched with the selected transaction.
                 </p>
             </div>
