@@ -135,12 +135,17 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			return;
 		}
 
-		// Fetch customer groups for all customers
-		frappe.db.get_list('Customer', {
-			filters: [['name', 'in', customers]],
-			fields: ['name', 'customer_group'],
-			limit: 9999  // Set high limit to get all customers
-		}).then((response) => {
+		// Fetch customer groups for all customers using POST to avoid query parameter limits
+		frappe.call({
+			method: 'frappe.client.get_list',
+			args: {
+				doctype: 'Customer',
+				filters: [['name', 'in', customers]],
+				fields: ['name', 'customer_group'],
+				limit_page_length: 9999
+			}
+		}).then((r) => {
+			const response = r.message;
 			if (response && response.length > 0) {
 				const customer_groups = {};
 				response.forEach((customer) => {
