@@ -274,7 +274,15 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 						let rows = [];
 						selected_map.forEach((val, index) => {
 							if (val == 1) {
-								rows.push(this.vouchers[index]);
+								// Get the actual row data from the filtered datatable
+								const filteredRowData = this.datatable.datamanager.data[index];
+								// Find the corresponding voucher by matching both voucher type and name
+								const voucher = this.vouchers.find(v => 
+									v[1] === filteredRowData[0] && v[2] === filteredRowData[1]
+								);
+								if (voucher) {
+									rows.push(voucher);
+								}
 							}
 						});
 						this.show_selected_transactions(rows);
