@@ -100,31 +100,99 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 
 				if (data && data.length > 0) {
 					this.vouchers = data;
-					const proposals_wrapper = this.dialog.fields_dict.payment_proposals.$wrapper;
-					proposals_wrapper.show();
-					this.dialog.fields_dict.no_matching_vouchers.$wrapper.hide();
-					this.data = [];
-					data.forEach((row) => {
-						const reference_date = row[5] ? row[5] : row[8];
-						this.data.push([
-							row[1],
-							row[2],
-							reference_date,
-							format_currency(row[3], row[9]),
-							row[4],
-							row[6],
-						]);
-					});
-					this.get_dt_columns();
-					this.get_datatable(proposals_wrapper);
+					this.apply_customer_group_filter(data);
 				} else {
 					const proposals_wrapper = this.dialog.fields_dict.payment_proposals.$wrapper;
 					proposals_wrapper.hide();
 					this.dialog.fields_dict.no_matching_vouchers.$wrapper.show();
+					this.dialog.show();
 				}
-				this.dialog.show();
 			},
 		});
+	}
+
+	apply_customer_group_filter(data) {
+		const customer_group_filter = this.dialog.get_value('customer_group');
+		
+		if (!customer_group_filter) {
+			// No filter applied, show all data
+			this.display_filtered_data(data);
+			return;
+		}
+
+		// Get all unique customers from the data where party_type is 'Customer'
+		const customers = [];
+		data.forEach((row) => {
+			// row[7] is party_type, row[6] is party
+			if (row[7] === 'Customer' && row[6] && !customers.includes(row[6])) {
+				customers.push(row[6]);
+			}
+		});
+
+		if (customers.length === 0) {
+			// No customer entries, show all data
+			this.display_filtered_data(data);
+			return;
+		}
+
+		// Fetch customer groups for all customers
+		frappe.db.get_list('Customer', {
+			filters: [['name', 'in', customers]],
+			fields: ['name', 'customer_group'],
+			limit: 9999  // Set high limit to get all customers
+		}).then((response) => {
+			if (response && response.length > 0) {
+				const customer_groups = {};
+				response.forEach((customer) => {
+					customer_groups[customer.name] = customer.customer_group;
+				});
+
+				// Filter data based on customer group
+				const filtered_data = data.filter((row) => {
+					// row[7] is party_type, row[6] is party
+					if (row[7] === 'Customer') {
+						const customer_group = customer_groups[row[6]];
+						return customer_group === customer_group_filter;
+					}
+					// Keep non-customer entries (like suppliers) when customer group filter is applied
+					return true;
+				});
+
+				this.display_filtered_data(filtered_data);
+			} else {
+				this.display_filtered_data(data);
+			}
+		}).catch(() => {
+			// If there's an error fetching customer groups, show all data
+			this.display_filtered_data(data);
+		});
+	}
+
+	display_filtered_data(data) {
+		const proposals_wrapper = this.dialog.fields_dict.payment_proposals.$wrapper;
+		
+		if (data && data.length > 0) {
+			proposals_wrapper.show();
+			this.dialog.fields_dict.no_matching_vouchers.$wrapper.hide();
+			this.data = [];
+			data.forEach((row) => {
+				const reference_date = row[5] ? row[5] : row[8];
+				this.data.push([
+					row[1],
+					row[2],
+					reference_date,
+					format_currency(row[3], row[9]),
+					row[4],
+					row[6],
+				]);
+			});
+			this.get_dt_columns();
+			this.get_datatable(proposals_wrapper);
+		} else {
+			proposals_wrapper.hide();
+			this.dialog.fields_dict.no_matching_vouchers.$wrapper.show();
+		}
+		this.dialog.show();
 	}
 
 	show_selected_transactions(transactions) {
@@ -264,7 +332,8 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			callback: (r) => {
 				console.log("get_doctypes_for_bank_reconciliation", r.message);
 				$.each(r.message, (_i, entry) => {
-					if (_i % 3 == 0) {
+					// Create more balanced columns: 2-3-2 distribution for typical 7 checkboxes
+					if (_i % 4 == 0) {
 						fields.push({
 							fieldtype: "Column Break",
 						});
@@ -298,13 +367,21 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				onchange: () => this.update_options(),
 			},
 			{
+				fieldtype: "Check",
+				label: "Bank Transaction",
+				fieldname: "bank_transaction",
+				onchange: () => this.update_options(),
+			},
+			{
 				fieldname: "column_break_5",
 				fieldtype: "Column Break",
 			},
 			{
-				fieldtype: "Check",
-				label: "Bank Transaction",
-				fieldname: "bank_transaction",
+				fieldtype: "Link",
+				label: "Customer Group",
+				fieldname: "customer_group",
+				options: "Customer Group",
+				depends_on: "eval:doc.payment_entry || doc.journal_entry || doc.sales_invoice || doc.unpaid_sales_invoice",
 				onchange: () => this.update_options(),
 			},
 			{
