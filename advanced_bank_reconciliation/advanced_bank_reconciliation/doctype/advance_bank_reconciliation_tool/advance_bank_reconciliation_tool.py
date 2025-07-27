@@ -26,20 +26,6 @@ class AdvanceBankReconciliationTool(Document):
 
 
 @frappe.whitelist()
-def get_doctypes_for_bank_reconciliation():
-	"""Return available document types for bank reconciliation."""
-	return [
-		"Payment Entry",
-		"Journal Entry", 
-		"Sales Invoice",
-		"Purchase Invoice",
-		"Unpaid Sales Invoice",
-		"Unpaid Purchase Invoice",
-		"Bank Transaction"
-	]
-
-
-@frappe.whitelist()
 def get_bank_transactions(bank_account, from_date=None, to_date=None):
 	# returns bank transactions for a bank account
 	filters = []

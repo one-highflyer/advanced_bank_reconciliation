@@ -260,8 +260,9 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		];
 
 		frappe.call({
-			method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_doctypes_for_bank_reconciliation",
+			method: "erpnext.accounts.doctype.bank_transaction.bank_transaction.get_doctypes_for_bank_reconciliation",
 			callback: (r) => {
+				console.log("get_doctypes_for_bank_reconciliation", r.message);
 				$.each(r.message, (_i, entry) => {
 					if (_i % 3 == 0) {
 						fields.push({
