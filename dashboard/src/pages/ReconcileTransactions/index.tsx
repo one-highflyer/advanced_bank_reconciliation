@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { BankReconciliationFilters } from '../../components/BankReconciliationFilters';
 import { TransactionList } from '../../components/TransactionList';
+import { TransactionMatchingSection } from './TransactionMatchingSection';
 import type { BankTransaction } from '../../lib/services/bankReconciliationService';
 
 type Filters = {
@@ -12,6 +13,7 @@ type Filters = {
 
 export default function ReconcileTransactions() {
     const [filters, setFilters] = useState<Filters | null>(null);
+    const [selectedTransaction, setSelectedTransaction] = useState<BankTransaction>();
 
     const handleFiltersChange = (newFilters: Filters) => {
         setFilters(newFilters);
@@ -19,22 +21,26 @@ export default function ReconcileTransactions() {
 
     const handleTransactionSelect = (transaction: BankTransaction) => {
         console.log('Selected transaction:', transaction);
-        // TODO: Implement transaction selection logic
-        // This could open a modal or navigate to a detail view
+        setSelectedTransaction(transaction);
     };
 
     return (
         <div className="container mx-auto px-4">
+            {selectedTransaction ? (
+                <TransactionMatchingSection selectedTransaction={selectedTransaction} />
+            ) : (
+                <>
+                    <BankReconciliationFilters onFiltersChange={handleFiltersChange} />
 
-            <BankReconciliationFilters onFiltersChange={handleFiltersChange} />
-
-            {filters && (
-                <TransactionList
-                    bankAccount={filters.bankAccount}
-                    fromDate={filters.fromDate}
-                    toDate={filters.toDate}
-                    onTransactionSelect={handleTransactionSelect}
-                />
+                    {filters && (
+                        <TransactionList
+                            bankAccount={filters.bankAccount}
+                            fromDate={filters.fromDate}
+                            toDate={filters.toDate}
+                            onTransactionSelect={handleTransactionSelect}
+                        />
+                    )}
+                </>
             )}
         </div>
     );
