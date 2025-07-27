@@ -4,6 +4,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { getBankAccounts, getCompanies, type BankAccount, type Company } from '../lib/services/bankReconciliationService';
+import { RefreshCcw } from 'lucide-react';
 
 interface BankReconciliationFiltersProps {
   onFiltersChange: (filters: {
@@ -101,7 +102,7 @@ export function BankReconciliationFilters({ onFiltersChange }: BankReconciliatio
             onValueChange={setSelectedCompany}
             disabled={loading}
           >
-            <SelectTrigger>
+            <SelectTrigger className="w-full">
               <SelectValue placeholder="Select company" />
             </SelectTrigger>
             <SelectContent>
@@ -121,7 +122,7 @@ export function BankReconciliationFilters({ onFiltersChange }: BankReconciliatio
             onValueChange={setSelectedBankAccount}
             disabled={loading}
           >
-            <SelectTrigger>
+            <SelectTrigger className="w-full">
               <SelectValue placeholder="Select bank account" />
             </SelectTrigger>
             <SelectContent>
@@ -154,13 +155,13 @@ export function BankReconciliationFilters({ onFiltersChange }: BankReconciliatio
           />
         </div>
 
-        <div className="flex items-end">
+        <div className="col-span-full flex items-end justify-end">
           <Button
             onClick={handleRefresh}
-            disabled={!selectedBankAccount || !fromDate || !toDate}
-            className="w-full"
+            disabled={!selectedCompany || !selectedBankAccount || !fromDate || !toDate}
           >
             Refresh
+            <RefreshCcw className="w-4 h-4" />
           </Button>
         </div>
       </div>

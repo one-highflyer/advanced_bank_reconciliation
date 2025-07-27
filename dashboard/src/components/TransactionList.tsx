@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getBankTransactions, type BankTransaction } from '../lib/services/bankReconciliationService';
 import { formatCurrency } from '../lib/utils';
+import { Button } from './ui/button';
 
 interface TransactionListProps {
   bankAccount?: string;
@@ -55,11 +56,11 @@ export function TransactionList({
     );
   }
 
-    if (error) {
+  if (error) {
     return (
       <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-md">
         <p className="text-destructive">{error}</p>
-        <button 
+        <button
           onClick={loadTransactions}
           className="mt-2 px-4 py-2 bg-destructive text-destructive-foreground rounded hover:bg-destructive/90"
         >
@@ -80,14 +81,14 @@ export function TransactionList({
     );
   }
 
-    return (
+  return (
     <div className="bg-card rounded-lg shadow border">
       <div className="px-6 py-4 border-b border-border">
         <h3 className="text-lg font-semibold text-card-foreground">
           Pending Transactions ({transactions.length})
         </h3>
       </div>
-      
+
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-border">
           <thead className="bg-muted">
@@ -122,8 +123,8 @@ export function TransactionList({
             </tr>
           </thead>
           <tbody className="bg-card divide-y divide-border">
-                        {transactions.map((transaction) => (
-              <tr 
+            {transactions.map((transaction) => (
+              <tr
                 key={transaction.name}
                 className="hover:bg-muted/50 cursor-pointer"
                 onClick={() => handleTransactionClick(transaction)}
@@ -156,9 +157,9 @@ export function TransactionList({
                   {transaction.reference_number}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
-                  <button className="px-3 py-1 bg-primary text-primary-foreground text-xs rounded hover:bg-primary/90">
+                  <Button variant="default" size="sm" className="cursor-pointer">
                     Actions
-                  </button>
+                  </Button>
                 </td>
               </tr>
             ))}
