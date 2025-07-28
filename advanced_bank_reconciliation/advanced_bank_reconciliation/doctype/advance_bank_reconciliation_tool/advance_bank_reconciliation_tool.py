@@ -558,6 +558,8 @@ def check_matching(
 		"party_type": transaction.party_type,
 		"party": transaction.party,
 		"bank_account": bank_account,
+		"from_date": from_date,
+		"to_date": to_date,
 	}
 
 	matching_vouchers = []
@@ -1002,11 +1004,11 @@ def get_unpaid_si_matching_query(exact_match, for_withdrawal=False, from_date=No
 	if for_withdrawal:
 		# For withdrawals, match negative outstanding amounts (returns/credit notes)
 		amount_condition = "outstanding_amount = %(amount)s" if exact_match else "outstanding_amount < 0.0"
-		amount_comparison = "ABS(outstanding_amount) = ABS(%(amount)s)" if exact_match else "1 = 0"
+		amount_comparison = "ABS(outstanding_amount) = ABS(%(amount)s)"
 	else:
 		# For deposits, match positive outstanding amounts (normal invoices)
 		amount_condition = "outstanding_amount = %(amount)s" if exact_match else "outstanding_amount > 0.0"
-		amount_comparison = "outstanding_amount = %(amount)s" if exact_match else "1 = 0"
+		amount_comparison = "outstanding_amount = %(amount)s"
 	
 	# Add date filters if provided
 	date_filter = ""
@@ -1048,11 +1050,11 @@ def get_unpaid_pi_matching_query(exact_match, for_deposit=False, from_date=None,
 	if for_deposit:
 		# For deposits, match negative outstanding amounts (returns/debit notes)
 		amount_condition = "outstanding_amount = %(amount)s" if exact_match else "outstanding_amount < 0.0"
-		amount_comparison = "ABS(outstanding_amount) = ABS(%(amount)s)" if exact_match else "1 = 0"
+		amount_comparison = "ABS(outstanding_amount) = ABS(%(amount)s)"
 	else:
 		# For withdrawals, match positive outstanding amounts (normal invoices)
 		amount_condition = "outstanding_amount = %(amount)s" if exact_match else "outstanding_amount > 0.0"
-		amount_comparison = "outstanding_amount = %(amount)s" if exact_match else "1 = 0"
+		amount_comparison = "outstanding_amount = %(amount)s"
 	
 	# Add date filters if provided
 	date_filter = ""
