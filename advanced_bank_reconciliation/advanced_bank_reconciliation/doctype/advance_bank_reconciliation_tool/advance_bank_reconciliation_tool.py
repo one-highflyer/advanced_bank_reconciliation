@@ -1002,20 +1002,20 @@ def get_unpaid_si_matching_query(exact_match, for_withdrawal=False, from_date=No
 	if for_withdrawal:
 		# For withdrawals, match negative outstanding amounts (returns/credit notes)
 		amount_condition = "outstanding_amount = %(amount)s" if exact_match else "outstanding_amount < 0.0"
-		amount_comparison = "ABS(outstanding_amount) = ABS(%(amount)s)" if exact_match else "ABS(outstanding_amount) = ABS(%(amount)s)"
+		amount_comparison = "ABS(outstanding_amount) = ABS(%(amount)s)" if exact_match else "1 = 0"
 	else:
 		# For deposits, match positive outstanding amounts (normal invoices)
 		amount_condition = "outstanding_amount = %(amount)s" if exact_match else "outstanding_amount > 0.0"
-		amount_comparison = "outstanding_amount = %(amount)s" if exact_match else "outstanding_amount = %(amount)s"
+		amount_comparison = "outstanding_amount = %(amount)s" if exact_match else "1 = 0"
 	
 	# Add date filters if provided
 	date_filter = ""
 	if from_date and to_date:
-		date_filter = f"AND posting_date BETWEEN '{from_date}' AND '{to_date}'"
+		date_filter = "AND posting_date BETWEEN %(from_date)s AND %(to_date)s"
 	elif from_date:
-		date_filter = f"AND posting_date >= '{from_date}'"
+		date_filter = "AND posting_date >= %(from_date)s"
 	elif to_date:
-		date_filter = f"AND posting_date <= '{to_date}'"
+		date_filter = "AND posting_date <= %(to_date)s"
 	
 	return f"""
 		SELECT
@@ -1048,20 +1048,20 @@ def get_unpaid_pi_matching_query(exact_match, for_deposit=False, from_date=None,
 	if for_deposit:
 		# For deposits, match negative outstanding amounts (returns/debit notes)
 		amount_condition = "outstanding_amount = %(amount)s" if exact_match else "outstanding_amount < 0.0"
-		amount_comparison = "ABS(outstanding_amount) = ABS(%(amount)s)" if exact_match else "ABS(outstanding_amount) = ABS(%(amount)s)"
+		amount_comparison = "ABS(outstanding_amount) = ABS(%(amount)s)" if exact_match else "1 = 0"
 	else:
 		# For withdrawals, match positive outstanding amounts (normal invoices)
 		amount_condition = "outstanding_amount = %(amount)s" if exact_match else "outstanding_amount > 0.0"
-		amount_comparison = "outstanding_amount = %(amount)s" if exact_match else "outstanding_amount = %(amount)s"
+		amount_comparison = "outstanding_amount = %(amount)s" if exact_match else "1 = 0"
 	
 	# Add date filters if provided
 	date_filter = ""
 	if from_date and to_date:
-		date_filter = f"AND posting_date BETWEEN '{from_date}' AND '{to_date}'"
+		date_filter = "AND posting_date BETWEEN %(from_date)s AND %(to_date)s"
 	elif from_date:
-		date_filter = f"AND posting_date >= '{from_date}'"
+		date_filter = "AND posting_date >= %(from_date)s"
 	elif to_date:
-		date_filter = f"AND posting_date <= '{to_date}'"
+		date_filter = "AND posting_date <= %(to_date)s"
 	
 	return f"""
 		SELECT
