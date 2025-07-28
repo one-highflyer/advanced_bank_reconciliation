@@ -659,12 +659,12 @@ def get_matching_queries(
 		queries.append(query)
 	
 	if transaction.deposit > 0.0 and "unpaid_sales_invoice" in document_types:
-		query = get_unpaid_si_matching_query(exact_match, for_withdrawal=False)
+		query = get_unpaid_si_matching_query(exact_match, for_withdrawal=False, from_date=from_date, to_date=to_date)
 		queries.append(query)
 	
 	# Also check for negative unpaid purchase invoices (returns) for deposits
 	if transaction.deposit > 0.0 and "unpaid_purchase_invoice" in document_types:
-		query = get_unpaid_pi_matching_query(exact_match, for_deposit=True)
+		query = get_unpaid_pi_matching_query(exact_match, for_deposit=True, from_date=from_date, to_date=to_date)
 		queries.append(query)
 
 	if transaction.withdrawal > 0.0:
@@ -673,12 +673,12 @@ def get_matching_queries(
 			queries.append(query)
 		
 		if "unpaid_purchase_invoice" in document_types:
-			query = get_unpaid_pi_matching_query(exact_match, for_deposit=False)
+			query = get_unpaid_pi_matching_query(exact_match, for_deposit=False, from_date=from_date, to_date=to_date)
 			queries.append(query)
 		
 		# Also check for negative unpaid sales invoices (returns) for withdrawals
 		if "unpaid_sales_invoice" in document_types:
-			query = get_unpaid_si_matching_query(exact_match, for_withdrawal=True)
+			query = get_unpaid_si_matching_query(exact_match, for_withdrawal=True, from_date=from_date, to_date=to_date)
 			queries.append(query)
 
 	if "bank_transaction" in document_types:
@@ -996,7 +996,7 @@ def get_pi_matching_query(exact_match):
 	"""
 
 
-def get_unpaid_si_matching_query(exact_match, for_withdrawal=False):
+def get_unpaid_si_matching_query(exact_match, for_withdrawal=False, from_date=None, to_date=None):
 	# get matching unpaid sales invoice query
 	# for_withdrawal=True is used to match negative invoices (returns) with withdrawal transactions
 	if for_withdrawal:
@@ -1007,6 +1007,15 @@ def get_unpaid_si_matching_query(exact_match, for_withdrawal=False):
 		# For deposits, match positive outstanding amounts (normal invoices)
 		amount_condition = "outstanding_amount = %(amount)s" if exact_match else "outstanding_amount > 0.0"
 		amount_comparison = "outstanding_amount = %(amount)s" if exact_match else "outstanding_amount = %(amount)s"
+	
+	# Add date filters if provided
+	date_filter = ""
+	if from_date and to_date:
+		date_filter = f"AND posting_date BETWEEN '{from_date}' AND '{to_date}'"
+	elif from_date:
+		date_filter = f"AND posting_date >= '{from_date}'"
+	elif to_date:
+		date_filter = f"AND posting_date <= '{to_date}'"
 	
 	return f"""
 		SELECT
@@ -1028,11 +1037,12 @@ def get_unpaid_si_matching_query(exact_match, for_withdrawal=False):
 			docstatus = 1
 			AND status NOT IN ('Paid', 'Cancelled', 'Credit Note Issued')
 			AND {amount_condition}
+			{date_filter}
 		ORDER BY posting_date DESC
 	"""
 
 
-def get_unpaid_pi_matching_query(exact_match, for_deposit=False):
+def get_unpaid_pi_matching_query(exact_match, for_deposit=False, from_date=None, to_date=None):
 	# get matching unpaid purchase invoice query
 	# for_deposit=True is used to match negative invoices (returns) with deposit transactions
 	if for_deposit:
@@ -1043,6 +1053,15 @@ def get_unpaid_pi_matching_query(exact_match, for_deposit=False):
 		# For withdrawals, match positive outstanding amounts (normal invoices)
 		amount_condition = "outstanding_amount = %(amount)s" if exact_match else "outstanding_amount > 0.0"
 		amount_comparison = "outstanding_amount = %(amount)s" if exact_match else "outstanding_amount = %(amount)s"
+	
+	# Add date filters if provided
+	date_filter = ""
+	if from_date and to_date:
+		date_filter = f"AND posting_date BETWEEN '{from_date}' AND '{to_date}'"
+	elif from_date:
+		date_filter = f"AND posting_date >= '{from_date}'"
+	elif to_date:
+		date_filter = f"AND posting_date <= '{to_date}'"
 	
 	return f"""
 		SELECT
@@ -1064,6 +1083,7 @@ def get_unpaid_pi_matching_query(exact_match, for_deposit=False):
 			docstatus = 1
 			AND status NOT IN ('Paid', 'Cancelled', 'Debit Note Issued')
 			AND {amount_condition}
+			{date_filter}
 		ORDER BY posting_date DESC
 	"""
 
