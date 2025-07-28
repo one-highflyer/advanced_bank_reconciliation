@@ -234,7 +234,7 @@ def publish_records(data_import):
 				"deposit": item[1],
 				"withdrawal": item[2],
 				"reference_number": item[4],
-				"description": item[3]
+				"description": str(item[3]) if item[3] else None
 			}
 
 			bank_transaction = frappe.new_doc("Bank Transaction")
@@ -244,5 +244,6 @@ def publish_records(data_import):
 		logger.info("Bank transactions submitted successfully")
 		return True
 	except Exception as e:
-		logger.error("Publish records error: %s", str(e))
+		logger.error("Publish records error: %s", str(e), exc_info=True)
+		frappe.db.rollback()
 		return False

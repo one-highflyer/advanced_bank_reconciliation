@@ -659,7 +659,12 @@ def get_matching_queries(
 		queries.append(query)
 	
 	if transaction.deposit > 0.0 and "unpaid_sales_invoice" in document_types:
-		query = get_unpaid_si_matching_query(exact_match)
+		query = get_unpaid_si_matching_query(exact_match, for_withdrawal=False)
+		queries.append(query)
+	
+	# Also check for negative unpaid purchase invoices (returns) for deposits
+	if transaction.deposit > 0.0 and "unpaid_purchase_invoice" in document_types:
+		query = get_unpaid_pi_matching_query(exact_match, for_deposit=True)
 		queries.append(query)
 
 	if transaction.withdrawal > 0.0:
@@ -668,7 +673,12 @@ def get_matching_queries(
 			queries.append(query)
 		
 		if "unpaid_purchase_invoice" in document_types:
-			query = get_unpaid_pi_matching_query(exact_match)
+			query = get_unpaid_pi_matching_query(exact_match, for_deposit=False)
+			queries.append(query)
+		
+		# Also check for negative unpaid sales invoices (returns) for withdrawals
+		if "unpaid_sales_invoice" in document_types:
+			query = get_unpaid_si_matching_query(exact_match, for_withdrawal=True)
 			queries.append(query)
 
 	if "bank_transaction" in document_types:
@@ -986,12 +996,22 @@ def get_pi_matching_query(exact_match):
 	"""
 
 
-def get_unpaid_si_matching_query(exact_match):
+def get_unpaid_si_matching_query(exact_match, for_withdrawal=False):
 	# get matching unpaid sales invoice query
+	# for_withdrawal=True is used to match negative invoices (returns) with withdrawal transactions
+	if for_withdrawal:
+		# For withdrawals, match negative outstanding amounts (returns/credit notes)
+		amount_condition = "outstanding_amount = %(amount)s" if exact_match else "outstanding_amount < 0.0"
+		amount_comparison = "ABS(outstanding_amount) = ABS(%(amount)s)" if exact_match else "ABS(outstanding_amount) = ABS(%(amount)s)"
+	else:
+		# For deposits, match positive outstanding amounts (normal invoices)
+		amount_condition = "outstanding_amount = %(amount)s" if exact_match else "outstanding_amount > 0.0"
+		amount_comparison = "outstanding_amount = %(amount)s" if exact_match else "outstanding_amount = %(amount)s"
+	
 	return f"""
 		SELECT
 			( CASE WHEN customer = %(party)s THEN 1 ELSE 0 END
-			+ CASE WHEN outstanding_amount = %(amount)s THEN 1 ELSE 0 END
+			+ CASE WHEN {amount_comparison} THEN 1 ELSE 0 END
 			+ 1 ) AS rank,
 			'Unpaid Sales Invoice' as doctype,
 			name,
@@ -1007,17 +1027,27 @@ def get_unpaid_si_matching_query(exact_match):
 		WHERE
 			docstatus = 1
 			AND status NOT IN ('Paid', 'Cancelled', 'Credit Note Issued')
-			AND outstanding_amount {'= %(amount)s' if exact_match else '> 0.0'}
+			AND {amount_condition}
 		ORDER BY posting_date DESC
 	"""
 
 
-def get_unpaid_pi_matching_query(exact_match):
+def get_unpaid_pi_matching_query(exact_match, for_deposit=False):
 	# get matching unpaid purchase invoice query
+	# for_deposit=True is used to match negative invoices (returns) with deposit transactions
+	if for_deposit:
+		# For deposits, match negative outstanding amounts (returns/debit notes)
+		amount_condition = "outstanding_amount = %(amount)s" if exact_match else "outstanding_amount < 0.0"
+		amount_comparison = "ABS(outstanding_amount) = ABS(%(amount)s)" if exact_match else "ABS(outstanding_amount) = ABS(%(amount)s)"
+	else:
+		# For withdrawals, match positive outstanding amounts (normal invoices)
+		amount_condition = "outstanding_amount = %(amount)s" if exact_match else "outstanding_amount > 0.0"
+		amount_comparison = "outstanding_amount = %(amount)s" if exact_match else "outstanding_amount = %(amount)s"
+	
 	return f"""
 		SELECT
 			( CASE WHEN supplier = %(party)s THEN 1 ELSE 0 END
-			+ CASE WHEN outstanding_amount = %(amount)s THEN 1 ELSE 0 END
+			+ CASE WHEN {amount_comparison} THEN 1 ELSE 0 END
 			+ 1 ) AS rank,
 			'Unpaid Purchase Invoice' as doctype,
 			name,
@@ -1033,84 +1063,96 @@ def get_unpaid_pi_matching_query(exact_match):
 		WHERE
 			docstatus = 1
 			AND status NOT IN ('Paid', 'Cancelled', 'Debit Note Issued')
-			AND outstanding_amount {'= %(amount)s' if exact_match else '> 0.0'}
+			AND {amount_condition}
 		ORDER BY posting_date DESC
 	"""
 
 
 @frappe.whitelist()
 def create_payment_entries_for_invoices(bank_transaction_name, invoices, auto_reconcile=True):
-	"""Create payment entries for unpaid invoices and optionally reconcile them with the bank transaction."""
-	import json
-	
-	if isinstance(invoices, str):
-		invoices = json.loads(invoices)
-	
-	if isinstance(auto_reconcile, str):
-		auto_reconcile = auto_reconcile.lower() in ['true', '1', 'yes']
-	
-	bank_transaction = frappe.get_doc("Bank Transaction", bank_transaction_name)
-	
-	if not invoices:
-		frappe.throw(_("No invoices selected for payment entry creation"))
-	
-	vouchers = []
-	created_payment_entries = []
-	
-	for invoice_data in invoices:
-		invoice_name = invoice_data.get("name")
-		invoice_type = invoice_data.get("doctype")
-		allocated_amount = flt(invoice_data.get("allocated_amount", 0))
-		
-		if not invoice_name or not invoice_type or allocated_amount <= 0:
-			continue
-			
-		# Determine the actual doctype (remove 'Unpaid ' prefix)
-		actual_doctype = invoice_type.replace("Unpaid ", "")
-		
-		# Get the invoice document
-		invoice_doc = frappe.get_doc(actual_doctype, invoice_name)
-		
-		# Determine payment type based on invoice type
-		if actual_doctype == "Sales Invoice":
-			payment_type = "Receive"
-			party_type = "Customer"
-			party = invoice_doc.customer
-		else:  # Purchase Invoice
-			payment_type = "Pay"
-			party_type = "Supplier"
-			party = invoice_doc.supplier
-		
-		# Create payment entry
-		payment_entry = create_payment_entry_for_invoice(
-			invoice_doc,
-			bank_transaction,
-			allocated_amount,
-			payment_type,
-			party_type,
-			party
-		)
-		
-		created_payment_entries.append(payment_entry.name)
-		
-		vouchers.append({
-			"payment_doctype": "Payment Entry",
-			"payment_name": payment_entry.name,
-			"amount": allocated_amount
-		})
-	
-	if not vouchers:
-		frappe.throw(_("No valid payment entries created"))
-	
-	# Optionally reconcile the vouchers with the bank transaction
-	if auto_reconcile:
-		return reconcile_vouchers(bank_transaction_name, json.dumps(vouchers))
-	else:
-		# Return the created payment entries for further processing
-		return {
-			"payment_entries": created_payment_entries,
-			"vouchers": vouchers
-		}
+    """Create payment entries for unpaid invoices and optionally reconcile them with the bank transaction."""
+    import json
+
+    if isinstance(invoices, str):
+        invoices = json.loads(invoices)
+
+    if isinstance(auto_reconcile, str):
+        auto_reconcile = auto_reconcile.lower() in ["true", "1", "yes"]
+
+    bank_transaction = frappe.get_doc("Bank Transaction", bank_transaction_name)
+
+    if not invoices:
+        frappe.throw(_("No invoices selected for payment entry creation"))
+
+    logger.info("Creating payment entries for invoices: %s", invoices)
+
+    vouchers = []
+    created_payment_entries = []
+
+    for invoice_data in invoices:
+        invoice_name = invoice_data.get("name")
+        invoice_type = invoice_data.get("doctype")
+        allocated_amount = flt(invoice_data.get("allocated_amount", 0))
+
+        if not invoice_name or not invoice_type or allocated_amount == 0:
+            continue
+
+        # Determine the actual doctype (remove 'Unpaid ' prefix)
+        actual_doctype = invoice_type.replace("Unpaid ", "")
+
+        # Get the invoice document
+        invoice_doc = frappe.get_doc(actual_doctype, invoice_name)
+
+        # Determine payment type based on invoice type and allocated amount
+        if actual_doctype == "Sales Invoice":
+            # For negative amounts (returns), money goes out (Pay), otherwise money comes in (Receive)
+            payment_type = "Pay" if allocated_amount < 0 else "Receive"
+            party_type = "Customer"
+            party = invoice_doc.customer
+        else:  # Purchase Invoice
+            # For negative amounts (returns), money comes in (Receive), otherwise money goes out (Pay)
+            payment_type = "Receive" if allocated_amount < 0 else "Pay"
+            party_type = "Supplier"
+            party = invoice_doc.supplier
+
+        logger.info(
+            "Creating payment entry for invoice: %s, bank_transaction: %s, allocated_amount: %s, payment_type: %s, party_type: %s, party: %s",
+            invoice_doc.name,
+            bank_transaction.name,
+            allocated_amount,
+            payment_type,
+            party_type,
+            party,
+        )
+        # Create payment entry
+        payment_entry = create_payment_entry_for_invoice(
+            invoice_doc,
+            bank_transaction,
+            allocated_amount,
+            payment_type,
+            party_type,
+            party,
+        )
+
+        created_payment_entries.append(payment_entry.name)
+
+        vouchers.append(
+            {
+                "payment_doctype": "Payment Entry",
+                "payment_name": payment_entry.name,
+                "amount": allocated_amount,
+            }
+        )
+
+    if not vouchers:
+        frappe.throw(_("No valid payment entries created"))
+
+    # Optionally reconcile the vouchers with the bank transaction
+    if auto_reconcile:
+        return reconcile_vouchers(bank_transaction_name, json.dumps(vouchers))
+    else:
+        # Return the created payment entries for further processing
+        return {"payment_entries": created_payment_entries, "vouchers": vouchers}
 
 
 def create_payment_entry_for_invoice(invoice_doc, bank_transaction, allocated_amount, payment_type, party_type, party):
@@ -1130,9 +1172,11 @@ def create_payment_entry_for_invoice(invoice_doc, bank_transaction, allocated_am
 	else:  # Pay
 		payment_entry.paid_from = bank_gl_account
 	
-	# Set the payment amount to the allocated amount
-	payment_entry.paid_amount = allocated_amount
-	payment_entry.received_amount = allocated_amount
+	# Set the payment amount to the absolute value of allocated amount
+	# For negative amounts, we still use the absolute value for payment amounts
+	abs_allocated_amount = abs(allocated_amount)
+	payment_entry.paid_amount = abs_allocated_amount
+	payment_entry.received_amount = abs_allocated_amount
 	
 	# Set reference details from bank transaction
 	payment_entry.reference_no = bank_transaction.reference_number or bank_transaction.description
@@ -1143,7 +1187,13 @@ def create_payment_entry_for_invoice(invoice_doc, bank_transaction, allocated_am
 	if payment_entry.references:
 		for ref in payment_entry.references:
 			if ref.reference_name == invoice_doc.name:
-				ref.allocated_amount = min(allocated_amount, ref.outstanding_amount)
+				# For negative invoices (returns), both the outstanding amount and allocated amount should be negative
+				if allocated_amount < 0:
+					# Keep the allocated amount negative to match the negative outstanding amount
+					ref.allocated_amount = max(allocated_amount, ref.outstanding_amount)  # max because both are negative
+				else:
+					# For normal invoices, use the regular logic
+					ref.allocated_amount = min(allocated_amount, ref.outstanding_amount)
 				break
 	
 	# Validate the payment entry
@@ -1551,7 +1601,7 @@ def validate_single_bank_transaction(bank_transaction_name):
 		# Iterate through all payment entries in the bank transaction
 		for payment_entry in bank_transaction.payment_entries:
 			try:
-				logger.debug("Processing %s: %s", payment_entry.payment_document, payment_entry.payment_entry)
+				logger.info("Processing %s: %s", payment_entry.payment_document, payment_entry.payment_entry)
 				
 				# Load the actual payment document
 				payment_doc = frappe.get_doc(payment_entry.payment_document, payment_entry.payment_entry)
@@ -1624,7 +1674,10 @@ def validate_payment_entry_clearance(bank_transaction, payment_entry, payment_do
 		# Check if allocated amount matches payment amount and direction
 		if bank_transaction.deposit > 0.0:
 			# Bank deposit (money coming in)
-			if payment_doc.payment_type == "Receive" and payment_entry.allocated_amount == payment_amount:
+			if payment_doc.payment_type == "Receive" and (payment_entry.allocated_amount == payment_amount or payment_entry.allocated_amount == -payment_amount):
+				# For Receive transactions with deposits, handle both positive and negative allocated amounts
+				# Positive: normal receipt coming in
+				# Negative: purchase return/refund coming in (allocated amount is negative but payment amount is positive)
 				return True
 			elif payment_doc.payment_type == "Pay" and payment_entry.allocated_amount == -payment_amount:
 				return True
@@ -1632,7 +1685,10 @@ def validate_payment_entry_clearance(bank_transaction, payment_entry, payment_do
 			# Bank withdrawal (money going out)  
 			if payment_doc.payment_type == "Receive" and payment_entry.allocated_amount == -payment_amount:
 				return True
-			elif payment_doc.payment_type == "Pay" and payment_entry.allocated_amount == payment_amount:
+			elif payment_doc.payment_type == "Pay" and (payment_entry.allocated_amount == payment_amount or payment_entry.allocated_amount == -payment_amount):
+				# For Pay transactions with withdrawals, handle both positive and negative allocated amounts
+				# Positive: normal payment going out
+				# Negative: sales return/refund going out (allocated amount is negative but payment amount is positive)
 				return True
 		
 		return False
