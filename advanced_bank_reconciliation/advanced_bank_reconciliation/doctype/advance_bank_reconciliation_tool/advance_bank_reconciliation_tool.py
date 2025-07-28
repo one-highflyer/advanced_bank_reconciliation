@@ -1003,7 +1003,7 @@ def get_unpaid_si_matching_query(exact_match, for_withdrawal=False, from_date=No
 	# for_withdrawal=True is used to match negative invoices (returns) with withdrawal transactions
 	if for_withdrawal:
 		# For withdrawals, match negative outstanding amounts (returns/credit notes)
-		amount_condition = "outstanding_amount = %(amount)s" if exact_match else "outstanding_amount < 0.0"
+		amount_condition = "ABS(outstanding_amount) = ABS(%(amount)s)" if exact_match else "outstanding_amount < 0.0"
 		amount_comparison = "ABS(outstanding_amount) = ABS(%(amount)s)"
 	else:
 		# For deposits, match positive outstanding amounts (normal invoices)
@@ -1049,7 +1049,7 @@ def get_unpaid_pi_matching_query(exact_match, for_deposit=False, from_date=None,
 	# for_deposit=True is used to match negative invoices (returns) with deposit transactions
 	if for_deposit:
 		# For deposits, match negative outstanding amounts (returns/debit notes)
-		amount_condition = "outstanding_amount = %(amount)s" if exact_match else "outstanding_amount < 0.0"
+		amount_condition = "ABS(outstanding_amount) = ABS(%(amount)s)" if exact_match else "outstanding_amount < 0.0"
 		amount_comparison = "ABS(outstanding_amount) = ABS(%(amount)s)"
 	else:
 		# For withdrawals, match positive outstanding amounts (normal invoices)
