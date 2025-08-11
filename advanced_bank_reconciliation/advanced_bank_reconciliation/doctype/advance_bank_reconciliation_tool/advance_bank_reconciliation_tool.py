@@ -510,20 +510,28 @@ def subtract_allocations(gl_account, vouchers):
 	voucher_allocated_amounts = get_total_allocated_amount(voucher_docs)
 
 	for voucher in vouchers:
-		rows = voucher_allocated_amounts.get((voucher[1], voucher[2])) or []
-		amount = None
-		for row in rows:
-			if row["gl_account"] == gl_account:
-				amount = row["total"]
-				break
-
+		amount = get_allocated_amount(voucher_allocated_amounts, voucher, gl_account)
 		if amount:
-			l = list(voucher)
-			l[3] -= amount
-			copied.append(tuple(l))
+			voucher_list = list(voucher)
+			voucher_list[3] -= amount
+			copied.append(tuple(voucher_list))
 		else:
 			copied.append(voucher)
 	return copied
+
+
+def get_allocated_amount(voucher_allocated_amounts, voucher, gl_account):
+	"""Get allocated amount for a voucher on a specific GL account"""
+	# voucher is a tuple with structure: (rank, doctype, name, paid_amount, ...)
+	voucher_key = (voucher[1], voucher[2])  # (doctype, name)
+	
+	if not (voucher_details := voucher_allocated_amounts.get(voucher_key)):
+		return None
+
+	if not (row := voucher_details.get(gl_account)):
+		return None
+
+	return row.get("total")
 
 
 def check_matching(
