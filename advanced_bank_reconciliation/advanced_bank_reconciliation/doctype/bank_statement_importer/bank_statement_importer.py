@@ -96,7 +96,9 @@ def build_table(mapping, data_headers, data_body):
 		"Description",
 		"Reference Number",
 		"Bank Account",
-		"Currency"
+		"Currency",
+		"Particulars",
+		"Other Party"
 	]
 	tbl.append(tbl_header)
 
@@ -153,6 +155,19 @@ def build_table(mapping, data_headers, data_body):
 				tbl_row.append(0)
 		else:
 			tbl_row.append(0)
+		
+		# Particulars
+		particulars_value = ""
+		if mapping.get("particulars_select") and mapping["particulars_select"] in data_headers:
+			particulars_value = data_row[data_headers.index(mapping["particulars_select"])] or ""
+		tbl_row.append(particulars_value)
+		
+		# Other Party
+		other_party_value = ""
+		if mapping.get("other_party_select") and mapping["other_party_select"] in data_headers:
+			other_party_value = data_row[data_headers.index(mapping["other_party_select"])] or ""
+		tbl_row.append(other_party_value)
+		
 		tbl.append(tbl_row)
 
 	return tbl
@@ -236,6 +251,14 @@ def publish_records(data_import):
 				"reference_number": item[4],
 				"description": str(item[3]) if item[3] else None
 			}
+			
+			# Add Particulars field if it exists (index 8)
+			if len(item) > 8 and item[8]:
+				bank_transaction_dict["custom_particulars"] = str(item[8])
+			
+			# Add Other Party field if it exists (index 9)
+			if len(item) > 9 and item[9]:
+				bank_transaction_dict["bank_party_name"] = str(item[9])
 
 			bank_transaction = frappe.new_doc("Bank Transaction")
 			bank_transaction.update(bank_transaction_dict)

@@ -81,6 +81,8 @@ frappe.ui.form.on('Bank Statement Importer', {
 				const withdrawalField = bank_mapping.withdrawal;
 				const descriptionField = bank_mapping.description;
 				const referenceField = bank_mapping.reference_number;
+				const particularsField = bank_mapping.custom_particulars;
+				const otherPartyField = bank_mapping.bank_party_name;
 				
 				// Set field options
 				frm.set_df_property("date_select", "options", options);
@@ -89,6 +91,8 @@ frappe.ui.form.on('Bank Statement Importer', {
 				frm.set_df_property("amount_select", "options", options);
 				frm.set_df_property("description_select", "options", options);
 				frm.set_df_property("reference_number_select", "options", options);
+				frm.set_df_property("particulars_select", "options", options);
+				frm.set_df_property("other_party_select", "options", options);
 
 
 				// Check if deposit and withdrawal use the same field
@@ -134,6 +138,12 @@ frappe.ui.form.on('Bank Statement Importer', {
 				if (referenceField) {
 					frm.set_value('reference_number_select', referenceField);
 				}
+				if (particularsField) {
+					frm.set_value('particulars_select', particularsField);
+				}
+				if (otherPartyField) {
+					frm.set_value('other_party_select', otherPartyField);
+				}
 				
 				// Set date format from bank
 				if (bank_mapping.date_format) {
@@ -150,6 +160,8 @@ frappe.ui.form.on('Bank Statement Importer', {
 				frm.refresh_field("description_select");
 				frm.refresh_field("reference_number_select");
                 frm.refresh_field("date_format");
+                frm.refresh_field("particulars_select");
+                frm.refresh_field("other_party_select");
 			}
 		}).then((r) => {
 			if (r.message === true) {
@@ -229,6 +241,16 @@ frappe.ui.form.on('Bank Statement Importer', {
 						name: __("Is Duplicated"),
 						editable: false,
 						width: 100,
+					},
+					{
+						name: __("Particulars"),
+						editable: false,
+						width: 150,
+					},
+					{
+						name: __("Other Party"),
+						editable: false,
+						width: 150,
 					}
 				];
 				const datatable_options = {
