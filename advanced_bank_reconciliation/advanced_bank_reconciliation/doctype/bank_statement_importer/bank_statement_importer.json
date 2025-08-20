@@ -26,6 +26,8 @@
   "positive_field",
   "reference_number_select",
   "description_select",
+  "particulars_select",
+  "other_party_select",
   "map_fields",
   "import_preview",
   "import_data",
@@ -171,13 +173,25 @@
    "fieldname": "date_format",
    "fieldtype": "Select",
    "label": "Date Format",
-   "options": "Auto\nY/m/d\nd/m/Y\ndd/mm/YY\nm/d/Y\nm-d-Y\nd-m-Y\nY-m-d\nY/d/m"
+   "options": "Auto\nY/m/d\nd/m/Y\ndd/mm/YY\nm/d/Y\nm-d-Y\nd-m-Y\nY-m-d"
+  },
+  {
+   "depends_on": "eval:doc.data_fetched == true",
+   "fieldname": "particulars_select",
+   "fieldtype": "Select",
+   "label": "Particulars"
+  },
+  {
+   "depends_on": "eval:doc.data_fetched == true",
+   "fieldname": "other_party_select",
+   "fieldtype": "Select",
+   "label": "Other Party"
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-06-03 22:05:59.353802",
+ "modified": "2025-08-20 20:00:26.115629",
  "modified_by": "Administrator",
  "module": "Advanced Bank Reconciliation",
  "name": "Bank Statement Importer",
@@ -203,6 +217,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": []
