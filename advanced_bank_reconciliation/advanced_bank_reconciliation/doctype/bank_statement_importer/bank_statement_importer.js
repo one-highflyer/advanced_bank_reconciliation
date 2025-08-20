@@ -81,8 +81,8 @@ frappe.ui.form.on('Bank Statement Importer', {
 				const withdrawalField = bank_mapping.withdrawal;
 				const descriptionField = bank_mapping.description;
 				const referenceField = bank_mapping.reference_number;
-				const particularsField = bank_mapping.custom_particulars;    // Add this line
-				const otherPartyField = bank_mapping.bank_party_name;       // Add this line
+				const particularsField = bank_mapping.custom_particulars;
+				const otherPartyField = bank_mapping.bank_party_name;
 				
 				// Set field options
 				frm.set_df_property("date_select", "options", options);
