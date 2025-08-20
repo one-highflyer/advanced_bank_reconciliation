@@ -97,7 +97,6 @@ def build_table(mapping, data_headers, data_body):
 		"Reference Number",
 		"Bank Account",
 		"Currency",
-		"Is Duplicated",
 		"Particulars",
 		"Other Party"
 	]
