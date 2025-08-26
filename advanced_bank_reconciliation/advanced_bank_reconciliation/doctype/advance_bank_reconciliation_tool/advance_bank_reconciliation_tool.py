@@ -51,6 +51,8 @@ def get_bank_transactions(bank_account, from_date=None, to_date=None):
 			"reference_number",
 			"party_type",
 			"party",
+			"custom_particulars",
+			"bank_party_name",
 		],
 		filters=filters,
 		order_by="date",
@@ -143,6 +145,8 @@ def update_bank_transaction(bank_transaction_name, reference_number, party_type=
 			"reference_number",
 			"party_type",
 			"party",
+			"custom_particulars",
+			"bank_party_name",
 		],
 	)[0]
 
