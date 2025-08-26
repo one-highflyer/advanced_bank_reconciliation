@@ -19,7 +19,7 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 	make_dt() {
 		var me = this;
 		frappe.call({
-			method: "erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.get_bank_transactions",
+			method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_bank_transactions",
 			args: {
 				bank_account: this.bank_account,
 				from_date: this.bank_statement_from_date,
@@ -35,7 +35,6 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 	}
 
 	make_reconciled_dt() {
-		console.log("Making reconciled data table");
 		var me = this;
 		frappe.call({
 			method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_reconciled_bank_transactions",
@@ -45,7 +44,6 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 				to_date: this.bank_statement_to_date,
 			},
 			callback: function (response) {
-				console.log("reconciled transactions response", response.message);
 				const transactions = response.message;
 
 				me.reconciled_transactions = [];
@@ -72,7 +70,7 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 			{
 				name: __("Date"),
 				editable: false,
-				width: 100,
+				width: 110,
 			},
 			{
 				name: __("Bank Transaction"),
@@ -83,47 +81,47 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 				}
 			},
 			{
-				name: __("Party Type"),
-				editable: false,
-				width: 95,
-			},
-			{
-				name: __("Party"),
-				editable: false,
-				width: 100,
-			},
-			{
 				name: __("Description"),
+				editable: false,
+				width: 150
+			},
+			{
+				name: __("Reference Number"),
 				editable: false,
 				width: 150,
 			},
 			{
+				name: __("Particulars"),
+				editable: false,
+				width: 150
+			},
+			{
+				name: __("Bank Party"),
+				editable: false,
+				width: 150
+			},
+			{
 				name: __("Deposit"),
 				editable: false,
-				width: 100,
+				width: 120,
 				format: (value) =>
 					"<span style='color:green;'>" + format_currency(value, this.currency) + "</span>",
 			},
 			{
 				name: __("Withdrawal"),
 				editable: false,
-				width: 100,
+				width: 120,
 				format: (value) =>
 					"<span style='color:red;'>" + format_currency(value, this.currency) + "</span>",
 			},
 			{
 				name: __("Unallocated Amount"),
 				editable: false,
-				width: 100,
+				width: 120,
 				format: (value) =>
 					"<span style='color:var(--blue-500);'>" +
 					format_currency(value, this.currency) +
 					"</span>",
-			},
-			{
-				name: __("Reference Number"),
-				editable: false,
-				width: 140,
 			},
 			{
 				name: __("Actions"),
@@ -141,7 +139,7 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 			{
 				name: __("Date"),
 				editable: false,
-				width: 100,
+				width: 110,
 			},
 			{
 				name: __("Bank Transaction"),
@@ -204,13 +202,13 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 		return [
 			row["date"],
 			row["name"],
-			row["party_type"],
-			row["party"],
 			row["description"],
+			row["reference_number"],
+			row["custom_particulars"],
+			row["bank_party_name"],
 			row["deposit"],
 			row["withdrawal"],
 			row["unallocated_amount"],
-			row["reference_number"],
 			`
 			<Button class="btn btn-primary btn-xs center"  data-name = ${row["name"]} >
 				${__("Actions")}
