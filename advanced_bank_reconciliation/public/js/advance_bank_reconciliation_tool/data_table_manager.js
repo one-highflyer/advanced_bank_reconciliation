@@ -81,57 +81,47 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 				}
 			},
 			{
-				name: __("Party Type"),
-				editable: false,
-				width: 95,
-			},
-			{
-				name: __("Party"),
-				editable: false,
-				width: 100,
-			},
-			{
 				name: __("Description"),
+				editable: false,
+				width: 150
+			},
+			{
+				name: __("Reference Number"),
 				editable: false,
 				width: 150,
 			},
 			{
 				name: __("Particulars"),
 				editable: false,
-				width: 150,
+				width: 150
 			},
 			{
-				name: __("Bank Party Name"),
+				name: __("Bank Party"),
 				editable: false,
-				width: 140,
+				width: 150
 			},
 			{
 				name: __("Deposit"),
 				editable: false,
-				width: 100,
+				width: 120,
 				format: (value) =>
 					"<span style='color:green;'>" + format_currency(value, this.currency) + "</span>",
 			},
 			{
 				name: __("Withdrawal"),
 				editable: false,
-				width: 100,
+				width: 120,
 				format: (value) =>
 					"<span style='color:red;'>" + format_currency(value, this.currency) + "</span>",
 			},
 			{
 				name: __("Unallocated Amount"),
 				editable: false,
-				width: 100,
+				width: 120,
 				format: (value) =>
 					"<span style='color:var(--blue-500);'>" +
 					format_currency(value, this.currency) +
 					"</span>",
-			},
-			{
-				name: __("Reference Number"),
-				editable: false,
-				width: 140,
 			},
 			{
 				name: __("Actions"),
@@ -212,15 +202,13 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 		return [
 			row["date"],
 			row["name"],
-			row["party_type"],
-			row["party"],
 			row["description"],
-			row["custom_particulars"] || "",
-			row["bank_party_name"] || "",
+			row["reference_number"],
+			row["custom_particulars"],
+			row["bank_party_name"],
 			row["deposit"],
 			row["withdrawal"],
 			row["unallocated_amount"],
-			row["reference_number"],
 			`
 			<Button class="btn btn-primary btn-xs center"  data-name = ${row["name"]} >
 				${__("Actions")}
