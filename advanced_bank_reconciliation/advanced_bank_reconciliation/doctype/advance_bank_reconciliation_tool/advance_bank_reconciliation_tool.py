@@ -842,9 +842,11 @@ def get_pe_matching_query(
 	# Simplified logic: 
 	# - For Receive payments: use received_amount (already in bank account currency)
 	# - For Pay payments: use paid_amount (already in bank account currency)
+	# Select currency based on which account the bank account actually is
+	currency_field = "IF(paid_to = %(bank_account)s, paid_to_account_currency, paid_from_account_currency) as currency"
+	
 	if transaction.deposit > 0.0:
 		# For deposits (bank transaction deposits), we want Receive payments where bank is paid_to
-		currency_field = "paid_to_account_currency as currency"
 		amount_field = (
 			"CASE "
 			"WHEN payment_type = 'Receive' AND paid_to = %(bank_account)s THEN received_amount "
@@ -854,7 +856,6 @@ def get_pe_matching_query(
 		amount_comparison = amount_field
 	else:
 		# For withdrawals (bank transaction withdrawals), we want Pay payments where bank is paid_from
-		currency_field = "paid_from_account_currency as currency"
 		amount_field = (
 			"CASE "
 			"WHEN payment_type = 'Pay' AND paid_from = %(bank_account)s THEN paid_amount "
