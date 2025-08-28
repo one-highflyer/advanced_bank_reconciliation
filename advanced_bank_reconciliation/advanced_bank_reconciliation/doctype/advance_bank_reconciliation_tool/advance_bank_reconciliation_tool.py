@@ -845,12 +845,22 @@ def get_pe_matching_query(
 	if transaction.deposit > 0.0:
 		# For deposits (bank transaction deposits), we want Receive payments where bank is paid_to
 		currency_field = "paid_to_account_currency as currency"
-		amount_field = "CASE WHEN payment_type = 'Receive' AND paid_to = %(bank_account)s THEN received_amount ELSE 0 END"
+		amount_field = (
+			"CASE "
+			"WHEN payment_type = 'Receive' AND paid_to = %(bank_account)s THEN received_amount "
+			"WHEN payment_type = 'Pay' AND paid_from = %(bank_account)s THEN -paid_amount "
+			"ELSE 0 END"
+		)
 		amount_comparison = amount_field
 	else:
 		# For withdrawals (bank transaction withdrawals), we want Pay payments where bank is paid_from
 		currency_field = "paid_from_account_currency as currency"
-		amount_field = "CASE WHEN payment_type = 'Pay' AND paid_from = %(bank_account)s THEN paid_amount ELSE 0 END"
+		amount_field = (
+			"CASE "
+			"WHEN payment_type = 'Pay' AND paid_from = %(bank_account)s THEN paid_amount "
+			"WHEN payment_type = 'Receive' AND paid_to = %(bank_account)s THEN -received_amount "
+			"ELSE 0 END"
+		)
 		amount_comparison = amount_field
 	
 	filter_by_date = f"AND posting_date between '{from_date}' and '{to_date}'"
@@ -869,10 +879,7 @@ def get_pe_matching_query(
 			+ 1 ) AS rank,
 			'Payment Entry' as doctype,
 			name,
-			IF(payment_type = 'Pay', 
-				{f'-({amount_field})' if transaction.deposit > 0.0 else f'({amount_field})'},
-				{f'({amount_field})' if transaction.deposit > 0.0 else f'-({amount_field})'}
-			) AS paid_amount,
+			({amount_field}) AS paid_amount,
 			reference_no,
 			reference_date,
 			party,
@@ -886,7 +893,7 @@ def get_pe_matching_query(
 			AND payment_type IN ('Pay', 'Receive', 'Internal Transfer')
 			AND ifnull(clearance_date, '') = ""
 			AND (paid_from = %(bank_account)s OR paid_to = %(bank_account)s) 
-			AND {f'({amount_comparison}) {"= %(amount)s" if exact_match else "> 0.0"}'}
+			AND {f'({amount_comparison}) {"= %(amount)s" if exact_match else "!= 0.0"}'}
 			{filter_by_date}
 			{filter_by_reference_no}
 		order by{order_by}
