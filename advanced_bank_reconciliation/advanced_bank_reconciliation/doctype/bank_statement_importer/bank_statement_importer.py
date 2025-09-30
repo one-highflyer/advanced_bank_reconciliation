@@ -8,7 +8,7 @@ from datetime import datetime
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import getdate
+from frappe.utils import flt, getdate
 from frappe.utils.csvutils import read_csv_content
 from frappe.utils.xlsxutils import (
     read_xls_file_from_attached_file,
@@ -114,20 +114,27 @@ def start_import(file_path, bank_account):
 
 
 def parse_amount(amount_str):
-    """Parse amount string, handling commas and other formatting"""
+    """Parse amount string using frappe's flt() which handles comma separators"""
     if not amount_str or amount_str == "":
         return 0.0
-    # Remove commas and any whitespace
-    cleaned = str(amount_str).replace(",", "").strip()
-    try:
-        return float(cleaned)
-    except (ValueError, TypeError) as e:
-        logger.error("Failed to parse amount '%s': %s", amount_str, str(e))
+
+    # Use frappe's built-in flt() which handles commas, whitespace, and formatting
+    result = flt(amount_str)
+
+    # Validate that non-zero strings don't parse to zero (indicates invalid format)
+    if (
+        result == 0.0
+        and amount_str
+        and str(amount_str).strip() not in ("0", "0.0", "0.00", "-", "")
+    ):
+        logger.error("Failed to parse amount '%s'", amount_str)
         frappe.throw(
             _("Could not parse amount '{0}'. Please check your CSV format.").format(
                 amount_str
             )
         )
+
+    return result
 
 
 def build_table(mapping, data_headers, data_body):
