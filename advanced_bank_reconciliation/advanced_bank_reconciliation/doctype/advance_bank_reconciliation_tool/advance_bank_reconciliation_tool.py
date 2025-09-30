@@ -570,6 +570,7 @@ def check_matching(
 		"party_type": transaction.party_type,
 		"party": transaction.party,
 		"bank_account": bank_account,
+		"currency": transaction.currency,
 		"from_date": from_date,
 		"to_date": to_date,
 	}
@@ -1043,6 +1044,7 @@ def get_unpaid_si_matching_query(exact_match, for_withdrawal=False, from_date=No
 		SELECT
 			( CASE WHEN customer = %(party)s THEN 1 ELSE 0 END
 			+ CASE WHEN {amount_comparison} THEN 1 ELSE 0 END
+			+ CASE WHEN currency = %(currency)s THEN 1 ELSE 0 END
 			+ 1 ) AS rank,
 			'Unpaid Sales Invoice' as doctype,
 			name,
@@ -1089,6 +1091,7 @@ def get_unpaid_pi_matching_query(exact_match, for_deposit=False, from_date=None,
 		SELECT
 			( CASE WHEN supplier = %(party)s THEN 1 ELSE 0 END
 			+ CASE WHEN {amount_comparison} THEN 1 ELSE 0 END
+			+ CASE WHEN currency = %(currency)s THEN 1 ELSE 0 END
 			+ 1 ) AS rank,
 			'Unpaid Purchase Invoice' as doctype,
 			name,
