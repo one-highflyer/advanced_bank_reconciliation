@@ -737,7 +737,12 @@ def get_bt_matching_query(exact_match, transaction):
 			party,
 			party_type,
 			date AS posting_date,
-			currency
+			currency,
+			CASE
+				WHEN party_type = 'Customer' THEN (SELECT customer_name FROM `tabCustomer` WHERE name = party LIMIT 1)
+				WHEN party_type = 'Supplier' THEN (SELECT supplier_name FROM `tabSupplier` WHERE name = party LIMIT 1)
+				ELSE party
+			END AS party_name
 		FROM
 			`tabBank Transaction`
 		WHERE
@@ -750,14 +755,36 @@ def get_bt_matching_query(exact_match, transaction):
 
 def get_ld_matching_query(bank_account, exact_match, filters):
 	loan_disbursement = frappe.qb.DocType("Loan Disbursement")
+	customer = frappe.qb.DocType("Customer")
+	supplier = frappe.qb.DocType("Supplier")
+	
 	matching_reference = loan_disbursement.reference_number == filters.get("reference_number")
 	matching_party = loan_disbursement.applicant_type == filters.get(
 		"party_type"
 	) and loan_disbursement.applicant == filters.get("party")
 
 	rank = frappe.qb.terms.Case().when(matching_reference, 1).else_(0)
-
 	rank1 = frappe.qb.terms.Case().when(matching_party, 1).else_(0)
+
+	# Build party_name subquery
+	party_name_case = (
+		frappe.qb.terms.Case()
+		.when(
+			loan_disbursement.applicant_type == "Customer",
+			frappe.qb.from_(customer)
+			.select(customer.customer_name)
+			.where(customer.name == loan_disbursement.applicant)
+			.limit(1)
+		)
+		.when(
+			loan_disbursement.applicant_type == "Supplier",
+			frappe.qb.from_(supplier)
+			.select(supplier.supplier_name)
+			.where(supplier.name == loan_disbursement.applicant)
+			.limit(1)
+		)
+		.else_(loan_disbursement.applicant)
+	)
 
 	query = (
 		frappe.qb.from_(loan_disbursement)
@@ -768,8 +795,11 @@ def get_ld_matching_query(bank_account, exact_match, filters):
 			loan_disbursement.disbursed_amount,
 			loan_disbursement.reference_number,
 			loan_disbursement.reference_date,
+			loan_disbursement.applicant,
 			loan_disbursement.applicant_type,
 			loan_disbursement.disbursement_date,
+			ConstantColumn(filters.get("currency", "")).as_("currency"),
+			party_name_case.as_("party_name")
 		)
 		.where(loan_disbursement.docstatus == 1)
 		.where(loan_disbursement.clearance_date.isnull())
@@ -777,9 +807,9 @@ def get_ld_matching_query(bank_account, exact_match, filters):
 	)
 
 	if exact_match:
-		query.where(loan_disbursement.disbursed_amount == filters.get("amount"))
+		query = query.where(loan_disbursement.disbursed_amount == filters.get("amount"))
 	else:
-		query.where(loan_disbursement.disbursed_amount > 0.0)
+		query = query.where(loan_disbursement.disbursed_amount > 0.0)
 
 	vouchers = query.run(as_list=True)
 
@@ -788,14 +818,36 @@ def get_ld_matching_query(bank_account, exact_match, filters):
 
 def get_lr_matching_query(bank_account, exact_match, filters):
 	loan_repayment = frappe.qb.DocType("Loan Repayment")
+	customer = frappe.qb.DocType("Customer")
+	supplier = frappe.qb.DocType("Supplier")
+	
 	matching_reference = loan_repayment.reference_number == filters.get("reference_number")
 	matching_party = loan_repayment.applicant_type == filters.get(
 		"party_type"
 	) and loan_repayment.applicant == filters.get("party")
 
 	rank = frappe.qb.terms.Case().when(matching_reference, 1).else_(0)
-
 	rank1 = frappe.qb.terms.Case().when(matching_party, 1).else_(0)
+
+	# Build party_name subquery
+	party_name_case = (
+		frappe.qb.terms.Case()
+		.when(
+			loan_repayment.applicant_type == "Customer",
+			frappe.qb.from_(customer)
+			.select(customer.customer_name)
+			.where(customer.name == loan_repayment.applicant)
+			.limit(1)
+		)
+		.when(
+			loan_repayment.applicant_type == "Supplier",
+			frappe.qb.from_(supplier)
+			.select(supplier.supplier_name)
+			.where(supplier.name == loan_repayment.applicant)
+			.limit(1)
+		)
+		.else_(loan_repayment.applicant)
+	)
 
 	query = (
 		frappe.qb.from_(loan_repayment)
@@ -806,8 +858,11 @@ def get_lr_matching_query(bank_account, exact_match, filters):
 			loan_repayment.amount_paid,
 			loan_repayment.reference_number,
 			loan_repayment.reference_date,
+			loan_repayment.applicant,
 			loan_repayment.applicant_type,
 			loan_repayment.posting_date,
+			ConstantColumn(filters.get("currency", "")).as_("currency"),
+			party_name_case.as_("party_name")
 		)
 		.where(loan_repayment.docstatus == 1)
 		.where(loan_repayment.clearance_date.isnull())
@@ -818,9 +873,9 @@ def get_lr_matching_query(bank_account, exact_match, filters):
 		query = query.where(loan_repayment.repay_from_salary == 0)
 
 	if exact_match:
-		query.where(loan_repayment.amount_paid == filters.get("amount"))
+		query = query.where(loan_repayment.amount_paid == filters.get("amount"))
 	else:
-		query.where(loan_repayment.amount_paid > 0.0)
+		query = query.where(loan_repayment.amount_paid > 0.0)
 
 	vouchers = query.run()
 
@@ -887,7 +942,12 @@ def get_pe_matching_query(
 			party,
 			party_type,
 			posting_date,
-			{currency_field}
+			{currency_field},
+			CASE
+				WHEN party_type = 'Customer' THEN (SELECT customer_name FROM `tabCustomer` WHERE name = party LIMIT 1)
+				WHEN party_type = 'Supplier' THEN (SELECT supplier_name FROM `tabSupplier` WHERE name = party LIMIT 1)
+				ELSE party
+			END AS party_name
 		FROM
 			`tabPayment Entry`
 		WHERE
@@ -937,10 +997,15 @@ def get_je_matching_query(
             ) AS paid_amount,
 			je.cheque_no AS reference_no,
 			je.cheque_date AS reference_date,
-			je.pay_to_recd_from AS party,
+			jea.party AS party,
 			jea.party_type,
 			je.posting_date,
-			jea.account_currency AS currency
+			jea.account_currency AS currency,
+			CASE
+				WHEN jea.party_type = 'Customer' THEN (SELECT customer_name FROM `tabCustomer` WHERE name = jea.party LIMIT 1)
+				WHEN jea.party_type = 'Supplier' THEN (SELECT supplier_name FROM `tabSupplier` WHERE name = jea.party LIMIT 1)
+				ELSE jea.party
+			END AS party_name
 		FROM
 			`tabJournal Entry Account` AS jea
 		JOIN
@@ -976,7 +1041,8 @@ def get_si_matching_query(exact_match):
 			si.customer as party,
 			'Customer' as party_type,
 			si.posting_date,
-			si.currency
+			si.currency,
+			si.customer_name as party_name
 
 		FROM
 			`tabSales Invoice Payment` as sip
@@ -1007,7 +1073,8 @@ def get_pi_matching_query(exact_match):
 			supplier as party,
 			'Supplier' as party_type,
 			posting_date,
-			currency
+			currency,
+			supplier_name as party_name
 		FROM
 			`tabPurchase Invoice`
 		WHERE
@@ -1054,7 +1121,8 @@ def get_unpaid_si_matching_query(exact_match, for_withdrawal=False, from_date=No
 			customer as party,
 			'Customer' as party_type,
 			posting_date,
-			currency
+			currency,
+			customer_name as party_name
 		FROM
 			`tabSales Invoice`
 		WHERE
@@ -1101,7 +1169,8 @@ def get_unpaid_pi_matching_query(exact_match, for_deposit=False, from_date=None,
 			supplier as party,
 			'Supplier' as party_type,
 			posting_date,
-			currency
+			currency,
+			supplier_name as party_name
 		FROM
 			`tabPurchase Invoice`
 		WHERE
