@@ -182,13 +182,20 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			this.data = [];
 			data.forEach((row) => {
 				const reference_date = row[5] ? row[5] : row[8];
+				// Format party display: show party_name (party_code) only when they differ, otherwise show whichever is present
+				let party_display;
+				if (row[10] && row[6] && row[10] !== row[6]) {
+					party_display = `${row[10]} (${row[6]})`;
+				} else {
+					party_display = row[10] || row[6] || '';
+				}
 				this.data.push([
 					row[1],
 					row[2],
 					reference_date,
 					format_currency(row[3], row[9]),
 					row[4],
-					row[6],
+					party_display,
 				]);
 			});
 			this.get_dt_columns();
