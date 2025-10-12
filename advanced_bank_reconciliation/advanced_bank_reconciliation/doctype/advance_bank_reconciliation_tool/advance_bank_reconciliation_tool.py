@@ -798,7 +798,7 @@ def get_ld_matching_query(bank_account, exact_match, filters):
 			loan_disbursement.applicant,
 			loan_disbursement.applicant_type,
 			loan_disbursement.disbursement_date,
-			ConstantColumn(filters.get("currency", "")).as_("currency"),
+			loan_disbursement.currency,
 			party_name_case.as_("party_name")
 		)
 		.where(loan_disbursement.docstatus == 1)
@@ -861,7 +861,7 @@ def get_lr_matching_query(bank_account, exact_match, filters):
 			loan_repayment.applicant,
 			loan_repayment.applicant_type,
 			loan_repayment.posting_date,
-			ConstantColumn(filters.get("currency", "")).as_("currency"),
+			loan_repayment.currency,
 			party_name_case.as_("party_name")
 		)
 		.where(loan_repayment.docstatus == 1)
