@@ -991,17 +991,17 @@ def get_je_matching_query(
             + 1) AS rank ,
 			'Journal Entry' AS doctype,
 			je.name,
-			IF(jea.debit_in_account_currency > 0, 
-                IF({transaction.deposit} > 0, jea.debit_in_account_currency, -jea.debit_in_account_currency), 
+			IF(jea.debit_in_account_currency > 0,
+                IF({transaction.deposit} > 0, jea.debit_in_account_currency, -jea.debit_in_account_currency),
                 IF({transaction.deposit} > 0, -jea.credit_in_account_currency, jea.credit_in_account_currency)
             ) AS paid_amount,
 			je.cheque_no AS reference_no,
 			je.cheque_date AS reference_date,
 			je.pay_to_recd_from AS party,
-			je.pay_to_recd_from AS party_name,
 			jea.party_type,
 			je.posting_date,
-			jea.account_currency AS currency
+			jea.account_currency AS currency,
+			je.pay_to_recd_from AS party_name
 		FROM
 			`tabJournal Entry Account` AS jea
 		JOIN
