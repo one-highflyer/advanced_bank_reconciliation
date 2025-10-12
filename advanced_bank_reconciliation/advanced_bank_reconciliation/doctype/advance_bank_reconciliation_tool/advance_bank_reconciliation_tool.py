@@ -997,15 +997,11 @@ def get_je_matching_query(
             ) AS paid_amount,
 			je.cheque_no AS reference_no,
 			je.cheque_date AS reference_date,
-			jea.party AS party,
+			jea.pay_to_recd_from AS party,
+			jea.pay_to_recd_from AS party_name,
 			jea.party_type,
 			je.posting_date,
-			jea.account_currency AS currency,
-			CASE
-				WHEN jea.party_type = 'Customer' THEN (SELECT customer_name FROM `tabCustomer` WHERE name = jea.party LIMIT 1)
-				WHEN jea.party_type = 'Supplier' THEN (SELECT supplier_name FROM `tabSupplier` WHERE name = jea.party LIMIT 1)
-				ELSE jea.party
-			END AS party_name
+			jea.account_currency AS currency
 		FROM
 			`tabJournal Entry Account` AS jea
 		JOIN
