@@ -997,8 +997,8 @@ def get_je_matching_query(
             ) AS paid_amount,
 			je.cheque_no AS reference_no,
 			je.cheque_date AS reference_date,
-			jea.pay_to_recd_from AS party,
-			jea.pay_to_recd_from AS party_name,
+			je.pay_to_recd_from AS party,
+			je.pay_to_recd_from AS party_name,
 			jea.party_type,
 			je.posting_date,
 			jea.account_currency AS currency
