@@ -17,7 +17,7 @@ from erpnext.setup.utils import get_exchange_rate
 from frappe import _
 from frappe.model.document import Document
 from frappe.query_builder.custom import ConstantColumn
-from frappe.utils import cint, flt, getdate
+from frappe.utils import cint, create_batch, flt, getdate
 
 logger = get_logger()
 
@@ -400,70 +400,98 @@ def auto_reconcile_vouchers(
 	from_reference_date=None,
 	to_reference_date=None,
 ):
-	frappe.flags.auto_reconcile_vouchers = True
-	document_types = ["payment_entry", "journal_entry"]
 	bank_transactions = get_bank_transactions(bank_account)
-	matched_transaction = []
-	for transaction in bank_transactions:
-		linked_payments = get_linked_payments(
-			transaction.name,
-			document_types,
+
+	if len(bank_transactions) > 10:
+		for bank_transaction_batch in create_batch(bank_transactions, 1000):
+			frappe.enqueue(
+				method="advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.start_auto_reconcile",
+				queue="long",
+				bank_transactions=bank_transaction_batch,
+				from_date=from_date,
+				to_date=to_date,
+				filter_by_reference_date=filter_by_reference_date,
+				from_reference_date=from_reference_date,
+				to_reference_date=to_reference_date,
+			)
+		frappe.msgprint(_("Auto Reconciliation has started in the background"))
+	else:
+		start_auto_reconcile(
+			bank_transactions,
 			from_date,
 			to_date,
 			filter_by_reference_date,
 			from_reference_date,
 			to_reference_date,
 		)
-		vouchers = []
-		for r in linked_payments:
-			vouchers.append(
-				{
-					"payment_doctype": r[1],
-					"payment_name": r[2],
-					"amount": r[4],
-				}
-			)
-		transaction = frappe.get_doc("Bank Transaction", transaction.name)
-		account = frappe.db.get_value("Bank Account", transaction.bank_account, "account")
-		for voucher in vouchers:
-			gl_entry = frappe.db.get_value(
-				"GL Entry",
-				dict(
-					account=account,
-					voucher_type=voucher["payment_doctype"],
-					voucher_no=voucher["payment_name"],
-				),
-				["credit", "debit"],
-				as_dict=1,
-			)
-			gl_amount, transaction_amount = (
-				(gl_entry.credit, transaction.deposit)
-				if gl_entry.credit > 0
-				else (gl_entry.debit, transaction.withdrawal)
-			)
-			allocated_amount = gl_amount if gl_amount >= transaction_amount else transaction_amount
-			transaction.append(
-				"payment_entries",
-				{
-					"payment_document": voucher["payment_doctype"],
-					"payment_entry": voucher["payment_name"],
-					"allocated_amount": allocated_amount,
+
+
+def start_auto_reconcile(
+	bank_transactions, from_date, to_date, filter_by_reference_date, from_reference_date, to_reference_date
+):
+	frappe.flags.auto_reconcile_vouchers = True
+
+	reconciled, partially_reconciled = set(), set()
+	for transaction in bank_transactions:
+		linked_payments = get_linked_payments(
+			transaction.name,
+			["payment_entry", "journal_entry"],
+			from_date,
+			to_date,
+			filter_by_reference_date,
+			from_reference_date,
+			to_reference_date,
+		)
+
+		if not linked_payments:
+			continue
+
+		# Convert tuple format to dict format for processing
+		# linked_payments returns tuples: (rank, doctype, name, paid_amount, ...)
+		vouchers = list(
+			map(
+				lambda entry: {
+					"payment_doctype": entry[1],  # doctype
+					"payment_name": entry[2],      # name
+					"amount": entry[3],            # paid_amount
 				},
+				linked_payments,
 			)
-			matched_transaction.append(str(transaction.name))
-		transaction.save()
-		transaction.update_allocations()
-	matched_transaction_len = len(set(matched_transaction))
-	if matched_transaction_len == 0:
-		frappe.msgprint(_("No matching references found for auto reconciliation"))
-	elif matched_transaction_len == 1:
-		frappe.msgprint(_("{0} transaction is reconcilied").format(matched_transaction_len))
-	else:
-		frappe.msgprint(_("{0} transactions are reconcilied").format(matched_transaction_len))
+		)
+
+		updated_transaction = reconcile_vouchers(transaction.name, json.dumps(vouchers))
+
+		if updated_transaction.status == "Reconciled":
+			reconciled.add(updated_transaction.name)
+		elif flt(transaction.unallocated_amount) != flt(updated_transaction.unallocated_amount):
+			# Partially reconciled (status = Unreconciled & unallocated amount changed)
+			partially_reconciled.add(updated_transaction.name)
+
+	alert_message, indicator = get_auto_reconcile_message(partially_reconciled, reconciled)
+	frappe.msgprint(title=_("Auto Reconciliation"), msg=alert_message, indicator=indicator)
 
 	frappe.flags.auto_reconcile_vouchers = False
 
-	return frappe.get_doc("Bank Transaction", transaction.name)
+
+def get_auto_reconcile_message(partially_reconciled, reconciled):
+	"""Returns alert message and indicator for auto reconciliation depending on result state."""
+	alert_message, indicator = "", "blue"
+	if not partially_reconciled and not reconciled:
+		alert_message = _("No matches occurred via auto reconciliation")
+		return alert_message, indicator
+
+	indicator = "green"
+	if reconciled:
+		alert_message += _("{0} Transaction(s) Reconciled").format(len(reconciled))
+		alert_message += "<br>"
+
+	if partially_reconciled:
+		alert_message += _("{0} {1} Partially Reconciled").format(
+			len(partially_reconciled),
+			_("Transactions") if len(partially_reconciled) > 1 else _("Transaction"),
+		)
+
+	return alert_message, indicator
 
 
 @frappe.whitelist()
@@ -472,7 +500,13 @@ def reconcile_vouchers(bank_transaction_name, vouchers):
 	vouchers = json.loads(vouchers)
 	transaction = frappe.get_doc("Bank Transaction", bank_transaction_name)
 	transaction.add_payment_entries(vouchers)
-	return frappe.get_doc("Bank Transaction", bank_transaction_name)
+	transaction.validate_duplicate_references()
+	transaction.allocate_payment_entries()
+	transaction.update_allocated_amount()
+	transaction.set_status()
+	transaction.save()
+
+	return transaction
 
 
 @frappe.whitelist()
@@ -530,7 +564,7 @@ def get_allocated_amount(voucher_allocated_amounts, voucher, gl_account):
 	"""Get allocated amount for a voucher on a specific GL account"""
 	# voucher is a tuple with structure: (rank, doctype, name, paid_amount, ...)
 	voucher_key = (voucher[1], voucher[2])  # (doctype, name)
-	
+
 	if not (voucher_details := voucher_allocated_amounts.get(voucher_key)):
 		return None
 
