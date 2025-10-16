@@ -86,7 +86,9 @@ def get_reconciled_bank_transactions(bank_account, from_date=None, to_date=None)
 		.left_join(bt_payments).on(bank_transaction.name == bt_payments.parent)
 		.where(bank_transaction.bank_account == bank_account)
 		.where(bank_transaction.docstatus == 1)
-		.where(bank_transaction.unallocated_amount == 0.0)
+		# Include reconciled transactions with a negative unallocated amount to avoid 
+		# missing reconciled transactions from both tables.
+		.where(bank_transaction.unallocated_amount <= 0.0)
 		.orderby(bank_transaction.date)
 	)
 
