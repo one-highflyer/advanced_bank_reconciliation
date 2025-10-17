@@ -400,7 +400,7 @@ def auto_reconcile_vouchers(
 	from_reference_date=None,
 	to_reference_date=None,
 ):
-	bank_transactions = get_bank_transactions(bank_account)
+	bank_transactions = get_bank_transactions(bank_account, from_date=from_date, to_date=to_date)
 
 	if len(bank_transactions) > 10:
 		for bank_transaction_batch in create_batch(bank_transactions, 1000):
