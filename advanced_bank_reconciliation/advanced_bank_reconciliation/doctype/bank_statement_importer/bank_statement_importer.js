@@ -72,7 +72,7 @@ frappe.ui.form.on('Bank Statement Importer', {
 				data_body = data?.message?.body;
 				
 				// Apply bank mapping if available
-				const bank_mapping = data?.message?.bank || {};
+				const bank_mapping = data?.message?.bank_mapping || {};
 				console.log("BANK MAPPING", bank_mapping);
 				
 				// Extract file field names directly from bank mapping (now bank fields are keys)
