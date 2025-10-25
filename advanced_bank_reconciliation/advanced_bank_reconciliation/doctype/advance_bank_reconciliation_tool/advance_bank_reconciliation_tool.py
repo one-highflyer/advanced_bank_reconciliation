@@ -1301,6 +1301,227 @@ def create_payment_entries_for_invoices(bank_transaction_name, invoices, auto_re
         return {"payment_entries": created_payment_entries, "vouchers": vouchers}
 
 
+@frappe.whitelist()
+def create_payment_entries_bulk(bank_transaction_name, invoices, regular_vouchers=None):
+	"""
+	Enqueue bulk payment entry creation for large number of invoices.
+	This prevents browser timeout by processing in background with progress updates.
+	"""
+	import json
+	
+	if isinstance(invoices, str):
+		invoices = json.loads(invoices)
+	
+	if isinstance(regular_vouchers, str):
+		regular_vouchers = json.loads(regular_vouchers)
+	elif regular_vouchers is None:
+		regular_vouchers = []
+	
+	if not invoices:
+		frappe.throw(_("No invoices selected for payment entry creation"))
+	
+	# Generate a unique job ID for tracking progress
+	job_id = frappe.generate_hash(length=10)
+	
+	# Enqueue the background job
+	frappe.enqueue(
+		method="advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.process_bulk_reconciliation",
+		queue="long",
+		timeout=3600,  # 1 hour timeout
+		job_name=f"bulk_reconciliation_{bank_transaction_name}_{job_id}",
+		bank_transaction_name=bank_transaction_name,
+		invoices=invoices,
+		regular_vouchers=regular_vouchers,
+		job_id=job_id,
+		user=frappe.session.user
+	)
+	
+	return {
+		"status": "queued",
+		"job_id": job_id,
+		"total_invoices": len(invoices),
+		"message": _("Bulk reconciliation started in background. You will be notified when complete.")
+	}
+
+
+def process_bulk_reconciliation(bank_transaction_name, invoices, regular_vouchers, job_id, user):
+	"""
+	Process bulk reconciliation in background with batching and progress updates.
+	This function handles large numbers of invoices without timing out.
+	"""
+	frappe.set_user(user)
+	
+	total_invoices = len(invoices)
+	batch_size = 20  # Process 20 invoices at a time to avoid DB transaction issues
+	processed = 0
+	failed = 0
+	all_vouchers = []
+	
+	try:
+		# Send initial progress update
+		publish_progress(job_id, 0, total_invoices, "Starting bulk reconciliation...")
+		
+		bank_transaction = frappe.get_doc("Bank Transaction", bank_transaction_name)
+		
+		# Process invoices in batches
+		for batch_start in range(0, total_invoices, batch_size):
+			batch_end = min(batch_start + batch_size, total_invoices)
+			batch = invoices[batch_start:batch_end]
+			
+			# Process this batch
+			batch_vouchers = []
+			for invoice_data in batch:
+				try:
+					invoice_name = invoice_data.get("name")
+					invoice_type = invoice_data.get("doctype")
+					allocated_amount = flt(invoice_data.get("allocated_amount", 0))
+					
+					if not invoice_name or not invoice_type or allocated_amount == 0:
+						continue
+					
+					# Determine the actual doctype (remove 'Unpaid ' prefix)
+					actual_doctype = invoice_type.replace("Unpaid ", "")
+					
+					# Get the invoice document
+					invoice_doc = frappe.get_doc(actual_doctype, invoice_name)
+					
+					# Determine payment type based on invoice type and allocated amount
+					if actual_doctype == "Sales Invoice":
+						payment_type = "Pay" if allocated_amount < 0 else "Receive"
+						party_type = "Customer"
+						party = invoice_doc.customer
+					else:  # Purchase Invoice
+						payment_type = "Receive" if allocated_amount < 0 else "Pay"
+						party_type = "Supplier"
+						party = invoice_doc.supplier
+					
+					# Create payment entry
+					payment_entry = create_payment_entry_for_invoice(
+						invoice_doc,
+						bank_transaction,
+						allocated_amount,
+						payment_type,
+						party_type,
+						party,
+					)
+					
+					batch_vouchers.append({
+						"payment_doctype": "Payment Entry",
+						"payment_name": payment_entry.name,
+						"amount": allocated_amount,
+					})
+					
+					processed += 1
+					
+				except Exception as e:
+					logger.error(f"Error processing invoice {invoice_data.get('name')}: {str(e)}", exc_info=True)
+					failed += 1
+					continue
+			
+			# Commit this batch
+			frappe.db.commit()
+			all_vouchers.extend(batch_vouchers)
+			
+			# Send progress update
+			progress_pct = int((batch_end / total_invoices) * 100)
+			publish_progress(
+				job_id, 
+				batch_end, 
+				total_invoices, 
+				f"Processed {batch_end} of {total_invoices} invoices..."
+			)
+			
+			# Small delay to prevent overwhelming the system
+			import time
+			time.sleep(0.1)
+		
+		# Now reconcile all created payment entries with the bank transaction
+		if all_vouchers:
+			publish_progress(job_id, total_invoices, total_invoices, "Reconciling payment entries...")
+			
+			# Add regular vouchers if any
+			if regular_vouchers:
+				all_vouchers.extend(regular_vouchers)
+			
+			# Reconcile all vouchers
+			updated_transaction = reconcile_vouchers(bank_transaction_name, json.dumps(all_vouchers))
+			frappe.db.commit()
+			
+			# Send completion notification
+			publish_completion(
+				job_id,
+				success=True,
+				message=f"Successfully created {processed} payment entries and reconciled bank transaction",
+				processed=processed,
+				failed=failed,
+				bank_transaction=updated_transaction.name
+			)
+		else:
+			raise Exception("No payment entries were created")
+			
+	except Exception as e:
+		frappe.db.rollback()
+		logger.error(f"Bulk reconciliation failed: {str(e)}", exc_info=True)
+		
+		# Try to delete any partially created payment entries
+		cleanup_failed_reconciliation(all_vouchers)
+		
+		# Send failure notification
+		publish_completion(
+			job_id,
+			success=False,
+			message=f"Bulk reconciliation failed: {str(e)}",
+			processed=processed,
+			failed=failed
+		)
+		raise
+
+
+def publish_progress(job_id, current, total, message):
+	"""Publish progress update via realtime"""
+	frappe.publish_realtime(
+		event="bulk_reconciliation_progress",
+		message={
+			"job_id": job_id,
+			"current": current,
+			"total": total,
+			"percentage": int((current / total) * 100) if total > 0 else 0,
+			"message": message
+		},
+		user=frappe.session.user
+	)
+
+
+def publish_completion(job_id, success, message, processed=0, failed=0, bank_transaction=None):
+	"""Publish completion notification"""
+	frappe.publish_realtime(
+		event="bulk_reconciliation_complete",
+		message={
+			"job_id": job_id,
+			"success": success,
+			"message": message,
+			"processed": processed,
+			"failed": failed,
+			"bank_transaction": bank_transaction
+		},
+		user=frappe.session.user
+	)
+
+
+def cleanup_failed_reconciliation(vouchers):
+	"""Attempt to cancel and delete payment entries created during failed reconciliation"""
+	for voucher in vouchers:
+		try:
+			if voucher.get("payment_doctype") == "Payment Entry":
+				pe = frappe.get_doc("Payment Entry", voucher.get("payment_name"))
+				if pe.docstatus == 1:
+					pe.cancel()
+				frappe.delete_doc("Payment Entry", voucher.get("payment_name"), force=1)
+		except Exception as e:
+			logger.error(f"Error cleaning up payment entry {voucher.get('payment_name')}: {str(e)}")
+			continue
+
+
 def create_payment_entry_for_invoice(invoice_doc, bank_transaction, allocated_amount, payment_type, party_type, party):
 	"""Create a payment entry for an unpaid invoice."""
 	from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry

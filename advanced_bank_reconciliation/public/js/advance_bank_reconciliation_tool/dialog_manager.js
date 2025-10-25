@@ -690,42 +690,186 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 	
 	processUnpaidInvoices(unpaidInvoices, regularVouchers) {
 		if (unpaidInvoices.length > 0) {
-			// First, create payment entries for unpaid invoices
-			// Don't auto-reconcile if we have regular vouchers to process too
-			let autoReconcile = regularVouchers.length === 0;
+			// Check if this is a bulk operation (threshold: 50 invoices)
+			const BULK_THRESHOLD = 50;
+			const isBulkOperation = unpaidInvoices.length >= BULK_THRESHOLD;
 			
-			frappe.call({
-				method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.create_payment_entries_for_invoices",
-				args: {
-					bank_transaction_name: this.bank_transaction.name,
-					invoices: unpaidInvoices,
-					auto_reconcile: autoReconcile
-				},
-				callback: (response) => {
-					console.log("Payment entries created for unpaid invoices");
-					
-					if (autoReconcile) {
-						// Payment entries were created and auto-reconciled, we're done
-						const alert_string = __("Payment Entries created and Bank Transaction {0} Matched", [this.bank_transaction.name]);
-						frappe.show_alert(alert_string);
-						this.update_dt_cards(response.message);
-						this.reset_datatable();
-						this.dialog.hide();
-					} else {
-						// Payment entries created but not reconciled, now combine with regular vouchers
-						let createdVouchers = response.message.vouchers || [];
-						let allVouchers = [...createdVouchers, ...regularVouchers];
-						this.reconcileAllVouchers(allVouchers);
-					}
-				},
-				error: (error) => {
-					frappe.msgprint(__("Error creating payment entries for unpaid invoices: {0}", [error.message]));
-				},
-			});
+			if (isBulkOperation) {
+				// Use background job for bulk operations
+				this.processBulkReconciliation(unpaidInvoices, regularVouchers);
+			} else {
+				// Use synchronous processing for small batches
+				this.processSyncReconciliation(unpaidInvoices, regularVouchers);
+			}
 		} else {
 			// No unpaid invoices, directly process regular vouchers
 			this.processRegularVouchers(regularVouchers, false);
 		}
+	}
+	
+	processSyncReconciliation(unpaidInvoices, regularVouchers) {
+		// Original synchronous processing for small batches
+		let autoReconcile = regularVouchers.length === 0;
+		
+		frappe.call({
+			method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.create_payment_entries_for_invoices",
+			args: {
+				bank_transaction_name: this.bank_transaction.name,
+				invoices: unpaidInvoices,
+				auto_reconcile: autoReconcile
+			},
+			callback: (response) => {
+				console.log("Payment entries created for unpaid invoices");
+				
+				if (autoReconcile) {
+					// Payment entries were created and auto-reconciled, we're done
+					const alert_string = __("Payment Entries created and Bank Transaction {0} Matched", [this.bank_transaction.name]);
+					frappe.show_alert(alert_string);
+					this.update_dt_cards(response.message);
+					this.reset_datatable();
+					this.dialog.hide();
+				} else {
+					// Payment entries created but not reconciled, now combine with regular vouchers
+					let createdVouchers = response.message.vouchers || [];
+					let allVouchers = [...createdVouchers, ...regularVouchers];
+					this.reconcileAllVouchers(allVouchers);
+				}
+			},
+			error: (error) => {
+				frappe.msgprint(__("Error creating payment entries for unpaid invoices: {0}", [error.message]));
+			},
+		});
+	}
+	
+	processBulkReconciliation(unpaidInvoices, regularVouchers) {
+		// Show confirmation dialog for bulk operation
+		frappe.confirm(
+			__("You are about to reconcile {0} invoices. This will be processed in the background. Continue?", [unpaidInvoices.length]),
+			() => {
+				// User confirmed, start bulk job
+				frappe.call({
+					method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.create_payment_entries_bulk",
+					args: {
+						bank_transaction_name: this.bank_transaction.name,
+						invoices: unpaidInvoices,
+						regular_vouchers: regularVouchers
+					},
+					callback: (response) => {
+						if (response.message && response.message.status === "queued") {
+							// Show progress dialog
+							this.showBulkProgressDialog(response.message.job_id, response.message.total_invoices);
+							// Hide the reconciliation dialog
+							this.dialog.hide();
+						}
+					},
+					error: (error) => {
+						frappe.msgprint(__("Error starting bulk reconciliation: {0}", [error.message || "Unknown error"]));
+					},
+				});
+			}
+		);
+	}
+	
+	showBulkProgressDialog(jobId, totalInvoices) {
+		// Create progress dialog
+		const progressDialog = new frappe.ui.Dialog({
+			title: __("Bulk Reconciliation in Progress"),
+			indicator: "blue",
+			size: "small",
+			static: true,
+			primary_action_label: __("Run in Background"),
+			primary_action: () => {
+				progressDialog.hide();
+				frappe.show_alert({
+					message: __("Bulk reconciliation is running in background. You will be notified when complete."),
+					indicator: "blue"
+				});
+			}
+		});
+		
+		// Add progress HTML
+		progressDialog.$body.html(`
+			<div class="bulk-reconciliation-progress">
+				<p class="text-muted mb-3">
+					<span class="progress-message">Starting bulk reconciliation...</span>
+				</p>
+				<div class="progress" style="height: 25px;">
+					<div class="progress-bar progress-bar-striped progress-bar-animated" 
+						role="progressbar" 
+						style="width: 0%"
+						aria-valuenow="0" 
+						aria-valuemin="0" 
+						aria-valuemax="100">
+						<span class="progress-text">0%</span>
+					</div>
+				</div>
+				<p class="text-muted mt-2 text-center">
+					<small>
+						<span class="current-count">0</span> of <span class="total-count">${totalInvoices}</span> invoices processed
+					</small>
+				</p>
+			</div>
+		`);
+		
+		progressDialog.show();
+		
+		// Subscribe to progress updates
+		frappe.realtime.on("bulk_reconciliation_progress", (data) => {
+			if (data.job_id === jobId) {
+				// Update progress bar
+				const progressBar = progressDialog.$body.find(".progress-bar");
+				const progressText = progressDialog.$body.find(".progress-text");
+				const currentCount = progressDialog.$body.find(".current-count");
+				const progressMessage = progressDialog.$body.find(".progress-message");
+				
+				progressBar.css("width", data.percentage + "%");
+				progressBar.attr("aria-valuenow", data.percentage);
+				progressText.text(data.percentage + "%");
+				currentCount.text(data.current);
+				progressMessage.text(data.message);
+			}
+		});
+		
+		// Subscribe to completion notification
+		frappe.realtime.on("bulk_reconciliation_complete", (data) => {
+			if (data.job_id === jobId) {
+				progressDialog.hide();
+				
+				if (data.success) {
+					frappe.show_alert({
+						message: data.message,
+						indicator: "green"
+					}, 10);
+					
+					// Refresh the data table
+					if (this.update_dt_cards) {
+						// Reload the bank transaction
+						frappe.call({
+							method: "frappe.client.get",
+							args: {
+								doctype: "Bank Transaction",
+								name: data.bank_transaction
+							},
+							callback: (r) => {
+								if (r.message) {
+									this.update_dt_cards(r.message);
+								}
+							}
+						});
+					}
+				} else {
+					frappe.msgprint({
+						title: __("Bulk Reconciliation Failed"),
+						message: data.message,
+						indicator: "red"
+					});
+				}
+				
+				// Unsubscribe from events
+				frappe.realtime.off("bulk_reconciliation_progress");
+				frappe.realtime.off("bulk_reconciliation_complete");
+			}
+		});
 	}
 	
 	reconcileAllVouchers(vouchers) {
