@@ -253,14 +253,27 @@ def parse_date(date_str, format):
 
     # Define format patterns mapping
     format_patterns = {
+        # Slash-separated
         "Y/m/d": "%Y/%m/%d",
         "d/m/Y": "%d/%m/%Y",
         "dd/mm/YY": "%d/%m/%y",
         "m/d/Y": "%m/%d/%Y",
-        "m-d-Y": "%m-%d-%Y",
-        "d-m-Y": "%d-%m-%Y",
-        "Y-m-d": "%Y-%m-%d",
+        "m/d/YY": "%m/%d/%y",
         "Y/d/m": "%Y/%d/%m",
+
+        # Dash-separated
+        "m-d-Y": "%m-%d-%Y",
+        "m-d-YY": "%m-%d-%y",
+        "d-m-Y": "%d-%m-%Y",
+        "d-m-YY": "%d-%m-%y",
+        "Y-m-d": "%Y-%m-%d",
+
+        # Dot-separated
+        "d.m.Y": "%d.%m.%Y",
+        "d.m.YY": "%d.%m.%y",
+        "Y.m.d": "%Y.%m.%d",
+        "m.d.Y": "%m.%d.%Y",
+        "m.d.YY": "%m.%d.%y",
     }
 
     # Try to parse with specified format
