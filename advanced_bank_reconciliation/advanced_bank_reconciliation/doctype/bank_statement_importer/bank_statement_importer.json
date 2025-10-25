@@ -173,7 +173,7 @@
    "fieldname": "date_format",
    "fieldtype": "Select",
    "label": "Date Format",
-   "options": "Auto\nY/m/d\nd/m/Y\ndd/mm/YY\nm/d/Y\nm-d-Y\nd-m-Y\nY-m-d"
+   "options": "Auto\nY/m/d\nd/m/Y\ndd/mm/YY\nm/d/Y\nm/d/YY\nm-d-Y\nm-d-YY\nd-m-Y\nd-m-YY\nY-m-d\nY/d/m\nd.m.Y\nd.m.YY\nY.m.d\nm.d.Y\nm.d.YY"
   },
   {
    "depends_on": "eval:doc.data_fetched == true",
@@ -191,7 +191,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-08-20 20:00:26.115629",
+ "modified": "2025-10-25 11:50:13.402838",
  "modified_by": "Administrator",
  "module": "Advanced Bank Reconciliation",
  "name": "Bank Statement Importer",
