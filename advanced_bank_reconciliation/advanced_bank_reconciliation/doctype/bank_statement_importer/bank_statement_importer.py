@@ -110,7 +110,7 @@ def start_import(file_path, bank_account):
             title="Warning",
         )
 
-    return {"header": data_headers, "body": data_body, "bank": bank_mapping}
+    return {"header": data_headers, "body": data_body, "bank_mapping": bank_mapping}
 
 
 def parse_amount(amount_str):
