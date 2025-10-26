@@ -1303,45 +1303,118 @@ def create_payment_entries_for_invoices(bank_transaction_name, invoices, auto_re
 
 @frappe.whitelist()
 def create_payment_entries_bulk(bank_transaction_name, invoices, regular_vouchers=None):
-	"""
-	Enqueue bulk payment entry creation for large number of invoices.
-	This prevents browser timeout by processing in background with progress updates.
-	"""
-	import json
-	
-	if isinstance(invoices, str):
-		invoices = json.loads(invoices)
-	
-	if isinstance(regular_vouchers, str):
-		regular_vouchers = json.loads(regular_vouchers)
-	elif regular_vouchers is None:
-		regular_vouchers = []
-	
-	if not invoices:
-		frappe.throw(_("No invoices selected for payment entry creation"))
-	
-	# Generate a unique job ID for tracking progress
-	job_id = frappe.generate_hash(length=10)
-	
-	# Enqueue the background job
-	frappe.enqueue(
-		method="advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.process_bulk_reconciliation",
-		queue="long",
-		timeout=3600,  # 1 hour timeout
-		job_name=f"bulk_reconciliation_{bank_transaction_name}_{job_id}",
-		bank_transaction_name=bank_transaction_name,
-		invoices=invoices,
-		regular_vouchers=regular_vouchers,
-		job_id=job_id,
-		user=frappe.session.user
-	)
-	
-	return {
-		"status": "queued",
-		"job_id": job_id,
-		"total_invoices": len(invoices),
-		"message": _("Bulk reconciliation started in background. You will be notified when complete.")
-	}
+    """
+    Unified enqueue for reconciliation via background job (small or large).
+    Performs synchronous pre-validation, then queues the job and returns job_id.
+
+    Args:
+        bank_transaction_name: Bank Transaction to reconcile against
+        invoices: list of dicts {doctype, name, allocated_amount}
+        regular_vouchers: optional list of dicts {payment_doctype, payment_name, amount}
+    """
+    import json
+
+    # Parse inputs
+    if isinstance(invoices, str):
+        invoices = json.loads(invoices)
+    if isinstance(regular_vouchers, str):
+        regular_vouchers = json.loads(regular_vouchers)
+    elif regular_vouchers is None:
+        regular_vouchers = []
+
+    if not invoices and not regular_vouchers:
+        frappe.throw(_("No vouchers selected for reconciliation"))
+
+    # Basic fetch and state validation for the Bank Transaction
+    bt = frappe.get_doc("Bank Transaction", bank_transaction_name)
+    if bt.docstatus != 1:
+        frappe.throw(_("Bank Transaction must be submitted"))
+    if flt(bt.unallocated_amount) <= 0:
+        frappe.throw(_("Nothing to allocate. Bank Transaction is fully reconciled or has no unallocated amount."))
+
+    # Synchronous pre-validation
+    # 1) Validate invoices, ensure allocated_amount is sensible vs outstanding
+    total_invoices_amount = 0.0
+    for inv in (invoices or []):
+        inv_name = (inv or {}).get("name")
+        inv_dt = (inv or {}).get("doctype")
+        allocated = flt((inv or {}).get("allocated_amount", 0))
+        if not inv_name or not inv_dt or allocated == 0:
+            continue
+        actual_dt = inv_dt.replace("Unpaid ", "")
+        inv_doc = frappe.get_doc(actual_dt, inv_name)
+        # Require submitted and positive outstanding (returns may be negative outstanding)
+        if inv_doc.docstatus != 1:
+            frappe.throw(_("Invoice {0} is not submitted").format(inv_name))
+        # Compare absolute values to avoid sign issues in returns/credit notes
+        outstanding_abs = abs(flt(getattr(inv_doc, "outstanding_amount", 0)))
+        if outstanding_abs <= 0:
+            frappe.throw(_("Invoice {0} has no outstanding amount").format(inv_name))
+        if abs(allocated) - 1e-6 > outstanding_abs:
+            frappe.throw(_("Allocated amount {0} exceeds outstanding {1} for invoice {2}").format(
+                frappe.utils.fmt_money(abs(allocated), 2),
+                frappe.utils.fmt_money(outstanding_abs, 2),
+                inv_name,
+            ))
+        total_invoices_amount += abs(allocated)
+
+    # 2) Sum regular vouchers amounts (treated as absolute allocations for pre-check)
+    total_regular_amount = 0.0
+    for v in (regular_vouchers or []):
+        amt = flt((v or {}).get("amount", 0))
+        if amt:
+            total_regular_amount += abs(amt)
+
+    # 3) Combined total must not exceed BT unallocated amount (within small tolerance)
+    combined_total = total_invoices_amount + total_regular_amount
+    if combined_total - 1e-6 > abs(flt(bt.unallocated_amount)):
+        frappe.throw(_(
+            "Selected allocations total {0} exceed Bank Transaction unallocated amount {1}"
+        ).format(
+            frappe.utils.fmt_money(combined_total, 2),
+            frappe.utils.fmt_money(abs(flt(bt.unallocated_amount)), 2),
+        ))
+
+    # Deduplicate accidental duplicate invoice entries by (doctype, name, allocated)
+    # (keeps original list order but filters exact duplicates)
+    seen = set()
+    deduped_invoices = []
+    for inv in (invoices or []):
+        key = (inv.get("doctype"), inv.get("name"), flt(inv.get("allocated_amount", 0)))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped_invoices.append(inv)
+
+    # Apply a short-lived lock to avoid duplicate enqueues for the same BT
+    lock_key = f"abr:recon:lock:{bank_transaction_name}"
+    cache = frappe.cache()
+    if cache.get_value(lock_key):
+        frappe.throw(_("Another reconciliation is already in progress for this Bank Transaction. Please wait."))
+    cache.set_value(lock_key, "1", expires_in=60)  # short enqueue lock; job will release
+
+    # Generate a unique job ID for tracking progress
+    job_id = frappe.generate_hash(length=10)
+
+    # Enqueue the background job
+    frappe.enqueue(
+        method="advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.process_bulk_reconciliation",
+        queue="long",
+        timeout=3600,  # 1 hour timeout
+        job_name=f"bulk_reconciliation_{bank_transaction_name}_{job_id}",
+        bank_transaction_name=bank_transaction_name,
+        invoices=deduped_invoices,
+        regular_vouchers=regular_vouchers or [],
+        job_id=job_id,
+        user=frappe.session.user
+    )
+
+    return {
+        "status": "queued",
+        "job_id": job_id,
+        "total_invoices": len(deduped_invoices),
+        "message": _("Reconciliation started in background. You will be notified when complete.")
+    }
 
 
 def process_bulk_reconciliation(bank_transaction_name, invoices, regular_vouchers, job_id, user):
@@ -1351,17 +1424,21 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 	"""
 	frappe.set_user(user)
 	
-	total_invoices = len(invoices)
+    total_invoices = len(invoices)
 	batch_size = 20  # Process 20 invoices at a time to avoid DB transaction issues
 	processed = 0
 	failed = 0
 	all_vouchers = []
 	
-	try:
-		# Send initial progress update
-		publish_progress(job_id, 0, total_invoices, "Starting bulk reconciliation...")
-		
-		bank_transaction = frappe.get_doc("Bank Transaction", bank_transaction_name)
+    try:
+        # Send initial progress update
+        publish_progress(job_id, 0, total_invoices, "Starting bulk reconciliation...")
+
+        bank_transaction = frappe.get_doc("Bank Transaction", bank_transaction_name)
+
+        # Re-validate available unallocated amount at job start
+        if flt(bank_transaction.unallocated_amount) <= 0:
+            raise Exception("Bank Transaction has no unallocated amount to reconcile")
 		
 		# Process invoices in batches
 		for batch_start in range(0, total_invoices, batch_size):
@@ -1435,17 +1512,62 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 			import time
 			time.sleep(0.1)
 		
-		# Now reconcile all created payment entries with the bank transaction
-		if all_vouchers:
-			publish_progress(job_id, total_invoices, total_invoices, "Reconciling payment entries...")
-			
-			# Add regular vouchers if any
-			if regular_vouchers:
-				all_vouchers.extend(regular_vouchers)
+        # If there were no invoices to convert to PEs but we have regular vouchers,
+        # reconcile those directly.
+        if not all_vouchers and regular_vouchers:
+            publish_progress(job_id, total_invoices, total_invoices, "Reconciling selected vouchers...")
+
+            # Final safety check against current unallocated amount
+            current_bt = frappe.get_doc("Bank Transaction", bank_transaction_name)
+            current_unalloc = abs(flt(current_bt.unallocated_amount))
+            total_alloc = 0.0
+            for v in regular_vouchers:
+                total_alloc += abs(flt(v.get("amount", 0)))
+            if total_alloc - 1e-6 > current_unalloc:
+                raise Exception(
+                    f"Selected vouchers total {total_alloc} exceed remaining unallocated amount {current_unalloc}"
+                )
+
+            updated_transaction = reconcile_vouchers(bank_transaction_name, json.dumps(regular_vouchers))
+            frappe.db.commit()
+
+            publish_completion(
+                job_id,
+                success=True,
+                message="Successfully reconciled selected vouchers with bank transaction",
+                processed=processed,
+                failed=failed,
+                bank_transaction=updated_transaction.name,
+            )
+            return
+
+        # Now reconcile all created payment entries with the bank transaction
+        if all_vouchers:
+            publish_progress(job_id, total_invoices, total_invoices, "Reconciling payment entries...")
+
+            # Add regular vouchers if any
+            if regular_vouchers:
+                all_vouchers.extend(regular_vouchers)
 			
 			# Reconcile all vouchers
-			updated_transaction = reconcile_vouchers(bank_transaction_name, json.dumps(all_vouchers))
-			frappe.db.commit()
+            # Final safety check: don't exceed current unallocated amount
+            try:
+                current_bt = frappe.get_doc("Bank Transaction", bank_transaction_name)
+                current_unalloc = abs(flt(current_bt.unallocated_amount))
+            except Exception:
+                current_unalloc = abs(flt(bank_transaction.unallocated_amount))
+
+            # Compute combined intended allocation total (absolute values)
+            total_alloc = 0.0
+            for v in all_vouchers:
+                total_alloc += abs(flt(v.get("amount", 0)))
+            if total_alloc - 1e-6 > current_unalloc:
+                raise Exception(
+                    f"Combined allocations {total_alloc} exceed remaining unallocated amount {current_unalloc}"
+                )
+
+            updated_transaction = reconcile_vouchers(bank_transaction_name, json.dumps(all_vouchers))
+            frappe.db.commit()
 			
 			# Send completion notification
 			publish_completion(
@@ -1459,22 +1581,29 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 		else:
 			raise Exception("No payment entries were created")
 			
-	except Exception as e:
-		frappe.db.rollback()
-		logger.error(f"Bulk reconciliation failed: {str(e)}", exc_info=True)
+    except Exception as e:
+        frappe.db.rollback()
+        logger.error(f"Bulk reconciliation failed: {str(e)}", exc_info=True)
 		
 		# Try to delete any partially created payment entries
 		cleanup_failed_reconciliation(all_vouchers)
 		
 		# Send failure notification
-		publish_completion(
-			job_id,
-			success=False,
-			message=f"Bulk reconciliation failed: {str(e)}",
-			processed=processed,
-			failed=failed
-		)
-		raise
+        publish_completion(
+            job_id,
+            success=False,
+            message=f"Bulk reconciliation failed: {str(e)}",
+            processed=processed,
+            failed=failed
+        )
+        raise
+    finally:
+        # Always release the enqueue lock (if any)
+        try:
+            lock_key = f"abr:recon:lock:{bank_transaction_name}"
+            frappe.cache().delete_value(lock_key)
+        except Exception:
+            pass
 
 
 def publish_progress(job_id, current, total, message):
@@ -2144,4 +2273,3 @@ def clear_journal_entry(journal_entry_name):
 	except Exception as e:
 		logger.error("Error clearing journal entry %s: %s", journal_entry_name, str(e), exc_info=True)
 		raise
-

@@ -684,90 +684,49 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			}
 		});
 		
-		// Process in sequence: unpaid invoices first, then regular vouchers
+		// Unified processing: always use background job (small or large)
 		this.processUnpaidInvoices(unpaidInvoices, regularVouchers);
 	}
 	
 	processUnpaidInvoices(unpaidInvoices, regularVouchers) {
-		if (unpaidInvoices.length > 0) {
-			// Check if this is a bulk operation (threshold: 50 invoices)
-			const BULK_THRESHOLD = 50;
-			const isBulkOperation = unpaidInvoices.length >= BULK_THRESHOLD;
-			
-			if (isBulkOperation) {
-				// Use background job for bulk operations
-				this.processBulkReconciliation(unpaidInvoices, regularVouchers);
-			} else {
-				// Use synchronous processing for small batches
-				this.processSyncReconciliation(unpaidInvoices, regularVouchers);
-			}
-		} else {
-			// No unpaid invoices, directly process regular vouchers
-			this.processRegularVouchers(regularVouchers, false);
-		}
+		// Always use background job regardless of size
+		this.processBulkReconciliation(unpaidInvoices || [], regularVouchers || []);
 	}
 	
-	processSyncReconciliation(unpaidInvoices, regularVouchers) {
-		// Original synchronous processing for small batches
-		let autoReconcile = regularVouchers.length === 0;
-		
-		frappe.call({
-			method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.create_payment_entries_for_invoices",
-			args: {
-				bank_transaction_name: this.bank_transaction.name,
-				invoices: unpaidInvoices,
-				auto_reconcile: autoReconcile
-			},
-			callback: (response) => {
-				console.log("Payment entries created for unpaid invoices");
-				
-				if (autoReconcile) {
-					// Payment entries were created and auto-reconciled, we're done
-					const alert_string = __("Payment Entries created and Bank Transaction {0} Matched", [this.bank_transaction.name]);
-					frappe.show_alert(alert_string);
-					this.update_dt_cards(response.message);
-					this.reset_datatable();
-					this.dialog.hide();
-				} else {
-					// Payment entries created but not reconciled, now combine with regular vouchers
-					let createdVouchers = response.message.vouchers || [];
-					let allVouchers = [...createdVouchers, ...regularVouchers];
-					this.reconcileAllVouchers(allVouchers);
-				}
-			},
-			error: (error) => {
-				frappe.msgprint(__("Error creating payment entries for unpaid invoices: {0}", [error.message]));
-			},
-		});
-	}
+	// processSyncReconciliation removed in favor of a single background flow
 	
 	processBulkReconciliation(unpaidInvoices, regularVouchers) {
-		// Show confirmation dialog for bulk operation
-		frappe.confirm(
-			__("You are about to reconcile {0} invoices. This will be processed in the background. Continue?", [unpaidInvoices.length]),
-			() => {
-				// User confirmed, start bulk job
-				frappe.call({
-					method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.create_payment_entries_bulk",
-					args: {
-						bank_transaction_name: this.bank_transaction.name,
-						invoices: unpaidInvoices,
-						regular_vouchers: regularVouchers
-					},
-					callback: (response) => {
-						if (response.message && response.message.status === "queued") {
-							// Show progress dialog
-							this.showBulkProgressDialog(response.message.job_id, response.message.total_invoices);
-							// Hide the reconciliation dialog
-							this.dialog.hide();
-						}
-					},
-					error: (error) => {
-						frappe.msgprint(__("Error starting bulk reconciliation: {0}", [error.message || "Unknown error"]));
-					},
-				});
-			}
-		);
+		const startJob = () => {
+			frappe.call({
+				method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.create_payment_entries_bulk",
+				args: {
+					bank_transaction_name: this.bank_transaction.name,
+					invoices: unpaidInvoices,
+					regular_vouchers: regularVouchers
+				},
+				callback: (response) => {
+					if (response.message && response.message.status === "queued") {
+						// Show progress dialog
+						this.showBulkProgressDialog(response.message.job_id, response.message.total_invoices);
+						// Hide the reconciliation dialog
+						this.dialog.hide();
+					}
+				},
+				error: (error) => {
+					frappe.msgprint(__("Error starting reconciliation: {0}", [error.message || "Unknown error"]));
+				},
+			});
+		};
+
+		// Ask for confirmation only when processing invoices
+		if ((unpaidInvoices || []).length > 0) {
+			frappe.confirm(
+				__("You are about to reconcile {0} invoices. This will be processed in the background. Continue?", [unpaidInvoices.length]),
+				() => startJob()
+			);
+		} else {
+			startJob();
+		}
 	}
 	
 	showBulkProgressDialog(jobId, totalInvoices) {
@@ -872,67 +831,9 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		});
 	}
 	
-	reconcileAllVouchers(vouchers) {
-		if (vouchers.length === 0) {
-			frappe.msgprint(__("No vouchers to reconcile"));
-			return;
-		}
-		
-		frappe.call({
-			method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.reconcile_vouchers",
-			args: {
-				bank_transaction_name: this.bank_transaction.name,
-				vouchers: vouchers,
-			},
-			callback: (response) => {
-				const alert_string = __("Payment Entries created for unpaid invoices and all vouchers matched with Bank Transaction {0}", [this.bank_transaction.name]);
-				frappe.show_alert(alert_string);
-				this.update_dt_cards(response.message);
-				this.reset_datatable();
-				this.dialog.hide();
-			},
-			error: (error) => {
-				frappe.msgprint(__("Error reconciling vouchers: {0}", [error.message]));
-			},
-		});
-	}
+	// reconcileAllVouchers removed (handled by background job)
 	
-	processRegularVouchers(regularVouchers, hasProcessedInvoices) {
-		if (regularVouchers.length > 0) {
-			// Process regular vouchers (Payment Entry, Journal Entry, etc.)
-			frappe.call({
-				method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.reconcile_vouchers",
-				args: {
-					bank_transaction_name: this.bank_transaction.name,
-					vouchers: regularVouchers,
-				},
-				callback: (response) => {
-					let alert_string;
-					if (hasProcessedInvoices) {
-						alert_string = __("Payment Entries created for unpaid invoices and all vouchers matched with Bank Transaction {0}", [this.bank_transaction.name]);
-					} else {
-						alert_string = __("Bank Transaction {0} Matched", [this.bank_transaction.name]);
-					}
-					frappe.show_alert(alert_string);
-					this.update_dt_cards(response.message);
-					this.reset_datatable();
-					this.dialog.hide();
-				},
-				error: (error) => {
-					frappe.msgprint(__("Error reconciling regular vouchers: {0}", [error.message]));
-				},
-			});
-		} else if (hasProcessedInvoices) {
-			// Only unpaid invoices were processed, no regular vouchers
-			const alert_string = __("Payment Entries created and Bank Transaction {0} Matched", [this.bank_transaction.name]);
-			frappe.show_alert(alert_string);
-			this.reset_datatable();
-			this.dialog.hide();
-		} else {
-			// This shouldn't happen if validation is working correctly
-			frappe.msgprint(__("No vouchers selected for reconciliation"));
-		}
-	}
+	// processRegularVouchers removed (handled by background job)
 
 	add_payment_entry(values) {
 		frappe.call({
