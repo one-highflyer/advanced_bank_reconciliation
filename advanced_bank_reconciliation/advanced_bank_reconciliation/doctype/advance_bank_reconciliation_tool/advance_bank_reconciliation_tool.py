@@ -1351,33 +1351,31 @@ def create_payment_entries_bulk(bank_transaction_name, invoices, regular_voucher
         # Require submitted and positive outstanding (returns may be negative outstanding)
         if inv_doc.docstatus != 1:
             frappe.throw(_("Invoice {0} is not submitted").format(inv_name))
-        # Compare absolute values to avoid sign issues in returns/credit notes
-        outstanding_abs = abs(flt(getattr(inv_doc, "outstanding_amount", 0)))
-        if outstanding_abs <= 0:
+        if inv_doc.outstanding_amount == 0:
             frappe.throw(_("Invoice {0} has no outstanding amount").format(inv_name))
-        if abs(allocated) - 1e-6 > outstanding_abs:
+        if abs(allocated) > abs(inv_doc.outstanding_amount):
             frappe.throw(_("Allocated amount {0} exceeds outstanding {1} for invoice {2}").format(
-                frappe.utils.fmt_money(abs(allocated), 2),
-                frappe.utils.fmt_money(outstanding_abs, 2),
+                frappe.utils.fmt_money(allocated, 2),
+                frappe.utils.fmt_money(inv_doc.outstanding_amount, 2),
                 inv_name,
             ))
-        total_invoices_amount += abs(allocated)
+        total_invoices_amount += allocated
 
     # 2) Sum regular vouchers amounts (treated as absolute allocations for pre-check)
     total_regular_amount = 0.0
     for v in (regular_vouchers or []):
         amt = flt((v or {}).get("amount", 0))
         if amt:
-            total_regular_amount += abs(amt)
+            total_regular_amount += amt
 
     # 3) Combined total must not exceed BT unallocated amount (within small tolerance)
     combined_total = total_invoices_amount + total_regular_amount
-    if combined_total - 1e-6 > abs(flt(bt.unallocated_amount)):
+    if abs(combined_total) > abs(flt(bt.unallocated_amount)):
         frappe.throw(_(
             "Selected allocations total {0} exceed Bank Transaction unallocated amount {1}"
         ).format(
             frappe.utils.fmt_money(combined_total, 2),
-            frappe.utils.fmt_money(abs(flt(bt.unallocated_amount)), 2),
+            frappe.utils.fmt_money(bt.unallocated_amount, 2),
         ))
 
     # Deduplicate accidental duplicate invoice entries by (doctype, name, allocated)
@@ -1396,7 +1394,7 @@ def create_payment_entries_bulk(bank_transaction_name, invoices, regular_voucher
     cache = frappe.cache()
     if cache.get_value(lock_key):
         frappe.throw(_("Another reconciliation is already in progress for this Bank Transaction. Please wait."))
-    cache.set_value(lock_key, "1", expires_in=60)  # short enqueue lock; job will release
+    cache.set_value(lock_key, "1", expires_in_sec=60)  # short enqueue lock; job will release
 
     # Generate a unique job ID for tracking progress
     job_id = frappe.generate_hash(length=10)
@@ -1404,7 +1402,7 @@ def create_payment_entries_bulk(bank_transaction_name, invoices, regular_voucher
     try:
         # Enqueue the background job
         frappe.enqueue(
-            method="advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.process_bulk_reconciliation",
+            method=process_bulk_reconciliation,
             queue="long",
             timeout=3600,  # 1 hour timeout
             job_name=f"bulk_reconciliation_{bank_transaction_name}_{job_id}",
@@ -1412,6 +1410,7 @@ def create_payment_entries_bulk(bank_transaction_name, invoices, regular_voucher
             invoices=deduped_invoices,
             regular_vouchers=regular_vouchers or [],
             job_id=job_id,
+            _job_id=job_id,
             user=frappe.session.user
         )
 
@@ -1428,7 +1427,7 @@ def create_payment_entries_bulk(bank_transaction_name, invoices, regular_voucher
         frappe.throw(_("Failed to start bulk reconciliation: {0}").format(str(e)))
 
 
-def process_bulk_reconciliation(bank_transaction_name, invoices, regular_vouchers, job_id, user):
+def process_bulk_reconciliation(bank_transaction_name, invoices, regular_vouchers, _job_id, user):
 	"""
 	Process bulk reconciliation in background with batching and progress updates.
 	This function handles large numbers of invoices without timing out.
@@ -1436,14 +1435,14 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 	frappe.set_user(user)
 
 	total_invoices = len(invoices)
-	batch_size = 20  # Process 20 invoices at a time to avoid DB transaction issues
+	batch_size = 100  # Process 100 invoices at a time to avoid DB transaction issues
 	processed = 0
 	failed = 0
 	all_vouchers = []
 
 	try:
 		# Send initial progress update
-		publish_progress(job_id, 0, total_invoices, "Starting bulk reconciliation...")
+		publish_progress(_job_id, 0, total_invoices, "Starting bulk reconciliation...")
 
 		bank_transaction = frappe.get_doc("Bank Transaction", bank_transaction_name)
 
@@ -1511,9 +1510,8 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 			all_vouchers.extend(batch_vouchers)
 			
 			# Send progress update
-			progress_pct = int((batch_end / total_invoices) * 100)
 			publish_progress(
-				job_id, 
+				_job_id, 
 				batch_end, 
 				total_invoices, 
 				f"Processed {batch_end} of {total_invoices} invoices..."
@@ -1526,15 +1524,15 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 		# If there were no invoices to convert to PEs but we have regular vouchers,
 		# reconcile those directly.
 		if not all_vouchers and regular_vouchers:
-			publish_progress(job_id, total_invoices, total_invoices, "Reconciling selected vouchers...")
+			publish_progress(_job_id, total_invoices, total_invoices, "Reconciling selected vouchers...")
 
 			# Final safety check against current unallocated amount
 			current_bt = frappe.get_doc("Bank Transaction", bank_transaction_name)
-			current_unalloc = abs(flt(current_bt.unallocated_amount))
+			current_unalloc = current_bt.unallocated_amount
 			total_alloc = 0.0
 			for v in regular_vouchers:
-				total_alloc += abs(flt(v.get("amount", 0)))
-			if total_alloc - 1e-6 > current_unalloc:
+				total_alloc += v.get("amount", 0)
+			if abs(total_alloc) > abs(current_unalloc):
 				raise Exception(
 					f"Selected vouchers total {total_alloc} exceed remaining unallocated amount {current_unalloc}"
 				)
@@ -1543,7 +1541,7 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 			frappe.db.commit()
 
 			publish_completion(
-				job_id,
+				_job_id,
 				success=True,
 				message="Successfully reconciled selected vouchers with bank transaction",
 				processed=processed,
@@ -1554,7 +1552,7 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 
 		# Now reconcile all created payment entries with the bank transaction
 		if all_vouchers:
-			publish_progress(job_id, total_invoices, total_invoices, "Reconciling payment entries...")
+			publish_progress(_job_id, total_invoices, total_invoices, "Reconciling payment entries...")
 
 			# Add regular vouchers if any
 			if regular_vouchers:
@@ -1571,8 +1569,8 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 			# Compute combined intended allocation total (absolute values)
 			total_alloc = 0.0
 			for v in all_vouchers:
-				total_alloc += abs(flt(v.get("amount", 0)))
-			if total_alloc - 1e-6 > current_unalloc:
+				total_alloc += v.get("amount", 0)
+			if abs(total_alloc) > abs(current_unalloc):
 				raise Exception(
 					f"Combined allocations {total_alloc} exceed remaining unallocated amount {current_unalloc}"
 				)
@@ -1582,7 +1580,7 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 			
 			# Send completion notification
 			publish_completion(
-				job_id,
+				_job_id,
 				success=True,
 				message=f"Successfully created {processed} payment entries and reconciled bank transaction",
 				processed=processed,
@@ -1601,7 +1599,7 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 		
 		# Send failure notification
 		publish_completion(
-			job_id,
+			_job_id,
 			success=False,
 			message=f"Bulk reconciliation failed: {str(e)}",
 			processed=processed,
