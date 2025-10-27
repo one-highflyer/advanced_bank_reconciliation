@@ -1401,25 +1401,31 @@ def create_payment_entries_bulk(bank_transaction_name, invoices, regular_voucher
     # Generate a unique job ID for tracking progress
     job_id = frappe.generate_hash(length=10)
 
-    # Enqueue the background job
-    frappe.enqueue(
-        method="advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.process_bulk_reconciliation",
-        queue="long",
-        timeout=3600,  # 1 hour timeout
-        job_name=f"bulk_reconciliation_{bank_transaction_name}_{job_id}",
-        bank_transaction_name=bank_transaction_name,
-        invoices=deduped_invoices,
-        regular_vouchers=regular_vouchers or [],
-        job_id=job_id,
-        user=frappe.session.user
-    )
+    try:
+        # Enqueue the background job
+        frappe.enqueue(
+            method="advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.process_bulk_reconciliation",
+            queue="long",
+            timeout=3600,  # 1 hour timeout
+            job_name=f"bulk_reconciliation_{bank_transaction_name}_{job_id}",
+            bank_transaction_name=bank_transaction_name,
+            invoices=deduped_invoices,
+            regular_vouchers=regular_vouchers or [],
+            job_id=job_id,
+            user=frappe.session.user
+        )
 
-    return {
-        "status": "queued",
-        "job_id": job_id,
-        "total_invoices": len(deduped_invoices),
-        "message": _("Reconciliation started in background. You will be notified when complete.")
-    }
+        return {
+            "status": "queued",
+            "job_id": job_id,
+            "total_invoices": len(deduped_invoices),
+            "message": _("Reconciliation started in background. You will be notified when complete.")
+        }
+    except Exception as e:
+        # Release lock if enqueue fails
+        cache.delete_value(lock_key)
+        logger.error("Failed to enqueue bulk reconciliation for %s: %s", bank_transaction_name, str(e), exc_info=True)
+        frappe.throw(_("Failed to start bulk reconciliation: {0}").format(str(e)))
 
 
 def process_bulk_reconciliation(bank_transaction_name, invoices, regular_vouchers, job_id, user):
