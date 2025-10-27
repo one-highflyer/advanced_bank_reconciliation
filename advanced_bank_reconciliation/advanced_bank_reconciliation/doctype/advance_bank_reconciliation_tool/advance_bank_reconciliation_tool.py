@@ -666,6 +666,12 @@ def get_queries(
 	return queries
 
 
+@frappe.whitelist()
+def get_additional_filters():
+    filters = frappe.get_hooks("bank_rec_additional_filters")
+    return filters
+
+
 def get_matching_queries(
 	bank_account,
 	company,
