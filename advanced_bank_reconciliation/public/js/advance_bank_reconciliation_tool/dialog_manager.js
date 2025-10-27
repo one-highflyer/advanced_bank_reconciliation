@@ -730,6 +730,12 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 	}
 	
 	showBulkProgressDialog(jobId, totalInvoices) {
+		// Helper function to cleanup event subscriptions
+		const cleanupRealtimeEvents = () => {
+			frappe.realtime.off("bulk_reconciliation_progress");
+			frappe.realtime.off("bulk_reconciliation_complete");
+		};
+
 		// Create progress dialog
 		const progressDialog = new frappe.ui.Dialog({
 			title: __("Bulk Reconciliation in Progress"),
@@ -745,7 +751,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				});
 			}
 		});
-		
+
 		// Add progress HTML
 		progressDialog.$body.html(`
 			<div class="bulk-reconciliation-progress">
@@ -753,11 +759,11 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 					<span class="progress-message">Starting bulk reconciliation...</span>
 				</p>
 				<div class="progress" style="height: 25px;">
-					<div class="progress-bar progress-bar-striped progress-bar-animated" 
-						role="progressbar" 
+					<div class="progress-bar progress-bar-striped progress-bar-animated"
+						role="progressbar"
 						style="width: 0%"
-						aria-valuenow="0" 
-						aria-valuemin="0" 
+						aria-valuenow="0"
+						aria-valuemin="0"
 						aria-valuemax="100">
 						<span class="progress-text">0%</span>
 					</div>
@@ -769,9 +775,14 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				</p>
 			</div>
 		`);
-		
+
+		// Cleanup event handlers when dialog is hidden/closed
+		progressDialog.$wrapper.on('hidden.bs.modal', () => {
+			cleanupRealtimeEvents();
+		});
+
 		progressDialog.show();
-		
+
 		// Subscribe to progress updates
 		frappe.realtime.on("bulk_reconciliation_progress", (data) => {
 			if (data.job_id === jobId) {
@@ -780,7 +791,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				const progressText = progressDialog.$body.find(".progress-text");
 				const currentCount = progressDialog.$body.find(".current-count");
 				const progressMessage = progressDialog.$body.find(".progress-message");
-				
+
 				progressBar.css("width", data.percentage + "%");
 				progressBar.attr("aria-valuenow", data.percentage);
 				progressText.text(data.percentage + "%");
@@ -788,18 +799,18 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				progressMessage.text(data.message);
 			}
 		});
-		
+
 		// Subscribe to completion notification
 		frappe.realtime.on("bulk_reconciliation_complete", (data) => {
 			if (data.job_id === jobId) {
 				progressDialog.hide();
-				
+
 				if (data.success) {
 					frappe.show_alert({
 						message: data.message,
 						indicator: "green"
 					}, 10);
-					
+
 					// Refresh the data table
 					if (this.update_dt_cards) {
 						// Reload the bank transaction
@@ -823,10 +834,9 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 						indicator: "red"
 					});
 				}
-				
-				// Unsubscribe from events
-				frappe.realtime.off("bulk_reconciliation_progress");
-				frappe.realtime.off("bulk_reconciliation_complete");
+
+				// Cleanup is now handled by the hidden.bs.modal event
+				// which fires automatically when progressDialog.hide() is called above
 			}
 		});
 	}
