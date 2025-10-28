@@ -98,8 +98,8 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		let data = result.message;
 
 		if (data && data.length > 0) {
-			this.vouchers = data;
 			data = await this.apply_customer_group_filter(data);
+			this.vouchers = data;
 			console.log("Applied additional filters. Filtered length: ", data.length);
 			this.display_filtered_data(data)
 		} else {
@@ -294,22 +294,28 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				inlineFilters: true,
 				events: {
 					onCheckRow: (row) => {
-						let selected_map = this.datatable.rowmanager.checkMap;
-						let rows = [];
-						selected_map.forEach((val, index) => {
-							if (val == 1) {
-								// Get the actual row data from the filtered datatable
-								const filteredRowData = this.datatable.datamanager.data[index];
-								// Find the corresponding voucher by matching both voucher type and name
-								const voucher = this.vouchers.find(v => 
-									v[1] === filteredRowData[0] && v[2] === filteredRowData[1]
-								);
-								if (voucher) {
-									rows.push(voucher);
+						// Clear any pending timeout
+						if (this._checkRowTimeout) {
+							clearTimeout(this._checkRowTimeout);
+						}
+
+						// Debounce: wait for checkRow events to stop firing
+						this._checkRowTimeout = setTimeout(() => {
+							let selected_map = this.datatable.rowmanager.checkMap;
+							let rows = [];
+							selected_map.forEach((val, index) => {
+								if (val == 1) {
+									const filteredRowData = this.datatable.datamanager.data[index];
+									const voucher = this.vouchers.find(v =>
+										v[1] === filteredRowData[0] && v[2] === filteredRowData[1]
+									);
+									if (voucher) {
+										rows.push(voucher);
+									}
 								}
-							}
-						});
-						this.show_selected_transactions(rows);
+							});
+							this.show_selected_transactions(rows);
+						}, 100); // Wait 100ms after last checkRow event
 					}
 				}
 			};
