@@ -1378,7 +1378,7 @@ def create_payment_entries_bulk(bank_transaction_name, invoices, regular_voucher
     combined_total = total_invoices_amount + total_regular_amount
     if abs(combined_total - bt.unallocated_amount) > 0.01:
         frappe.throw(_(
-            "Selected allocations total {0} exceed Bank Transaction unallocated amount {1}"
+            "Selected allocations total {0} differ from Bank Transaction unallocated amount {1} by more than 0.01"
         ).format(
             frappe.utils.fmt_money(combined_total, 2),
             frappe.utils.fmt_money(bt.unallocated_amount, 2),
