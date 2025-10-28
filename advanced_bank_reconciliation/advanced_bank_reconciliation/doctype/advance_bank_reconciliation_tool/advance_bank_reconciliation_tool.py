@@ -1376,7 +1376,7 @@ def create_payment_entries_bulk(bank_transaction_name, invoices, regular_voucher
 
     # 3) Combined total must not exceed BT unallocated amount (within small tolerance)
     combined_total = total_invoices_amount + total_regular_amount
-    if abs(combined_total) > abs(flt(bt.unallocated_amount)):
+    if abs(combined_total - bt.unallocated_amount) > 0.01:
         frappe.throw(_(
             "Selected allocations total {0} exceed Bank Transaction unallocated amount {1}"
         ).format(
@@ -1538,7 +1538,7 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 			total_alloc = 0.0
 			for v in regular_vouchers:
 				total_alloc += v.get("amount", 0)
-			if abs(total_alloc) > abs(current_unalloc):
+			if abs(total_alloc - current_unalloc) > 0.01:
 				raise Exception(
 					f"Selected vouchers total {total_alloc} exceed remaining unallocated amount {current_unalloc}"
 				)
@@ -1576,7 +1576,7 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 			total_alloc = 0.0
 			for v in all_vouchers:
 				total_alloc += v.get("amount", 0)
-			if abs(total_alloc) > abs(current_unalloc):
+			if abs(total_alloc - current_unalloc) > 0.01:
 				raise Exception(
 					f"Combined allocations {total_alloc} exceed remaining unallocated amount {current_unalloc}"
 				)
