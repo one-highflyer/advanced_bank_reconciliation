@@ -729,11 +729,36 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 					regular_vouchers: regularVouchers
 				},
 				callback: (response) => {
-					if (response.message && response.message.status === "queued") {
-						// Show progress dialog
-						this.showBulkProgressDialog(response.message.job_id, response.message.total_invoices);
-						// Hide the reconciliation dialog
-						this.dialog.hide();
+					if (response.message) {
+						if (response.message.status === "completed") {
+							// Synchronous completion - show success and refresh
+							frappe.show_alert({
+								message: response.message.message || __("Reconciliation completed successfully"),
+								indicator: "green"
+							}, 10);
+
+							// Refresh the bank transaction data
+							if (this.update_dt_cards) {
+								frappe.call({
+									method: "frappe.client.get",
+									args: {
+										doctype: "Bank Transaction",
+										name: response.message.bank_transaction || this.bank_transaction.name
+									},
+									callback: (r) => {
+										if (r.message) {
+											this.update_dt_cards(r.message);
+										}
+									}
+								});
+							}
+
+							this.dialog.hide();
+						} else if (response.message.status === "queued") {
+							// Asynchronous - show progress dialog
+							this.showBulkProgressDialog(response.message.job_id, response.message.total_invoices);
+							this.dialog.hide();
+						}
 					}
 				},
 				error: (error) => {
@@ -745,7 +770,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		// Ask for confirmation only when processing invoices
 		if ((unpaidInvoices || []).length > 0) {
 			frappe.confirm(
-				__("You are about to reconcile {0} unpaid invoices. This will be processed in the background. Continue?", [unpaidInvoices.length]),
+				__("You are about to reconcile {0} unpaid invoices. Continue?", [unpaidInvoices.length]),
 				() => startJob()
 			);
 		} else {

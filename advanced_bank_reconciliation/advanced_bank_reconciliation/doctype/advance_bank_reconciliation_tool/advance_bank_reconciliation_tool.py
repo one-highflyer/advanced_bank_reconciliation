@@ -1427,10 +1427,12 @@ def create_payment_entries_bulk(bank_transaction_name, invoices, regular_voucher
 		)
 
 		return {
-			"status": "queued",
+			"status": "completed" if not reconcile_unpaid_invoices_in_background else "queued",
 			"job_id": job_id,
 			"total_invoices": len(deduped_invoices),
-			"message": _("Reconciliation started in background. You will be notified when complete.")
+			"message": _("Reconciliation completed successfully.") if not reconcile_unpaid_invoices_in_background
+					   else _("Reconciliation started in background. You will be notified when complete."),
+			"bank_transaction": bank_transaction_name
 		}
 	except Exception as e:
 		# Release lock if enqueue fails
