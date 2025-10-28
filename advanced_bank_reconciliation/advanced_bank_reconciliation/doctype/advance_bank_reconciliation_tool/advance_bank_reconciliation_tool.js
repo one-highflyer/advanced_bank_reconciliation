@@ -24,6 +24,7 @@ frappe.ui.form.on("Advance Bank Reconciliation Tool", {
 		frm.doc.bank_statement_from_date = frappe.datetime.add_months(today, -1);
 		frm.doc.bank_statement_to_date = today;
 		frm.trigger("bank_account");
+		frm.trigger("setup_bulk_reconciliation_styles");
 	},
 
 	filter_by_reference_date: function (frm) {
@@ -198,6 +199,38 @@ frappe.ui.form.on("Advance Bank Reconciliation Tool", {
 				});
 			}
 		);
+	},
+	
+	// Add custom CSS for bulk reconciliation progress dialog
+	setup_bulk_reconciliation_styles() {
+		if (!document.getElementById('bulk-reconciliation-styles')) {
+			const style = document.createElement('style');
+			style.id = 'bulk-reconciliation-styles';
+			style.textContent = `
+				.bulk-reconciliation-progress {
+					padding: 20px 10px;
+				}
+				.bulk-reconciliation-progress .progress {
+					border-radius: 10px;
+					overflow: hidden;
+					box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+				}
+				.bulk-reconciliation-progress .progress-bar {
+					background: linear-gradient(90deg, #2490ef 0%, #1a73e8 100%);
+					transition: width 0.3s ease;
+				}
+				.bulk-reconciliation-progress .progress-text {
+					font-weight: 600;
+					font-size: 13px;
+					line-height: 25px;
+				}
+				.bulk-reconciliation-progress .progress-message {
+					font-weight: 500;
+					color: #6c757d;
+				}
+			`;
+			document.head.appendChild(style);
+		}
 	},
 
 	render_chart(frm) {

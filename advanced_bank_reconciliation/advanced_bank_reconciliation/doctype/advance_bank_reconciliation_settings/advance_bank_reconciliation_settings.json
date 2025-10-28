@@ -1,0 +1,59 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-10-29 07:29:05.215055",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "reconciling_unpaid_invoices_section",
+  "validate_selection_against_unallocated_amount",
+  "reconcile_unpaid_invoices_in_background"
+ ],
+ "fields": [
+  {
+   "fieldname": "reconciling_unpaid_invoices_section",
+   "fieldtype": "Section Break",
+   "label": "Reconciling Unpaid Invoices"
+  },
+  {
+   "default": "0",
+   "description": "If checked, the unallocated amount from the bank transaction will be validated against the total of the selected unpaid invoices. If the total doesn't match, an error will be thrown.",
+   "fieldname": "validate_selection_against_unallocated_amount",
+   "fieldtype": "Check",
+   "label": "Validate selection against unallocated amount"
+  },
+  {
+   "default": "1",
+   "description": "If selected, unpaid invoices are reconciled in a background job.",
+   "fieldname": "reconcile_unpaid_invoices_in_background",
+   "fieldtype": "Check",
+   "label": "Reconcile unpaid invoices in background"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2025-10-29 07:38:47.051364",
+ "modified_by": "Administrator",
+ "module": "Advanced Bank Reconciliation",
+ "name": "Advance Bank Reconciliation Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

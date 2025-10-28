@@ -74,14 +74,14 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		this.dialog.set_values(copied);
 	}
 
-	get_linked_vouchers(document_types) {
+	async get_linked_vouchers(document_types) {
 		if (!this.bank_transaction_name) {
 			console.log("Bank Transaction Name not found. Skip getting linked vouchers.");
 			return;
 		}
 
 		console.log("get_linked_payments", this.bank_transaction_name, document_types, this.from_date, this.to_date, this.filter_by_reference_date, this.from_reference_date, this.to_reference_date);
-		frappe.call({
+		const result = await frappe.call({
 			method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_linked_payments",
 			// method: "erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.get_linked_payments",
 			args: {
@@ -93,32 +93,25 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				from_reference_date: this.from_reference_date,
 				to_reference_date: this.to_reference_date,
 			},
-
-			callback: (result) => {
-				console.log("get payment entries result", result.message.length);
-				const data = result.message;
-
-				if (data && data.length > 0) {
-					this.vouchers = data;
-					this.apply_customer_group_filter(data);
-				} else {
-					const proposals_wrapper = this.dialog.fields_dict.payment_proposals.$wrapper;
-					proposals_wrapper.hide();
-					this.dialog.fields_dict.no_matching_vouchers.$wrapper.show();
-					this.dialog.show();
-				}
-			},
 		});
+		console.log("get payment entries result", result.message.length);
+		let data = result.message;
+
+		if (data && data.length > 0) {
+			data = await this.apply_customer_group_filter(data);
+			this.vouchers = data;
+			console.log("Applied additional filters. Filtered length: ", data.length);
+			this.display_filtered_data(data)
+		} else {
+			const proposals_wrapper = this.dialog.fields_dict.payment_proposals.$wrapper;
+			proposals_wrapper.hide();
+			this.dialog.fields_dict.no_matching_vouchers.$wrapper.show();
+			this.dialog.show();
+		}
 	}
 
-	apply_customer_group_filter(data) {
+	async apply_customer_group_filter(data) {
 		const customer_group_filter = this.dialog.get_value('customer_group');
-		
-		if (!customer_group_filter) {
-			// No filter applied, show all data
-			this.display_filtered_data(data);
-			return;
-		}
 
 		// Get all unique customers from the data where party_type is 'Customer'
 		const customers = [];
@@ -131,46 +124,65 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 
 		if (customers.length === 0) {
 			// No customer entries, show all data
-			this.display_filtered_data(data);
-			return;
+			return data;
+		}
+
+		const additional_customer_fields = {};
+		if (this.additional_filters) {
+			this.additional_filters
+				.filter(fil => fil.dt == "Customer")
+				.forEach(fil => {
+					const value = this.dialog.get_value(fil.fieldname);
+					console.log("Custom filter value", fil.fieldname, value);
+					if (value) {
+						additional_customer_fields[fil.fieldname] = value;
+					}
+				});
 		}
 
 		// Fetch customer groups for all customers using POST to avoid query parameter limits
-		frappe.call({
-			method: 'frappe.client.get_list',
-			args: {
-				doctype: 'Customer',
-				filters: [['name', 'in', customers]],
-				fields: ['name', 'customer_group'],
-				limit_page_length: 9999
-			}
-		}).then((r) => {
+		try {
+			const r = await frappe.call({
+				method: 'frappe.client.get_list',
+				args: {
+					doctype: 'Customer',
+					filters: [['name', 'in', customers]],
+					fields: ['name', 'customer_group', ...Object.keys(additional_customer_fields)],
+					limit_page_length: 9999
+				}
+			});
 			const response = r.message;
-			if (response && response.length > 0) {
-				const customer_groups = {};
-				response.forEach((customer) => {
-					customer_groups[customer.name] = customer.customer_group;
-				});
-
-				// Filter data based on customer group
-				const filtered_data = data.filter((row) => {
-					// row[7] is party_type, row[6] is party
-					if (row[7] === 'Customer') {
-						const customer_group = customer_groups[row[6]];
-						return customer_group === customer_group_filter;
-					}
-					// Keep non-customer entries (like suppliers) when customer group filter is applied
-					return true;
-				});
-
-				this.display_filtered_data(filtered_data);
-			} else {
-				this.display_filtered_data(data);
+			if (!response || response.length == 0) {
+				return data;
 			}
-		}).catch(() => {
+			const customers_map = {};
+			response.forEach((customer) => {
+				customers_map[customer.name] = customer;
+			});
+
+			let filtered_data = data;
+			if (customer_group_filter) {
+				// Filter data based on customer group
+				filtered_data = filtered_data.filter((row) => {
+					return row[7] == "Customer" && customers_map[row[6]] && customers_map[row[6]].customer_group == customer_group_filter;
+				});
+				console.log("Applied customer group filter: ", customer_group_filter, filtered_data.length);
+			}
+			
+			console.log("Applying additional customer fields filters", additional_customer_fields);
+			for (let additional_filter of Object.keys(additional_customer_fields)) {
+				const value = additional_customer_fields[additional_filter];
+				filtered_data = filtered_data.filter((row) => {
+					return row[7] == "Customer" && customers_map[row[6]] && customers_map[row[6]][additional_filter] == value;
+				})
+				console.log("Applied additional filter: ", additional_filter, "length: ", filtered_data.length)
+			}
+
+			return filtered_data;
+		} catch (err) {
 			// If there's an error fetching customer groups, show all data
-			this.display_filtered_data(data);
-		});
+			return data
+		}
 	}
 
 	display_filtered_data(data) {
@@ -282,22 +294,28 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				inlineFilters: true,
 				events: {
 					onCheckRow: (row) => {
-						let selected_map = this.datatable.rowmanager.checkMap;
-						let rows = [];
-						selected_map.forEach((val, index) => {
-							if (val == 1) {
-								// Get the actual row data from the filtered datatable
-								const filteredRowData = this.datatable.datamanager.data[index];
-								// Find the corresponding voucher by matching both voucher type and name
-								const voucher = this.vouchers.find(v => 
-									v[1] === filteredRowData[0] && v[2] === filteredRowData[1]
-								);
-								if (voucher) {
-									rows.push(voucher);
+						// Clear any pending timeout
+						if (this._checkRowTimeout) {
+							clearTimeout(this._checkRowTimeout);
+						}
+
+						// Debounce: wait for checkRow events to stop firing
+						this._checkRowTimeout = setTimeout(() => {
+							let selected_map = this.datatable.rowmanager.checkMap;
+							let rows = [];
+							selected_map.forEach((val, index) => {
+								if (val == 1) {
+									const filteredRowData = this.datatable.datamanager.data[index];
+									const voucher = this.vouchers.find(v =>
+										v[1] === filteredRowData[0] && v[2] === filteredRowData[1]
+									);
+									if (voucher) {
+										rows.push(voucher);
+									}
 								}
-							}
-						});
-						this.show_selected_transactions(rows);
+							});
+							this.show_selected_transactions(rows);
+						}, 100); // Wait 100ms after last checkRow event
 					}
 				}
 			};
@@ -315,7 +333,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		}
 	}
 
-	make_dialog() {
+	async make_dialog() {
 		const me = this;
 		me.selected_payment = null;
 
@@ -347,34 +365,47 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			},
 		];
 
-		frappe.call({
-			method: "erpnext.accounts.doctype.bank_transaction.bank_transaction.get_doctypes_for_bank_reconciliation",
-			callback: (r) => {
-				console.log("get_doctypes_for_bank_reconciliation", r.message);
-				$.each(r.message, (_i, entry) => {
-					// Create more balanced columns: 2-3-2 distribution for typical 7 checkboxes
-					if (_i % 4 == 0) {
-						fields.push({
-							fieldtype: "Column Break",
-						});
-					}
-					fields.push({
-						fieldtype: "Check",
-						label: entry,
-						fieldname: frappe.scrub(entry),
-						onchange: () => this.update_options(),
-					});
+		const r = await frappe.call({
+			method: "erpnext.accounts.doctype.bank_transaction.bank_transaction.get_doctypes_for_bank_reconciliation"
+		});
+		console.log("get_doctypes_for_bank_reconciliation", r.message);
+		$.each(r.message, (_i, entry) => {
+			// Create more balanced columns: 2-3-2 distribution for typical 7 checkboxes
+			if (fields.length % 4 == 0) {
+				fields.push({
+					fieldtype: "Column Break",
 				});
+			}
+			fields.push({
+				fieldtype: "Check",
+				label: entry,
+				fieldname: frappe.scrub(entry),
+				onchange: () => this.update_options(),
+			});
+		});
 
-				fields.push(...this.get_voucher_fields());
+		const filters_res = await frappe.call({
+			method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_additional_filters"
+		});
+		console.log("additional filters response", filters_res.message);
+		this.additional_filters = filters_res.message;
+		$.each(filters_res.message, (_i, entry) => {
+			console.log("Adding custom filter", entry.fieldname);
+			fields.push({
+				fieldtype: entry.fieldtype,
+				label: entry.label || entry.fieldname,
+				fieldname: entry.fieldname,
+				onchange: () => this.update_options()
+			})
+		});
 
-				me.dialog = new frappe.ui.Dialog({
-					title: __("Reconcile the Bank Transaction"),
-					fields: fields,
-					size: "extra-large",
-					primary_action: (values) => this.reconciliation_dialog_primary_action(values),
-				});
-			},
+		fields.push(...this.get_voucher_fields());
+
+		me.dialog = new frappe.ui.Dialog({
+			title: __("Reconcile the Bank Transaction"),
+			fields: fields,
+			size: "extra-large",
+			primary_action: (values) => this.reconciliation_dialog_primary_action(values),
 		});
 	}
 
@@ -684,111 +715,184 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			}
 		});
 		
-		// Process in sequence: unpaid invoices first, then regular vouchers
+		// Unified processing: always use background job (small or large)
 		this.processUnpaidInvoices(unpaidInvoices, regularVouchers);
 	}
 	
 	processUnpaidInvoices(unpaidInvoices, regularVouchers) {
-		if (unpaidInvoices.length > 0) {
-			// First, create payment entries for unpaid invoices
-			// Don't auto-reconcile if we have regular vouchers to process too
-			let autoReconcile = regularVouchers.length === 0;
-			
+		const startJob = () => {
 			frappe.call({
-				method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.create_payment_entries_for_invoices",
+				method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.create_payment_entries_bulk",
 				args: {
 					bank_transaction_name: this.bank_transaction.name,
 					invoices: unpaidInvoices,
-					auto_reconcile: autoReconcile
+					regular_vouchers: regularVouchers
 				},
 				callback: (response) => {
-					console.log("Payment entries created for unpaid invoices");
-					
-					if (autoReconcile) {
-						// Payment entries were created and auto-reconciled, we're done
-						const alert_string = __("Payment Entries created and Bank Transaction {0} Matched", [this.bank_transaction.name]);
-						frappe.show_alert(alert_string);
-						this.update_dt_cards(response.message);
-						this.reset_datatable();
-						this.dialog.hide();
-					} else {
-						// Payment entries created but not reconciled, now combine with regular vouchers
-						let createdVouchers = response.message.vouchers || [];
-						let allVouchers = [...createdVouchers, ...regularVouchers];
-						this.reconcileAllVouchers(allVouchers);
+					if (response.message) {
+						if (response.message.status === "completed") {
+							// Synchronous completion - show success and refresh
+							frappe.show_alert({
+								message: response.message.message || __("Reconciliation completed successfully"),
+								indicator: "green"
+							}, 10);
+
+							// Refresh the bank transaction data
+							if (this.update_dt_cards) {
+								frappe.call({
+									method: "frappe.client.get",
+									args: {
+										doctype: "Bank Transaction",
+										name: response.message.bank_transaction || this.bank_transaction.name
+									},
+									callback: (r) => {
+										if (r.message) {
+											this.update_dt_cards(r.message);
+										}
+									}
+								});
+							}
+
+							this.dialog.hide();
+						} else if (response.message.status === "queued") {
+							// Asynchronous - show progress dialog
+							this.showBulkProgressDialog(response.message.job_id, response.message.total_invoices);
+							this.dialog.hide();
+						}
 					}
 				},
 				error: (error) => {
-					frappe.msgprint(__("Error creating payment entries for unpaid invoices: {0}", [error.message]));
+					frappe.msgprint(__("Error starting reconciliation: {0}", [error.message || "Unknown error"]));
 				},
 			});
+		};
+
+		// Ask for confirmation only when processing invoices
+		if ((unpaidInvoices || []).length > 0) {
+			frappe.confirm(
+				__("You are about to reconcile {0} unpaid invoices. Continue?", [unpaidInvoices.length]),
+				() => startJob()
+			);
 		} else {
-			// No unpaid invoices, directly process regular vouchers
-			this.processRegularVouchers(regularVouchers, false);
+			startJob();
 		}
 	}
 	
-	reconcileAllVouchers(vouchers) {
-		if (vouchers.length === 0) {
-			frappe.msgprint(__("No vouchers to reconcile"));
-			return;
-		}
-		
-		frappe.call({
-			method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.reconcile_vouchers",
-			args: {
-				bank_transaction_name: this.bank_transaction.name,
-				vouchers: vouchers,
-			},
-			callback: (response) => {
-				const alert_string = __("Payment Entries created for unpaid invoices and all vouchers matched with Bank Transaction {0}", [this.bank_transaction.name]);
-				frappe.show_alert(alert_string);
-				this.update_dt_cards(response.message);
-				this.reset_datatable();
-				this.dialog.hide();
-			},
-			error: (error) => {
-				frappe.msgprint(__("Error reconciling vouchers: {0}", [error.message]));
-			},
+	showBulkProgressDialog(jobId, totalInvoices) {
+		// Helper function to cleanup event subscriptions
+		const cleanupRealtimeEvents = () => {
+			frappe.realtime.off("bulk_reconciliation_progress");
+			frappe.realtime.off("bulk_reconciliation_complete");
+		};
+
+		// Create progress dialog
+		const progressDialog = new frappe.ui.Dialog({
+			title: __("Bulk Reconciliation in Progress"),
+			indicator: "blue",
+			size: "small",
+			static: true,
+			primary_action_label: __("Run in Background"),
+			primary_action: () => {
+				progressDialog.hide();
+				frappe.show_alert({
+					message: __("Bulk reconciliation is running in background. You will be notified when complete."),
+					indicator: "blue"
+				});
+			}
+		});
+
+		// Add progress HTML
+		progressDialog.$body.html(`
+			<div class="bulk-reconciliation-progress">
+				<p class="text-muted mb-3">
+					<span class="progress-message">Starting bulk reconciliation...</span>
+				</p>
+				<div class="progress" style="height: 25px;">
+					<div class="progress-bar progress-bar-striped progress-bar-animated"
+						role="progressbar"
+						style="width: 0%"
+						aria-valuenow="0"
+						aria-valuemin="0"
+						aria-valuemax="100">
+						<span class="progress-text">0%</span>
+					</div>
+				</div>
+				<p class="text-muted mt-2 text-center">
+					<small>
+						<span class="current-count">0</span> of <span class="total-count">${totalInvoices}</span> invoices processed
+					</small>
+				</p>
+			</div>
+		`);
+
+		// Cleanup event handlers when dialog is hidden/closed
+		progressDialog.$wrapper.on('hidden.bs.modal', () => {
+			cleanupRealtimeEvents();
+		});
+
+		progressDialog.show();
+
+		// Subscribe to progress updates
+		frappe.realtime.on("bulk_reconciliation_progress", (data) => {
+			if (data.job_id === jobId) {
+				// Update progress bar
+				const progressBar = progressDialog.$body.find(".progress-bar");
+				const progressText = progressDialog.$body.find(".progress-text");
+				const currentCount = progressDialog.$body.find(".current-count");
+				const progressMessage = progressDialog.$body.find(".progress-message");
+
+				progressBar.css("width", data.percentage + "%");
+				progressBar.attr("aria-valuenow", data.percentage);
+				progressText.text(data.percentage + "%");
+				currentCount.text(data.current);
+				progressMessage.text(data.message);
+			}
+		});
+
+		// Subscribe to completion notification
+		frappe.realtime.on("bulk_reconciliation_complete", (data) => {
+			if (data.job_id === jobId) {
+				progressDialog.hide();
+
+				if (data.success) {
+					frappe.show_alert({
+						message: data.message,
+						indicator: "green"
+					}, 10);
+
+					// Refresh the data table
+					if (this.update_dt_cards) {
+						// Reload the bank transaction
+						frappe.call({
+							method: "frappe.client.get",
+							args: {
+								doctype: "Bank Transaction",
+								name: data.bank_transaction
+							},
+							callback: (r) => {
+								if (r.message) {
+									this.update_dt_cards(r.message);
+								}
+							}
+						});
+					}
+				} else {
+					frappe.msgprint({
+						title: __("Bulk Reconciliation Failed"),
+						message: data.message,
+						indicator: "red"
+					});
+				}
+
+				// Cleanup is now handled by the hidden.bs.modal event
+				// which fires automatically when progressDialog.hide() is called above
+			}
 		});
 	}
 	
-	processRegularVouchers(regularVouchers, hasProcessedInvoices) {
-		if (regularVouchers.length > 0) {
-			// Process regular vouchers (Payment Entry, Journal Entry, etc.)
-			frappe.call({
-				method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.reconcile_vouchers",
-				args: {
-					bank_transaction_name: this.bank_transaction.name,
-					vouchers: regularVouchers,
-				},
-				callback: (response) => {
-					let alert_string;
-					if (hasProcessedInvoices) {
-						alert_string = __("Payment Entries created for unpaid invoices and all vouchers matched with Bank Transaction {0}", [this.bank_transaction.name]);
-					} else {
-						alert_string = __("Bank Transaction {0} Matched", [this.bank_transaction.name]);
-					}
-					frappe.show_alert(alert_string);
-					this.update_dt_cards(response.message);
-					this.reset_datatable();
-					this.dialog.hide();
-				},
-				error: (error) => {
-					frappe.msgprint(__("Error reconciling regular vouchers: {0}", [error.message]));
-				},
-			});
-		} else if (hasProcessedInvoices) {
-			// Only unpaid invoices were processed, no regular vouchers
-			const alert_string = __("Payment Entries created and Bank Transaction {0} Matched", [this.bank_transaction.name]);
-			frappe.show_alert(alert_string);
-			this.reset_datatable();
-			this.dialog.hide();
-		} else {
-			// This shouldn't happen if validation is working correctly
-			frappe.msgprint(__("No vouchers selected for reconciliation"));
-		}
-	}
+	// reconcileAllVouchers removed (handled by background job)
+	
+	// processRegularVouchers removed (handled by background job)
 
 	add_payment_entry(values) {
 		frappe.call({
