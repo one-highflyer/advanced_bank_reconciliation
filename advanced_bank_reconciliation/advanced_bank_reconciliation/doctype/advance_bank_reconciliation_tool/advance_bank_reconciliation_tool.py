@@ -668,8 +668,8 @@ def get_queries(
 
 @frappe.whitelist()
 def get_additional_filters():
-    filters = frappe.get_hooks("bank_rec_additional_filters")
-    return filters
+	filters = frappe.get_hooks("bank_rec_additional_filters")
+	return filters
 
 
 def get_matching_queries(
@@ -1032,14 +1032,14 @@ def get_je_matching_query(
 		SELECT
 			(CASE WHEN je.cheque_no=%(reference_no)s THEN 1 ELSE 0 END
 			+ CASE WHEN jea.debit_in_account_currency = %(amount)s THEN 1 ELSE 0 END
-            + CASE WHEN jea.credit_in_account_currency = %(amount)s THEN 1 ELSE 0 END
-            + 1) AS rank ,
+			+ CASE WHEN jea.credit_in_account_currency = %(amount)s THEN 1 ELSE 0 END
+			+ 1) AS rank ,
 			'Journal Entry' AS doctype,
 			je.name,
 			IF(jea.debit_in_account_currency > 0,
-                IF({transaction.deposit} > 0, jea.debit_in_account_currency, -jea.debit_in_account_currency),
-                IF({transaction.deposit} > 0, -jea.credit_in_account_currency, jea.credit_in_account_currency)
-            ) AS paid_amount,
+				IF({transaction.deposit} > 0, jea.debit_in_account_currency, -jea.debit_in_account_currency),
+				IF({transaction.deposit} > 0, -jea.credit_in_account_currency, jea.credit_in_account_currency)
+			) AS paid_amount,
 			je.cheque_no AS reference_no,
 			je.cheque_date AS reference_date,
 			je.pay_to_recd_from AS party,
@@ -1059,7 +1059,7 @@ def get_je_matching_query(
 			AND (je.clearance_date IS NULL OR je.clearance_date='0000-00-00')
 			AND jea.account = %(bank_account)s
 			AND (jea.debit_in_account_currency {'= %(amount)s' if exact_match else '> 0.0'}
-            OR jea.credit_in_account_currency {'= %(amount)s' if exact_match else '> 0.0'})
+			OR jea.credit_in_account_currency {'= %(amount)s' if exact_match else '> 0.0'})
 			AND je.docstatus = 1
 			{filter_by_date}
 			{filter_by_reference_no}
@@ -1228,210 +1228,215 @@ def get_unpaid_pi_matching_query(exact_match, for_deposit=False, from_date=None,
 
 @frappe.whitelist()
 def create_payment_entries_for_invoices(bank_transaction_name, invoices, auto_reconcile=True):
-    """Create payment entries for unpaid invoices and optionally reconcile them with the bank transaction."""
-    import json
+	"""Create payment entries for unpaid invoices and optionally reconcile them with the bank transaction."""
+	import json
 
-    if isinstance(invoices, str):
-        invoices = json.loads(invoices)
+	if isinstance(invoices, str):
+		invoices = json.loads(invoices)
 
-    if isinstance(auto_reconcile, str):
-        auto_reconcile = auto_reconcile.lower() in ["true", "1", "yes"]
+	if isinstance(auto_reconcile, str):
+		auto_reconcile = auto_reconcile.lower() in ["true", "1", "yes"]
 
-    bank_transaction = frappe.get_doc("Bank Transaction", bank_transaction_name)
+	bank_transaction = frappe.get_doc("Bank Transaction", bank_transaction_name)
 
-    if not invoices:
-        frappe.throw(_("No invoices selected for payment entry creation"))
+	if not invoices:
+		frappe.throw(_("No invoices selected for payment entry creation"))
 
-    logger.info("Creating payment entries for invoices: %s", invoices)
+	logger.info("Creating payment entries for invoices: %s", invoices)
 
-    vouchers = []
-    created_payment_entries = []
+	vouchers = []
+	created_payment_entries = []
 
-    for invoice_data in invoices:
-        invoice_name = invoice_data.get("name")
-        invoice_type = invoice_data.get("doctype")
-        allocated_amount = flt(invoice_data.get("allocated_amount", 0))
+	for invoice_data in invoices:
+		invoice_name = invoice_data.get("name")
+		invoice_type = invoice_data.get("doctype")
+		allocated_amount = flt(invoice_data.get("allocated_amount", 0))
 
-        if not invoice_name or not invoice_type or allocated_amount == 0:
-            continue
+		if not invoice_name or not invoice_type or allocated_amount == 0:
+			continue
 
-        # Determine the actual doctype (remove 'Unpaid ' prefix)
-        actual_doctype = invoice_type.replace("Unpaid ", "")
+		# Determine the actual doctype (remove 'Unpaid ' prefix)
+		actual_doctype = invoice_type.replace("Unpaid ", "")
 
-        # Get the invoice document
-        invoice_doc = frappe.get_doc(actual_doctype, invoice_name)
+		# Get the invoice document
+		invoice_doc = frappe.get_doc(actual_doctype, invoice_name)
 
-        # Determine payment type based on invoice type and allocated amount
-        if actual_doctype == "Sales Invoice":
-            # For negative amounts (returns), money goes out (Pay), otherwise money comes in (Receive)
-            payment_type = "Pay" if allocated_amount < 0 else "Receive"
-            party_type = "Customer"
-            party = invoice_doc.customer
-        else:  # Purchase Invoice
-            # For negative amounts (returns), money comes in (Receive), otherwise money goes out (Pay)
-            payment_type = "Receive" if allocated_amount < 0 else "Pay"
-            party_type = "Supplier"
-            party = invoice_doc.supplier
+		# Determine payment type based on invoice type and allocated amount
+		if actual_doctype == "Sales Invoice":
+			# For negative amounts (returns), money goes out (Pay), otherwise money comes in (Receive)
+			payment_type = "Pay" if allocated_amount < 0 else "Receive"
+			party_type = "Customer"
+			party = invoice_doc.customer
+		else:  # Purchase Invoice
+			# For negative amounts (returns), money comes in (Receive), otherwise money goes out (Pay)
+			payment_type = "Receive" if allocated_amount < 0 else "Pay"
+			party_type = "Supplier"
+			party = invoice_doc.supplier
 
-        logger.info(
-            "Creating payment entry for invoice: %s, bank_transaction: %s, allocated_amount: %s, payment_type: %s, party_type: %s, party: %s",
-            invoice_doc.name,
-            bank_transaction.name,
-            allocated_amount,
-            payment_type,
-            party_type,
-            party,
-        )
-        # Create payment entry
-        payment_entry = create_payment_entry_for_invoice(
-            invoice_doc,
-            bank_transaction,
-            allocated_amount,
-            payment_type,
-            party_type,
-            party,
-        )
+		logger.info(
+			"Creating payment entry for invoice: %s, bank_transaction: %s, allocated_amount: %s, payment_type: %s, party_type: %s, party: %s",
+			invoice_doc.name,
+			bank_transaction.name,
+			allocated_amount,
+			payment_type,
+			party_type,
+			party,
+		)
+		# Create payment entry
+		payment_entry = create_payment_entry_for_invoice(
+			invoice_doc,
+			bank_transaction,
+			allocated_amount,
+			payment_type,
+			party_type,
+			party,
+		)
 
-        created_payment_entries.append(payment_entry.name)
+		created_payment_entries.append(payment_entry.name)
 
-        vouchers.append(
-            {
-                "payment_doctype": "Payment Entry",
-                "payment_name": payment_entry.name,
-                "amount": allocated_amount,
-            }
-        )
+		vouchers.append(
+			{
+				"payment_doctype": "Payment Entry",
+				"payment_name": payment_entry.name,
+				"amount": allocated_amount,
+			}
+		)
 
-    if not vouchers:
-        frappe.throw(_("No valid payment entries created"))
+	if not vouchers:
+		frappe.throw(_("No valid payment entries created"))
 
-    # Optionally reconcile the vouchers with the bank transaction
-    if auto_reconcile:
-        return reconcile_vouchers(bank_transaction_name, json.dumps(vouchers))
-    else:
-        # Return the created payment entries for further processing
-        return {"payment_entries": created_payment_entries, "vouchers": vouchers}
+	# Optionally reconcile the vouchers with the bank transaction
+	if auto_reconcile:
+		return reconcile_vouchers(bank_transaction_name, json.dumps(vouchers))
+	else:
+		# Return the created payment entries for further processing
+		return {"payment_entries": created_payment_entries, "vouchers": vouchers}
 
 
 @frappe.whitelist()
 def create_payment_entries_bulk(bank_transaction_name, invoices, regular_vouchers=None):
-    """
-    Unified enqueue for reconciliation via background job (small or large).
-    Performs synchronous pre-validation, then queues the job and returns job_id.
+	"""
+	Unified enqueue for reconciliation via background job (small or large).
+	Performs synchronous pre-validation, then queues the job and returns job_id.
 
-    Args:
-        bank_transaction_name: Bank Transaction to reconcile against
-        invoices: list of dicts {doctype, name, allocated_amount}
-        regular_vouchers: optional list of dicts {payment_doctype, payment_name, amount}
-    """
-    import json
+	Args:
+		bank_transaction_name: Bank Transaction to reconcile against
+		invoices: list of dicts {doctype, name, allocated_amount}
+		regular_vouchers: optional list of dicts {payment_doctype, payment_name, amount}
+	"""
+	import json
 
-    # Parse inputs
-    if isinstance(invoices, str):
-        invoices = json.loads(invoices)
-    if isinstance(regular_vouchers, str):
-        regular_vouchers = json.loads(regular_vouchers)
-    elif regular_vouchers is None:
-        regular_vouchers = []
+	# Parse inputs
+	if isinstance(invoices, str):
+		invoices = json.loads(invoices)
+	if isinstance(regular_vouchers, str):
+		regular_vouchers = json.loads(regular_vouchers)
+	elif regular_vouchers is None:
+		regular_vouchers = []
 
-    if not invoices and not regular_vouchers:
-        frappe.throw(_("No vouchers selected for reconciliation"))
+	if not invoices and not regular_vouchers:
+		frappe.throw(_("No vouchers selected for reconciliation"))
 
-    # Basic fetch and state validation for the Bank Transaction
-    bt = frappe.get_doc("Bank Transaction", bank_transaction_name)
-    if bt.docstatus != 1:
-        frappe.throw(_("Bank Transaction must be submitted"))
-    if flt(bt.unallocated_amount) <= 0:
-        frappe.throw(_("Nothing to allocate. Bank Transaction is fully reconciled or has no unallocated amount."))
+	# Basic fetch and state validation for the Bank Transaction
+	bt = frappe.get_doc("Bank Transaction", bank_transaction_name)
+	if bt.docstatus != 1:
+		frappe.throw(_("Bank Transaction must be submitted"))
+	if flt(bt.unallocated_amount) <= 0:
+		frappe.throw(_("Nothing to allocate. Bank Transaction is fully reconciled or has no unallocated amount."))
 
-    # Synchronous pre-validation
-    # 1) Validate invoices, ensure allocated_amount is sensible vs outstanding
-    total_invoices_amount = 0.0
-    for inv in (invoices or []):
-        inv_name = (inv or {}).get("name")
-        inv_dt = (inv or {}).get("doctype")
-        allocated = flt((inv or {}).get("allocated_amount", 0))
-        if not inv_name or not inv_dt or allocated == 0:
-            continue
-        actual_dt = inv_dt.replace("Unpaid ", "")
-        inv_doc = frappe.get_doc(actual_dt, inv_name)
-        # Require submitted and positive outstanding (returns may be negative outstanding)
-        if inv_doc.docstatus != 1:
-            frappe.throw(_("Invoice {0} is not submitted").format(inv_name))
-        if inv_doc.outstanding_amount == 0:
-            frappe.throw(_("Invoice {0} has no outstanding amount").format(inv_name))
-        if abs(allocated) > abs(inv_doc.outstanding_amount):
-            frappe.throw(_("Allocated amount {0} exceeds outstanding {1} for invoice {2}").format(
-                frappe.utils.fmt_money(allocated, 2),
-                frappe.utils.fmt_money(inv_doc.outstanding_amount, 2),
-                inv_name,
-            ))
-        total_invoices_amount += allocated
+	validate_selection_against_unallocated_amount = frappe.get_single_value("Advance Bank Reconciliation Settings", "validate_selection_against_unallocated_amount")
+	reconcile_unpaid_invoices_in_background = frappe.get_single_value("Advance Bank Reconciliation Settings", "reconcile_unpaid_invoices_in_background")
 
-    # 2) Sum regular vouchers amounts (treated as absolute allocations for pre-check)
-    total_regular_amount = 0.0
-    for v in (regular_vouchers or []):
-        amt = flt((v or {}).get("amount", 0))
-        if amt:
-            total_regular_amount += amt
+	# Synchronous pre-validation
+	# 1) Validate invoices, ensure allocated_amount is sensible vs outstanding
+	total_invoices_amount = 0.0
+	for inv in (invoices or []):
+		inv_name = (inv or {}).get("name")
+		inv_dt = (inv or {}).get("doctype")
+		allocated = flt((inv or {}).get("allocated_amount", 0))
+		if not inv_name or not inv_dt or allocated == 0:
+			continue
+		actual_dt = inv_dt.replace("Unpaid ", "")
+		inv_doc = frappe.get_doc(actual_dt, inv_name)
+		# Require submitted and positive outstanding (returns may be negative outstanding)
+		if inv_doc.docstatus != 1:
+			frappe.throw(_("Invoice {0} is not submitted").format(inv_name))
+		if inv_doc.outstanding_amount == 0:
+			frappe.throw(_("Invoice {0} has no outstanding amount").format(inv_name))
+		if validate_selection_against_unallocated_amount and abs(allocated) > abs(inv_doc.outstanding_amount):
+			frappe.throw(_("Allocated amount {0} exceeds outstanding {1} for invoice {2}").format(
+				frappe.utils.fmt_money(allocated, 2),
+				frappe.utils.fmt_money(inv_doc.outstanding_amount, 2),
+				inv_name,
+			))
+		total_invoices_amount += allocated
 
-    # 3) Combined total must not exceed BT unallocated amount (within small tolerance)
-    combined_total = total_invoices_amount + total_regular_amount
-    if abs(combined_total - bt.unallocated_amount) > 0.01:
-        frappe.throw(_(
-            "Selected allocations total {0} differ from Bank Transaction unallocated amount {1} by more than 0.01"
-        ).format(
-            frappe.utils.fmt_money(combined_total, 2),
-            frappe.utils.fmt_money(bt.unallocated_amount, 2),
-        ))
+	# 2) Sum regular vouchers amounts (treated as absolute allocations for pre-check)
+	total_regular_amount = 0.0
+	for v in (regular_vouchers or []):
+		amt = flt((v or {}).get("amount", 0))
+		if amt:
+			total_regular_amount += amt
 
-    # Deduplicate accidental duplicate invoice entries by (doctype, name, allocated)
-    # (keeps original list order but filters exact duplicates)
-    seen = set()
-    deduped_invoices = []
-    for inv in (invoices or []):
-        key = (inv.get("doctype"), inv.get("name"), flt(inv.get("allocated_amount", 0)))
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped_invoices.append(inv)
+	# 3) Combined total must not exceed BT unallocated amount (within small tolerance)
+	combined_total = total_invoices_amount + total_regular_amount
+	if validate_selection_against_unallocated_amount and abs(combined_total - bt.unallocated_amount) > 0.01:
+		frappe.throw(_(
+			"Selected allocations total {0} differ from Bank Transaction unallocated amount {1} by more than 0.01"
+		).format(
+			frappe.utils.fmt_money(combined_total, 2),
+			frappe.utils.fmt_money(bt.unallocated_amount, 2),
+		))
 
-    # Apply a short-lived lock to avoid duplicate enqueues for the same BT
-    lock_key = f"abr:recon:lock:{bank_transaction_name}"
-    cache = frappe.cache()
-    if cache.get_value(lock_key):
-        frappe.throw(_("Another reconciliation is already in progress for this Bank Transaction. Please wait."))
-    cache.set_value(lock_key, "1", expires_in_sec=60)  # short enqueue lock; job will release
+	# Deduplicate accidental duplicate invoice entries by (doctype, name, allocated)
+	# (keeps original list order but filters exact duplicates)
+	seen = set()
+	deduped_invoices = []
+	for inv in (invoices or []):
+		key = (inv.get("doctype"), inv.get("name"), flt(inv.get("allocated_amount", 0)))
+		if key in seen:
+			continue
+		seen.add(key)
+		deduped_invoices.append(inv)
 
-    # Generate a unique job ID for tracking progress
-    job_id = frappe.generate_hash(length=10)
+	# Apply a short-lived lock to avoid duplicate enqueues for the same BT
+	lock_key = f"abr:recon:lock:{bank_transaction_name}"
+	cache = frappe.cache()
+	if cache.get_value(lock_key):
+		frappe.throw(_("Another reconciliation is already in progress for this Bank Transaction. Please wait."))
+	cache.set_value(lock_key, "1", expires_in_sec=60)  # short enqueue lock; job will release
 
-    try:
-        # Enqueue the background job
-        frappe.enqueue(
-            method=process_bulk_reconciliation,
-            queue="long",
-            timeout=3600,  # 1 hour timeout
-            job_name=f"bulk_reconciliation_{bank_transaction_name}_{job_id}",
-            bank_transaction_name=bank_transaction_name,
-            invoices=deduped_invoices,
-            regular_vouchers=regular_vouchers or [],
-            job_id=job_id,
-            _job_id=job_id,
-            user=frappe.session.user
-        )
+	# Generate a unique job ID for tracking progress
+	job_id = frappe.generate_hash(length=10)
 
-        return {
-            "status": "queued",
-            "job_id": job_id,
-            "total_invoices": len(deduped_invoices),
-            "message": _("Reconciliation started in background. You will be notified when complete.")
-        }
-    except Exception as e:
-        # Release lock if enqueue fails
-        cache.delete_value(lock_key)
-        logger.error("Failed to enqueue bulk reconciliation for %s: %s", bank_transaction_name, str(e), exc_info=True)
-        frappe.throw(_("Failed to start bulk reconciliation: {0}").format(str(e)))
+	try:
+		# Enqueue the background job
+		frappe.enqueue(
+			method=process_bulk_reconciliation,
+			queue="long",
+			timeout=3600,  # 1 hour timeout
+			# If reconcile_unpaid_invoices_in_background is True, then the job will be executed immediately
+			now=not reconcile_unpaid_invoices_in_background,
+			job_name=f"bulk_reconciliation_{bank_transaction_name}_{job_id}",
+			bank_transaction_name=bank_transaction_name,
+			invoices=deduped_invoices,
+			regular_vouchers=regular_vouchers or [],
+			job_id=job_id,
+			_job_id=job_id,
+			user=frappe.session.user
+		)
+
+		return {
+			"status": "queued",
+			"job_id": job_id,
+			"total_invoices": len(deduped_invoices),
+			"message": _("Reconciliation started in background. You will be notified when complete.")
+		}
+	except Exception as e:
+		# Release lock if enqueue fails
+		cache.delete_value(lock_key)
+		logger.error("Failed to enqueue bulk reconciliation for %s: %s", bank_transaction_name, str(e), exc_info=True)
+		frappe.throw(_("Failed to start bulk reconciliation: {0}").format(str(e)))
 
 
 def process_bulk_reconciliation(bank_transaction_name, invoices, regular_vouchers, _job_id, user):
@@ -1449,6 +1454,7 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 	all_vouchers = []
 
 	try:
+		validate_selection_against_unallocated_amount = frappe.get_single_value("Advance Bank Reconciliation Settings", "validate_selection_against_unallocated_amount")
 		# Send initial progress update
 		publish_progress(_job_id, 0, total_invoices, "Starting bulk reconciliation...")
 
@@ -1579,7 +1585,7 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 			total_alloc = 0.0
 			for v in all_vouchers:
 				total_alloc += v.get("amount", 0)
-			if abs(total_alloc - current_unalloc) > 0.01:
+			if validate_selection_against_unallocated_amount and abs(total_alloc - current_unalloc) > 0.01:
 				raise Exception(
 					f"Combined allocations {total_alloc} exceed remaining unallocated amount {current_unalloc}"
 				)
