@@ -1186,8 +1186,9 @@ def get_unpaid_pi_matching_query(exact_match, for_deposit=False, from_date=None,
 		amount_comparison = "ABS(outstanding_amount) = ABS(%(amount)s)"
 	else:
 		# For withdrawals, match positive outstanding amounts (normal invoices)
-		amount_condition = "outstanding_amount = %(amount)s" if exact_match else "outstanding_amount > 0.0"
-		amount_comparison = "outstanding_amount = %(amount)s"
+		# For exact match, use ABS to handle both positive and negative amounts consistently
+		amount_condition = "ABS(outstanding_amount) = ABS(%(amount)s)" if exact_match else "outstanding_amount > 0.0"
+		amount_comparison = "ABS(outstanding_amount) = ABS(%(amount)s)" if exact_match else "outstanding_amount = %(amount)s"
 
 	# Add date filters if provided
 	date_filter = ""
@@ -1439,6 +1440,7 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 	This function handles large numbers of invoices without timing out.
 	"""
 	frappe.set_user(user)
+	logger = get_logger()
 
 	total_invoices = len(invoices)
 	batch_size = 100  # Process 100 invoices at a time to avoid DB transaction issues
@@ -1569,7 +1571,8 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 			try:
 				current_bt = frappe.get_doc("Bank Transaction", bank_transaction_name)
 				current_unalloc = abs(flt(current_bt.unallocated_amount))
-			except Exception:
+			except Exception as e:
+				logger.error("Failed to re-fetch Bank Transaction: %s: %s", bank_transaction_name, str(e), exc_info=True)
 				current_unalloc = abs(flt(bank_transaction.unallocated_amount))
 
 			# Compute combined intended allocation total (absolute values)
@@ -1598,7 +1601,7 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 			
 	except Exception as e:
 		frappe.db.rollback()
-		logger.error(f"Bulk reconciliation failed: {str(e)}", exc_info=True)
+		logger.error("Bulk reconciliation failed: %s: %s", str(e), exc_info=True)
 		
 		# Try to delete any partially created payment entries
 		cleanup_failed_reconciliation(all_vouchers)
