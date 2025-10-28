@@ -1509,7 +1509,7 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 					processed += 1
 					
 				except Exception as e:
-					logger.error(f"Error processing invoice {invoice_data.get('name')}: {str(e)}", exc_info=True)
+					logger.exception("Error processing invoice %s: %s", invoice_data.get("name"), str(e))
 					failed += 1
 					continue
 			

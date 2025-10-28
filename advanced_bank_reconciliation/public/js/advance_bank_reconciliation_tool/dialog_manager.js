@@ -720,13 +720,6 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 	}
 	
 	processUnpaidInvoices(unpaidInvoices, regularVouchers) {
-		// Always use background job regardless of size
-		this.processBulkReconciliation(unpaidInvoices || [], regularVouchers || []);
-	}
-	
-	// processSyncReconciliation removed in favor of a single background flow
-	
-	processBulkReconciliation(unpaidInvoices, regularVouchers) {
 		const startJob = () => {
 			frappe.call({
 				method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.create_payment_entries_bulk",
@@ -752,7 +745,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		// Ask for confirmation only when processing invoices
 		if ((unpaidInvoices || []).length > 0) {
 			frappe.confirm(
-				__("You are about to reconcile {0} invoices. This will be processed in the background. Continue?", [unpaidInvoices.length]),
+				__("You are about to reconcile {0} unpaid invoices. This will be processed in the background. Continue?", [unpaidInvoices.length]),
 				() => startJob()
 			);
 		} else {
