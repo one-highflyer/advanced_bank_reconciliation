@@ -1,42 +1,34 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+## [1.0.0](https://github.com/one-highflyer/advanced_bank_reconciliation/releases/tag/v1.0.0) (2025-12-19)
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+### Features
 
-## [0.1.1] - 2025-01-28
+* Initial release of Advanced Bank Reconciliation Tool
+* Bank statement importer with flexible date format support and field mapping
+* Multi-currency bank reconciliation with exchange rate handling
+* Bulk bank reconciliation with background job processing
+* Real-time progress tracking via WebSocket (frappe.realtime)
+* Hook-based extensible filter system for customizations
+* Invoice returns support (negative sales/purchase invoices matching)
+* Customer group filtering in payment entries dialog
+* Party name display in reconciliation queries and UI
+* Particulars and Bank Party Name columns in bank transactions table
+* Date filters for unpaid invoice matching queries
+* Payment entry and journal entry creation from bank transactions
+* Background/synchronous execution modes (configurable via settings)
+* Rank currency-matched invoices higher in reconciliation
+* Support for reconciling unpaid invoices with bank transactions
+* Journal entry query enhancement with party name for clarity
 
-### Added
-- Date filters for unpaid invoice matching queries
-  - Modified `get_unpaid_si_matching_query()` to accept `from_date` and `to_date` parameters
-  - Modified `get_unpaid_pi_matching_query()` to accept `from_date` and `to_date` parameters
-  - Supports all date combinations: both dates, from_date only, to_date only
-  - Maintains backward compatibility when no date filters are provided
-- Comprehensive support for invoice returns in bank reconciliation
-  - Enable matching of negative sales invoices (returns) with withdrawal transactions
-  - Enable matching of negative purchase invoices (returns) with deposit transactions
-  - Improved ranking system for exact amount matches
-  - Support for negative allocated amounts in payment entry creation
+### Bug Fixes
 
-### Changed
-- Enhanced clearance validation to support both positive and negative transaction scenarios
-- Improved logging for better debugging and monitoring of reconciliation processes
-
-### Fixed
-- Payment entry creation now properly handles negative allocated amounts for return transactions
-
-## [0.1.0] - 2025-01-27
-
-### Added
-- Customer group filtering in payment entries dialog
-- Conditional display of customer group filter for customer-related document types
-
-### Changed
-- Improved dialog layout with better column distribution
-
-## [0.0.1] - Initial Release
-
-### Added
-- Initial implementation of Advanced Bank Reconciliation Tool
-- Enhanced bank transaction validation and matching capabilities
+* Multi-currency amount matching and exchange rate conversion
+* Bank transaction validation for foreign currency payment entries
+* CSV import for amounts with comma separators
+* Memory leak and lock release in bulk reconciliation
+* Performance with Select All on large datasets
+* Bank field showing "[object Object]" during statement upload
+* Allocation validation on advance bank reconciliation tool
+* Amount comparison inconsistency in reconciliation
+* Row data retrieval in dialog manager for selected transactions
