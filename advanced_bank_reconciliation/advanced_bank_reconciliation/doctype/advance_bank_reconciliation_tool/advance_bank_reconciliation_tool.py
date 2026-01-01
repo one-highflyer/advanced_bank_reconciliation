@@ -333,58 +333,66 @@ def create_payment_entry_bts(
 	cost_center=None,
 	allow_edit=None,
 ):
+	from erpnext.accounts.party import get_party_account
+
 	# Create a new payment entry based on the bank transaction
 	bank_transaction = frappe.db.get_values(
 		"Bank Transaction",
 		bank_transaction_name,
-		fieldname=["name", "unallocated_amount", "deposit", "bank_account"],
+		fieldname=["name", "unallocated_amount", "deposit", "bank_account", "currency"],
 		as_dict=True,
 	)[0]
-	paid_amount = bank_transaction.unallocated_amount
+
 	payment_type = "Receive" if bank_transaction.deposit > 0.0 else "Pay"
 
-	company_account = frappe.get_value("Bank Account", bank_transaction.bank_account, "account")
-	company = frappe.get_value("Account", company_account, "company")
-	payment_entry_dict = {
-		"company": company,
-		"payment_type": payment_type,
-		"reference_no": reference_number,
-		"reference_date": reference_date,
-		"party_type": party_type,
-		"party": party,
-		"posting_date": posting_date,
-		"paid_amount": paid_amount,
-		"received_amount": paid_amount,
-	}
-	payment_entry = frappe.new_doc("Payment Entry")
+	bank_account = frappe.get_cached_value("Bank Account", bank_transaction.bank_account, "account")
+	company = frappe.get_cached_value("Account", bank_account, "company")
+	party_account = get_party_account(party_type, party, company)
 
-	payment_entry.update(payment_entry_dict)
+	bank_currency = bank_transaction.currency
+	party_currency = frappe.get_cached_value("Account", party_account, "account_currency")
+
+	exc_rate = get_exchange_rate(bank_currency, party_currency, posting_date)
+
+	amt_in_bank_acc_currency = bank_transaction.unallocated_amount
+	amount_in_party_currency = bank_transaction.unallocated_amount * exc_rate
+
+	pe = frappe.new_doc("Payment Entry")
+	pe.payment_type = payment_type
+	pe.company = company
+	pe.reference_no = reference_number
+	pe.reference_date = reference_date
+	pe.party_type = party_type
+	pe.party = party
+	pe.posting_date = posting_date
+	pe.paid_from = party_account if payment_type == "Receive" else bank_account
+	pe.paid_to = party_account if payment_type == "Pay" else bank_account
+	pe.paid_from_account_currency = party_currency if payment_type == "Receive" else bank_currency
+	pe.paid_to_account_currency = party_currency if payment_type == "Pay" else bank_currency
+	pe.paid_amount = amount_in_party_currency if payment_type == "Receive" else amt_in_bank_acc_currency
+	pe.received_amount = amount_in_party_currency if payment_type == "Pay" else amt_in_bank_acc_currency
 
 	if mode_of_payment:
-		payment_entry.mode_of_payment = mode_of_payment
+		pe.mode_of_payment = mode_of_payment
 	if project:
-		payment_entry.project = project
+		pe.project = project
 	if cost_center:
-		payment_entry.cost_center = cost_center
-	if payment_type == "Receive":
-		payment_entry.paid_to = company_account
-	else:
-		payment_entry.paid_from = company_account
+		pe.cost_center = cost_center
 
-	payment_entry.validate()
+	pe.validate()
 
 	if allow_edit:
-		return payment_entry
+		return pe
 
-	payment_entry.insert()
+	pe.insert()
+	pe.submit()
 
-	payment_entry.submit()
 	vouchers = json.dumps(
 		[
 			{
 				"payment_doctype": "Payment Entry",
-				"payment_name": payment_entry.name,
-				"amount": paid_amount,
+				"payment_name": pe.name,
+				"amount": amt_in_bank_acc_currency,
 			}
 		]
 	)
