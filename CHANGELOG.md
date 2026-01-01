@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.0.0...v1.0.1) (2026-01-01)
+
+
+### Bug Fixes
+
+* handle multi-currency in create_payment_entry_bts ([e06260f](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/e06260f908fb91f078ec6d757352dedbf83c9607))
+
 # 1.0.0 (2025-12-19)
 
 
