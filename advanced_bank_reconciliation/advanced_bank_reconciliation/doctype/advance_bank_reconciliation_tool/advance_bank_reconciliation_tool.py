@@ -165,6 +165,7 @@ def create_journal_entry_bts(
 	party_type=None,
 	party=None,
 	allow_edit=None,
+	cost_center=None,
 ):
 	# Create a new journal entry based on the bank transaction
 	bank_transaction = frappe.db.get_values(
@@ -184,6 +185,7 @@ def create_journal_entry_bts(
 			)
 
 	company = frappe.get_value("Account", company_account, "company")
+	resolved_cost_center = cost_center or get_default_cost_center(company)
 	company_default_currency = frappe.get_cached_value("Company", company, "default_currency")
 	company_account_currency = frappe.get_cached_value("Account", company_account, "account_currency")
 	second_account_currency = frappe.get_cached_value("Account", second_account, "account_currency")
@@ -215,7 +217,7 @@ def create_journal_entry_bts(
 		"debit_in_account_currency": withdrawal,
 		"party_type": party_type,
 		"party": party,
-		"cost_center": get_default_cost_center(company),
+		"cost_center": resolved_cost_center,
 	}
 
 	company_account_dict = {
@@ -224,7 +226,7 @@ def create_journal_entry_bts(
 		"bank_account": bank_transaction.bank_account,
 		"credit_in_account_currency": withdrawal,
 		"debit_in_account_currency": deposit,
-		"cost_center": get_default_cost_center(company),
+		"cost_center": resolved_cost_center,
 	}
 
 	# convert transaction amount to company currency

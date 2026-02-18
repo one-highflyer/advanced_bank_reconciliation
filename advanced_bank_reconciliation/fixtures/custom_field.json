@@ -52,5 +52,25 @@
   "translatable": 0,
   "unique": 0,
   "width": null
+ },
+ {
+  "doctype": "Custom Field",
+  "dt": "Bank Transaction",
+  "fieldname": "custom_particulars",
+  "fieldtype": "Data",
+  "insert_after": "transaction_type",
+  "label": "Particulars",
+  "modified": "2026-02-18 00:00:00.000000",
+  "name": "Bank Transaction-custom_particulars"
+ },
+ {
+  "doctype": "Custom Field",
+  "dt": "Bank Transaction",
+  "fieldname": "custom_code",
+  "fieldtype": "Data",
+  "insert_after": "custom_particulars",
+  "label": "Code",
+  "modified": "2026-02-18 00:00:00.000000",
+  "name": "Bank Transaction-custom_code"
  }
 ]

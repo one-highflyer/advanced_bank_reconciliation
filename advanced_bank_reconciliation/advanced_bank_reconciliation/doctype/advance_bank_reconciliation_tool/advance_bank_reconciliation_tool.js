@@ -69,6 +69,24 @@ frappe.ui.form.on("Advance Bank Reconciliation Tool", {
 		frm.add_custom_button(__("Batch Validate Transactions"), function () {
 			frm.trigger("batch_validate_transactions");
 		}, __("Validation"));
+
+		frm.add_custom_button(__("Run Bank Rules"), function () {
+			if (!frm.doc.bank_account || !frm.doc.bank_statement_from_date || !frm.doc.bank_statement_to_date) {
+				frappe.msgprint(__("Please select a bank account and date range first"));
+				return;
+			}
+			frm.call({
+				method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.abr_bank_rule.abr_bank_rule.run_bank_rules",
+				args: {
+					bank_account: frm.doc.bank_account,
+					from_date: frm.doc.bank_statement_from_date,
+					to_date: frm.doc.bank_statement_to_date,
+				},
+				callback: function () {
+					frm.refresh();
+				},
+			});
+		}, __("Validation"));
 	},
 
 	bank_account: function (frm) {

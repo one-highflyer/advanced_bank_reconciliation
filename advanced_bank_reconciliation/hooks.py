@@ -243,11 +243,14 @@ fixtures = [
         "dt": "Custom Field",
         "filters": [
             ["dt", "=", "Bank"],
-            [
-                "fieldname",
-                "in",
-                ["bank_statement_date_format"],
-            ],
+            ["fieldname", "in", ["bank_statement_date_format"]],
+        ],
+    },
+    {
+        "dt": "Custom Field",
+        "filters": [
+            ["dt", "=", "Bank Transaction"],
+            ["fieldname", "in", ["custom_particulars", "custom_code"]],
         ],
     },
 ]
