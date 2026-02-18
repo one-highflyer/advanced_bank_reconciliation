@@ -7,6 +7,7 @@ frappe.ui.form.on("ABR Bank Rule", {
 			return {
 				filters: {
 					company: frm.doc.company,
+					is_company_account: 1,
 					disabled: 0,
 				},
 			};
@@ -30,6 +31,12 @@ frappe.ui.form.on("ABR Bank Rule", {
 					},
 				};
 			});
+		}
+	},
+
+	company(frm) {
+		for (const field of ["bank_account", "account", "cost_center"]) {
+			frm.set_value(field, "");
 		}
 	},
 });

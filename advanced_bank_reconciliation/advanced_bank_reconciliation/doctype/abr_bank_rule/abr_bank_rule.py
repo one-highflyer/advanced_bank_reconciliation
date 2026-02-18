@@ -42,6 +42,14 @@ class ABRBankRule(Document):
 		title: DF.Data
 	# end: auto-generated types
 
+	NUMERIC_ONLY_OPERATORS = {"Greater than", "Greater than or Equals", "Less Than", "Less Than or Equals"}
+	TEXT_ONLY_OPERATORS = {"Contains", "Not Contains"}
+	NUMERIC_FIELDS = {"Deposit", "Withdrawal"}
+	VALID_OPERATORS = {
+		"Equals", "Not Equals", "Greater than", "Greater than or Equals",
+		"Less Than", "Less Than or Equals", "Contains", "Not Contains",
+	}
+
 	def validate(self):
 		if not self.conditions:
 			frappe.throw("At least one condition is required")
@@ -54,6 +62,37 @@ class ABRBankRule(Document):
 				frappe.throw("Party Type is required for Payment Entry rules")
 			if not self.party:
 				frappe.throw("Party is required for Payment Entry rules")
+
+		self._validate_bank_account_company()
+		self._validate_conditions()
+
+	def _validate_bank_account_company(self):
+		if self.bank_account and self.company:
+			ba_company = frappe.db.get_value("Bank Account", self.bank_account, "company")
+			if ba_company and ba_company != self.company:
+				frappe.throw(
+					"Bank Account '%s' belongs to company '%s', not '%s'"
+					% (self.bank_account, ba_company, self.company)
+				)
+
+	def _validate_conditions(self):
+		for cond in self.conditions:
+			if not cond.value:
+				frappe.throw("Value is required for condition on field '%s'" % cond.field_name)
+			if cond.field_name not in CONDITION_FIELD_MAP:
+				frappe.throw("Unknown condition field '%s'" % cond.field_name)
+			if cond.condition not in self.VALID_OPERATORS:
+				frappe.throw("Unknown operator '%s'" % cond.condition)
+			if cond.condition in self.NUMERIC_ONLY_OPERATORS and cond.field_name not in self.NUMERIC_FIELDS:
+				frappe.throw(
+					"Operator '%s' is only valid for numeric fields (Deposit, Withdrawal), not '%s'"
+					% (cond.condition, cond.field_name)
+				)
+			if cond.condition in self.TEXT_ONLY_OPERATORS and cond.field_name in self.NUMERIC_FIELDS:
+				frappe.throw(
+					"Operator '%s' is not valid for numeric fields, not '%s'"
+					% (cond.condition, cond.field_name)
+				)
 
 
 # --- Field name to Bank Transaction fieldname mapping ---
@@ -96,10 +135,15 @@ def run_bank_rules(bank_account, from_date, to_date):
 	matched_count = 0
 	unmatched_count = 0
 	error_count = 0
+	skipped_count = 0
 
 	for txn_summary in transactions:
+		matched_rule = None
 		try:
 			transaction = frappe.get_doc("Bank Transaction", txn_summary.name)
+			if not transaction.unallocated_amount or transaction.unallocated_amount <= 0:
+				skipped_count += 1
+				continue
 			matched_rule = _match_transaction(transaction, rules, logger)
 			if matched_rule:
 				_execute_rule_action(transaction, matched_rule, logger)
@@ -110,20 +154,35 @@ def run_bank_rules(bank_account, from_date, to_date):
 		except Exception:
 			error_count += 1
 			tb = frappe.get_traceback()
-			logger.error("Error processing transaction '%s': %s", txn_summary.name, tb)
-			frappe.db.rollback()
-			frappe.log_error(
-				message=tb,
-				title="ABR Bank Rule failed for transaction %s" % txn_summary.name,
+			rule_title = matched_rule.title if matched_rule else "N/A"
+			logger.error(
+				"Error processing transaction '%s' (rule: '%s'): %s",
+				txn_summary.name, rule_title, tb,
 			)
-			frappe.db.commit()
+			frappe.db.rollback()
+			try:
+				frappe.log_error(
+					message="Bank Account: %s\nRule: %s\nTransaction: %s\n\n%s"
+					% (bank_account, rule_title, txn_summary.name, tb),
+					title="ABR Bank Rule failed for %s" % txn_summary.name,
+				)
+				frappe.db.commit()
+			except Exception:
+				logger.error(
+					"Failed to persist Error Log for transaction '%s': %s",
+					txn_summary.name, frappe.get_traceback(),
+				)
 
-	result_msg = "Bank Rules Result: %s matched, %s unmatched, %s errors" % (
+	result_msg = "Bank Rules Result: %s matched, %s unmatched, %s skipped, %s errors" % (
 		matched_count,
 		unmatched_count,
+		skipped_count,
 		error_count,
 	)
-	logger.info(result_msg)
+	logger.info(
+		"Bank Rules Result: %s matched, %s unmatched, %s skipped, %s errors",
+		matched_count, unmatched_count, skipped_count, error_count,
+	)
 
 	indicator = "orange" if error_count else "green"
 	frappe.msgprint(result_msg, indicator=indicator, title="Bank Rules")
@@ -131,6 +190,7 @@ def run_bank_rules(bank_account, from_date, to_date):
 	return {
 		"matched": matched_count,
 		"unmatched": unmatched_count,
+		"skipped": skipped_count,
 		"errors": error_count,
 	}
 
@@ -239,7 +299,9 @@ def evaluate_condition(transaction, condition, logger):
 	if operator == "Contains":
 		return bool(field_value) and condition_value.lower() in str(field_value).lower()
 	if operator == "Not Contains":
-		return not field_value or condition_value.lower() not in str(field_value).lower()
+		if not field_value:
+			return False
+		return condition_value.lower() not in str(field_value).lower()
 
 	logger.error("Unknown operator '%s'", operator)
 	return False

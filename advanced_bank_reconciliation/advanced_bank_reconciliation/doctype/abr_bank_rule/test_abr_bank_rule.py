@@ -203,6 +203,54 @@ class TestABRBankRuleValidation(FrappeTestCase):
 		rule.insert()
 		self.assertTrue(rule.name)
 
+	def test_condition_without_value_fails(self):
+		with self.assertRaises(frappe.ValidationError):
+			self._make_rule(
+				conditions=[{"field_name": "Description", "condition": "Contains", "value": ""}]
+			).insert()
+
+	def test_numeric_operator_on_text_field_fails(self):
+		with self.assertRaises(frappe.ValidationError):
+			self._make_rule(
+				conditions=[{"field_name": "Description", "condition": "Greater than", "value": "100"}]
+			).insert()
+
+	def test_numeric_operator_on_deposit_succeeds(self):
+		rule = self._make_rule(
+			conditions=[{"field_name": "Deposit", "condition": "Greater than", "value": "100"}]
+		)
+		rule.insert()
+		self.assertTrue(rule.name)
+
+	def test_bank_account_company_mismatch_fails(self):
+		other_company = "_Test Company 1"
+		with self.assertRaises(frappe.ValidationError):
+			self._make_rule(company=other_company).insert()
+
+	def test_contains_on_numeric_field_fails(self):
+		with self.assertRaises(frappe.ValidationError):
+			self._make_rule(
+				conditions=[{"field_name": "Deposit", "condition": "Contains", "value": "5"}]
+			).insert()
+
+	def test_not_contains_on_numeric_field_fails(self):
+		with self.assertRaises(frappe.ValidationError):
+			self._make_rule(
+				conditions=[{"field_name": "Withdrawal", "condition": "Not Contains", "value": "5"}]
+			).insert()
+
+	def test_unknown_field_name_fails(self):
+		with self.assertRaises(frappe.ValidationError):
+			self._make_rule(
+				conditions=[{"field_name": "Nonexistent", "condition": "Equals", "value": "x"}]
+			).insert()
+
+	def test_unknown_operator_fails(self):
+		with self.assertRaises(frappe.ValidationError):
+			self._make_rule(
+				conditions=[{"field_name": "Description", "condition": "Starts With", "value": "x"}]
+			).insert()
+
 
 # ============================================================================
 # Group 2: Condition Evaluation (pure unit tests, no DB)
@@ -355,9 +403,9 @@ class TestEvaluateCondition(FrappeTestCase):
 			evaluate_condition(txn, make_condition("Description", "Contains", "test"), self.logger)
 		)
 
-	def test_not_contains_on_none_field_returns_true(self):
+	def test_not_contains_on_none_field_returns_false(self):
 		txn = make_transaction(description=None)
-		self.assertTrue(
+		self.assertFalse(
 			evaluate_condition(
 				txn, make_condition("Description", "Not Contains", "test"), self.logger
 			)
@@ -382,6 +430,32 @@ class TestEvaluateCondition(FrappeTestCase):
 		self.assertFalse(
 			evaluate_condition(
 				txn, make_condition("Description", "Starts With", "test"), self.logger
+			)
+		)
+
+	def test_deposit_less_than_boundary(self):
+		txn = make_transaction(deposit=100)
+		self.assertFalse(
+			evaluate_condition(txn, make_condition("Deposit", "Less Than", "100"), self.logger)
+		)
+
+	def test_currency_equals_match(self):
+		txn = make_transaction(currency="NZD")
+		self.assertTrue(
+			evaluate_condition(txn, make_condition("Currency", "Equals", "NZD"), self.logger)
+		)
+
+	def test_currency_equals_no_match(self):
+		txn = make_transaction(currency="NZD")
+		self.assertFalse(
+			evaluate_condition(txn, make_condition("Currency", "Equals", "USD"), self.logger)
+		)
+
+	def test_not_contains_on_empty_string_returns_false(self):
+		txn = make_transaction(description="")
+		self.assertFalse(
+			evaluate_condition(
+				txn, make_condition("Description", "Not Contains", "test"), self.logger
 			)
 		)
 
@@ -713,6 +787,52 @@ class TestRunBankRules(FrappeTestCase):
 		self.assertEqual(result["matched"], 0)
 		self.assertEqual(result["errors"], 1)
 
+	@patch(f"{ABR_MODULE}._execute_rule_action")
+	@patch("frappe.db.commit")
+	@patch("frappe.db.rollback")
+	def test_error_on_one_txn_does_not_block_others(self, _rb, _commit, mock_execute):
+		self._create_bt(deposit=500, description="PAYROLL first")
+		self._create_bt(deposit=300, description="PAYROLL second")
+		self._create_rule(
+			conditions=[{"field_name": "Description", "condition": "Contains", "value": "PAYROLL"}]
+		)
+		mock_execute.side_effect = [Exception("Simulated error"), None]
+
+		result = run_bank_rules(self.bank_account, add_days(today(), -1), today())
+
+		self.assertEqual(result["errors"], 1)
+		self.assertEqual(result["matched"], 1)
+		self.assertEqual(mock_execute.call_count, 2)
+
+	@patch(f"{ABR_MODULE}._execute_rule_action")
+	@patch(f"{ABR_MODULE}.get_bank_transactions")
+	@patch("frappe.db.commit")
+	@patch("frappe.db.rollback")
+	def test_already_reconciled_txn_is_skipped(self, _rb, _commit, mock_get_txns, mock_execute):
+		bt = self._create_bt(deposit=500, description="PAYROLL monthly")
+		# Set unallocated_amount to 0, but force get_bank_transactions to still return it
+		# (simulates a race condition where txn was reconciled after the query)
+		frappe.db.set_value("Bank Transaction", bt.name, "unallocated_amount", 0)
+		mock_get_txns.return_value = [frappe._dict(name=bt.name)]
+		self._create_rule(
+			conditions=[{"field_name": "Description", "condition": "Contains", "value": "PAYROLL"}]
+		)
+
+		result = run_bank_rules(self.bank_account, add_days(today(), -1), today())
+
+		self.assertEqual(result["matched"], 0)
+		self.assertEqual(result["skipped"], 1)
+		self.assertEqual(result["unmatched"], 0)
+		mock_execute.assert_not_called()
+
+	def test_run_bank_rules_without_bank_account_throws(self):
+		with self.assertRaises(frappe.ValidationError):
+			run_bank_rules("", add_days(today(), -1), today())
+
+	def test_run_bank_rules_without_dates_throws(self):
+		with self.assertRaises(frappe.ValidationError):
+			run_bank_rules(self.bank_account, None, None)
+
 
 # ============================================================================
 # Group 6: End-to-End (real JE/PE creation, no mocks)
@@ -809,11 +929,16 @@ class TestRunBankRulesEndToEnd(FrappeTestCase):
 			je = frappe.get_doc("Journal Entry", je_link.payment_entry)
 			self.assertEqual(je.docstatus, 1)
 
-			# Find the non-bank account row (the second_account)
+			# Verify amounts and direction
+			bank_gl = f"_Test Bank - {TEST_COMPANY_ABBR}"
+			bank_row = next((row for row in je.accounts if row.account == bank_gl), None)
 			second_row = next(
 				(row for row in je.accounts if row.account == f"Sales - {TEST_COMPANY_ABBR}"), None
 			)
+			self.assertIsNotNone(bank_row)
 			self.assertIsNotNone(second_row)
+			self.assertEqual(bank_row.debit_in_account_currency, 500)
+			self.assertEqual(second_row.credit_in_account_currency, 500)
 			self.assertEqual(second_row.cost_center, cost_center)
 		finally:
 			cleanup_bank_rule_test(bt.name, rule.name)
@@ -848,5 +973,61 @@ class TestRunBankRulesEndToEnd(FrappeTestCase):
 			self.assertEqual(pe.party_type, "Customer")
 			self.assertEqual(pe.party, "_Test Customer")
 			self.assertEqual(pe.payment_type, "Receive")
+			self.assertEqual(pe.paid_amount, 300)
+		finally:
+			cleanup_bank_rule_test(bt.name, rule.name)
+
+	def test_je_rule_withdrawal_creates_correct_direction(self):
+		cost_center = frappe.db.get_value("Company", TEST_COMPANY, "cost_center")
+		bt = self._create_bt(
+			withdrawal=200, description="Office supplies", reference_number="WD-REF-001"
+		)
+		rule = self._create_rule(
+			entry_type="Journal Entry",
+			account=f"Sales - {TEST_COMPANY_ABBR}",
+			cost_center=cost_center,
+			conditions=[{"field_name": "Description", "condition": "Contains", "value": "Office"}],
+		)
+		frappe.db.commit()
+
+		try:
+			result = run_bank_rules(self.bank_account, add_days(today(), -1), today())
+			self.assertEqual(result["matched"], 1)
+			self.assertEqual(result["errors"], 0)
+
+			bt.reload()
+			self.assertEqual(bt.unallocated_amount, 0)
+
+			je = frappe.get_doc("Journal Entry", bt.payment_entries[0].payment_entry)
+			self.assertEqual(je.docstatus, 1)
+
+			bank_gl = f"_Test Bank - {TEST_COMPANY_ABBR}"
+			bank_row = next((row for row in je.accounts if row.account == bank_gl), None)
+			second_row = next(
+				(row for row in je.accounts if row.account == f"Sales - {TEST_COMPANY_ABBR}"), None
+			)
+			self.assertIsNotNone(bank_row)
+			self.assertIsNotNone(second_row)
+			self.assertEqual(bank_row.credit_in_account_currency, 200)
+			self.assertEqual(second_row.debit_in_account_currency, 200)
+		finally:
+			cleanup_bank_rule_test(bt.name, rule.name)
+
+	def test_running_rules_twice_does_not_double_process(self):
+		bt = self._create_bt(
+			deposit=500, description="PAYROLL monthly", reference_number="IDEM-001"
+		)
+		rule = self._create_rule(
+			conditions=[{"field_name": "Description", "condition": "Contains", "value": "PAYROLL"}]
+		)
+		frappe.db.commit()
+
+		try:
+			result1 = run_bank_rules(self.bank_account, add_days(today(), -1), today())
+			self.assertEqual(result1["matched"], 1)
+
+			result2 = run_bank_rules(self.bank_account, add_days(today(), -1), today())
+			self.assertEqual(result2["matched"], 0)
+			self.assertEqual(result2["unmatched"], 0)
 		finally:
 			cleanup_bank_rule_test(bt.name, rule.name)
