@@ -1,3 +1,15 @@
+# [1.1.0](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.0.1...v1.1.0) (2026-02-18)
+
+
+### Bug Fixes
+
+* **bank-rules:** harden validation, error handling, and condition evaluation ([435ebff](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/435ebffd1941869f0d1fa3515eb3e15eb4898b3c))
+
+
+### Features
+
+* **bank-rules:** add ABR Bank Rules for automatic transaction coding ([791c8f2](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/791c8f214a0be38175c415a1551b0bc6ce3b008a)), closes [#49](https://github.com/one-highflyer/advanced_bank_reconciliation/issues/49)
+
 ## [1.0.1](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.0.0...v1.0.1) (2026-01-01)
 
 
