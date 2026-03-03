@@ -104,7 +104,7 @@ CONDITION_FIELD_MAP = {
 	"Description": ("description", False),
 	"Reference Number": ("reference_number", False),
 	"Particulars": ("custom_particulars", False),
-	"Party Name": ("bank_party_name", False),
+	"Other Party": ("bank_party_name", False),
 	"Code": ("custom_code", False),
 }
 """Maps condition field label -> (transaction_fieldname, is_numeric)"""
