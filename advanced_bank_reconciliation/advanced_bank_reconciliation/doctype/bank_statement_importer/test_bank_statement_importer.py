@@ -67,6 +67,8 @@ class TestBankStatementImporter(FrappeTestCase):
         self.assertEqual(parse_json_if_required('{"save_mapping_for_future_use": 1}'), {"save_mapping_for_future_use": 1})
         self.assertEqual(parse_json_if_required({"bank_account": "BA-001"}), {"bank_account": "BA-001"})
         self.assertEqual(parse_json_if_required(""), {})
+        self.assertEqual(parse_json_if_required("{"), {})
+        self.assertEqual(parse_json_if_required("not json"), {})
         self.assertTrue(is_truthy("1"))
         self.assertTrue(is_truthy("true"))
         self.assertFalse(is_truthy("false"))

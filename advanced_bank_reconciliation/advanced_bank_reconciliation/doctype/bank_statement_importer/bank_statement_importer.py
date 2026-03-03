@@ -153,7 +153,11 @@ def parse_json_if_required(data):
         value = data.strip()
         if not value:
             return {}
-        return json.loads(value)
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, ValueError):
+            logger.warning("Failed to parse JSON from importer data: %s", value[:200])
+            return {}
 
     if isinstance(data, dict):
         return data
@@ -453,6 +457,7 @@ def get_last_transaction(bank_account):
 
 @frappe.whitelist()
 def publish_records(data_import, importer_data=None):
+    import_success = False
     try:
         dataset = (json.loads(data_import))[1:]
         logger.info("Importing %s bank transactions", len(dataset))
@@ -493,12 +498,12 @@ def publish_records(data_import, importer_data=None):
             bank_transaction.insert()
             bank_transaction.submit()
         logger.info("Bank transactions submitted successfully")
+        import_success = True
     except Exception as e:
         logger.error("Publish records error: %s", str(e), exc_info=True)
         frappe.db.rollback()
-        return False
 
-    # Save bank mapping after successful import (separate from import transaction)
+    # Save bank mapping independently of import outcome
     parsed_importer_data = parse_json_if_required(importer_data)
     if is_truthy(parsed_importer_data.get("save_mapping_for_future_use")):
         try:
@@ -506,9 +511,9 @@ def publish_records(data_import, importer_data=None):
         except Exception as e:
             logger.error("Failed to save bank mapping: %s", str(e), exc_info=True)
             frappe.msgprint(
-                _("Bank transactions were imported successfully, but saving the field mapping failed: {0}").format(str(e)),
-                title=_("Partial Success"),
+                _("Saving the field mapping for future use failed: {0}").format(str(e)),
+                title=_("Warning"),
                 indicator="orange",
             )
 
-    return True
+    return import_success
