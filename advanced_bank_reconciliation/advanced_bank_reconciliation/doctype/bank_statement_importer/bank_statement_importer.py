@@ -18,6 +18,17 @@ from frappe.utils.xlsxutils import (
 logger = frappe.logger("bank_rec", allow_site=True)
 logger.setLevel(logging.INFO)
 
+BANK_MAPPING_FIELD_ORDER = [
+    "date",
+    "deposit",
+    "withdrawal",
+    "description",
+    "reference_number",
+    "custom_particulars",
+    "custom_code",
+    "bank_party_name",
+]
+
 
 class BankStatementImporter(Document):
     pass
@@ -137,6 +148,109 @@ def parse_amount(amount_str):
     return result
 
 
+def parse_json_if_required(data):
+    if isinstance(data, str):
+        value = data.strip()
+        if not value:
+            return {}
+        return json.loads(value)
+
+    if isinstance(data, dict):
+        return data
+
+    return {}
+
+
+def is_truthy(value):
+    if isinstance(value, bool):
+        return value
+
+    if isinstance(value, (int, float)):
+        return value == 1
+
+    return str(value).strip().lower() in ("1", "true", "yes", "y", "on")
+
+
+def get_selected_bank_mapping(importer_data):
+    selected_mapping = {}
+
+    if importer_data.get("date_select"):
+        selected_mapping["date"] = importer_data.get("date_select")
+
+    if is_truthy(importer_data.get("same_amount_field")):
+        amount_field = importer_data.get("amount_select")
+        if amount_field:
+            selected_mapping["deposit"] = amount_field
+            selected_mapping["withdrawal"] = amount_field
+    else:
+        if importer_data.get("deposit_select"):
+            selected_mapping["deposit"] = importer_data.get("deposit_select")
+        if importer_data.get("withdrawal_select"):
+            selected_mapping["withdrawal"] = importer_data.get("withdrawal_select")
+
+    if importer_data.get("description_select"):
+        selected_mapping["description"] = importer_data.get("description_select")
+
+    if importer_data.get("reference_number_select"):
+        selected_mapping["reference_number"] = importer_data.get("reference_number_select")
+
+    if importer_data.get("particulars_select"):
+        selected_mapping["custom_particulars"] = importer_data.get("particulars_select")
+
+    if importer_data.get("code_select"):
+        selected_mapping["custom_code"] = importer_data.get("code_select")
+
+    if importer_data.get("other_party_select"):
+        selected_mapping["bank_party_name"] = importer_data.get("other_party_select")
+
+    return selected_mapping
+
+
+def save_bank_mapping_for_future_use(importer_data):
+    bank_account = importer_data.get("bank_account")
+    if not bank_account:
+        frappe.msgprint(
+            _("Could not save field mapping: no Bank Account was specified."),
+            title=_("Warning"),
+            indicator="orange",
+        )
+        return
+
+    bank_account_doc = frappe.get_doc("Bank Account", bank_account)
+    if not bank_account_doc.bank:
+        frappe.msgprint(
+            _(
+                "Could not save field mapping because Bank Account '{0}' is not linked to a Bank."
+            ).format(bank_account),
+            title=_("Warning"),
+            indicator="orange",
+        )
+        return
+
+    bank = frappe.get_doc("Bank", bank_account_doc.bank)
+    selected_mapping = get_selected_bank_mapping(importer_data)
+
+    if hasattr(bank, "bank_transaction_mapping"):
+        bank.bank_transaction_mapping = [
+            row
+            for row in bank.bank_transaction_mapping
+            if row.bank_transaction_field not in BANK_MAPPING_FIELD_ORDER
+        ]
+
+        for fieldname in BANK_MAPPING_FIELD_ORDER:
+            file_field = selected_mapping.get(fieldname)
+            if file_field:
+                bank.append(
+                    "bank_transaction_mapping",
+                    {"bank_transaction_field": fieldname, "file_field": file_field},
+                )
+
+    if importer_data.get("date_format"):
+        bank.bank_statement_date_format = importer_data.get("date_format")
+
+    bank.save(ignore_permissions=True)
+
+
 def build_table(mapping, data_headers, data_body):
     tbl = []
     tbl_header = [
@@ -147,7 +261,9 @@ def build_table(mapping, data_headers, data_body):
         "Reference Number",
         "Bank Account",
         "Currency",
+        "Is Duplicated",
         "Particulars",
+        "Code",
         "Other Party",
     ]
     tbl.append(tbl_header)
@@ -228,6 +344,12 @@ def build_table(mapping, data_headers, data_body):
                 data_row[data_headers.index(mapping["particulars_select"])] or ""
             )
         tbl_row.append(particulars_value)
+
+        # Code
+        code_value = ""
+        if mapping.get("code_select") and mapping["code_select"] in data_headers:
+            code_value = data_row[data_headers.index(mapping["code_select"])] or ""
+        tbl_row.append(code_value)
 
         # Other Party
         other_party_value = ""
@@ -330,7 +452,7 @@ def get_last_transaction(bank_account):
 
 
 @frappe.whitelist()
-def publish_records(data_import):
+def publish_records(data_import, importer_data=None):
     try:
         dataset = (json.loads(data_import))[1:]
         logger.info("Importing %s bank transactions", len(dataset))
@@ -345,21 +467,48 @@ def publish_records(data_import):
                 "description": str(item[3]) if item[3] else None,
             }
 
-            # Add Particulars field if it exists (index 8)
-            if len(item) > 8 and item[8]:
-                bank_transaction_dict["custom_particulars"] = str(item[8])
+            particulars = item[8] if len(item) > 8 else None
+            code = None
+            other_party = None
 
-            # Add Other Party field if it exists (index 9)
-            if len(item) > 9 and item[9]:
-                bank_transaction_dict["bank_party_name"] = str(item[9])
+            # New dataset format has: [.., is_duplicated, particulars, code, other_party]
+            if len(item) > 10:
+                code = item[9]
+                other_party = item[10]
+            # Legacy dataset format has: [.., is_duplicated, particulars, other_party]
+            elif len(item) > 9:
+                other_party = item[9]
+
+            if particulars:
+                bank_transaction_dict["custom_particulars"] = str(particulars)
+
+            if code:
+                bank_transaction_dict["custom_code"] = str(code)
+
+            if other_party:
+                bank_transaction_dict["bank_party_name"] = str(other_party)
 
             bank_transaction = frappe.new_doc("Bank Transaction")
             bank_transaction.update(bank_transaction_dict)
             bank_transaction.insert()
             bank_transaction.submit()
         logger.info("Bank transactions submitted successfully")
-        return True
     except Exception as e:
         logger.error("Publish records error: %s", str(e), exc_info=True)
         frappe.db.rollback()
         return False
+
+    # Save bank mapping after successful import (separate from import transaction)
+    parsed_importer_data = parse_json_if_required(importer_data)
+    if is_truthy(parsed_importer_data.get("save_mapping_for_future_use")):
+        try:
+            save_bank_mapping_for_future_use(parsed_importer_data)
+        except Exception as e:
+            logger.error("Failed to save bank mapping: %s", str(e), exc_info=True)
+            frappe.msgprint(
+                _("Bank transactions were imported successfully, but saving the field mapping failed: {0}").format(str(e)),
+                title=_("Partial Success"),
+                indicator="orange",
+            )
+
+    return True
