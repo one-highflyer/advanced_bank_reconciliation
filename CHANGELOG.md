@@ -1,3 +1,10 @@
+## [1.1.2](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.1.1...v1.1.2) (2026-03-03)
+
+
+### Bug Fixes
+
+* **bank-rules:** rename "Party Name" condition label to "Other Party" ([96001c1](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/96001c149518f71f6f0b2b843d469aeb6133369f))
+
 ## [1.1.1](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.1.0...v1.1.1) (2026-03-03)
 
 
