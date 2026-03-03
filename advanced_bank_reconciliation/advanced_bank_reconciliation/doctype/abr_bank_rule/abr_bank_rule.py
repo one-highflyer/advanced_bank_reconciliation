@@ -229,7 +229,7 @@ def _execute_rule_action(transaction, rule, logger):
 	if rule.entry_type == "Journal Entry":
 		create_journal_entry_bts(
 			transaction.name,
-			transaction.reference_number,
+			transaction.reference_number or transaction.name,
 			transaction.date,
 			transaction.date,
 			entry_type="Journal Entry",
