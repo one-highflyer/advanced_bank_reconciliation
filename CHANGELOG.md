@@ -1,3 +1,11 @@
+## [1.1.1](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.1.0...v1.1.1) (2026-03-03)
+
+
+### Bug Fixes
+
+* **bank-importer:** address PR review feedback ([6630d3b](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/6630d3b81be33da6ca819f5f8173b3d06b9eee48))
+* **bank-importer:** improve Code field import and bank mapping save reliability ([9912776](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/9912776580a0c55f6abd69d631ef2817c92a7a55))
+
 # [1.1.0](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.0.1...v1.1.0) (2026-02-18)
 
 
