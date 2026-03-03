@@ -391,7 +391,7 @@ class TestEvaluateCondition(FrappeTestCase):
 		txn = make_transaction(bank_party_name="ACME Corp Ltd")
 		self.assertTrue(
 			evaluate_condition(
-				txn, make_condition("Party Name", "Contains", "ACME"), self.logger
+				txn, make_condition("Other Party", "Contains", "ACME"), self.logger
 			)
 		)
 
