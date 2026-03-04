@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.1.3...v1.2.0) (2026-03-04)
+
+
+### Features
+
+* **bank-rules:** store party as reference on non-receivable/payable JE accounts ([6817385](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/681738566ad9f102a3c6cadfec76a0c83555218b))
+
 ## [1.1.3](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.1.2...v1.1.3) (2026-03-03)
 
 
