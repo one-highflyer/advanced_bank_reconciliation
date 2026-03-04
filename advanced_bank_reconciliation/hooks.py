@@ -68,7 +68,8 @@ app_license = "gpl-3.0"
 # ------------
 
 # before_install = "advanced_bank_reconciliation.install.before_install"
-# after_install = "advanced_bank_reconciliation.install.after_install"
+after_install = "advanced_bank_reconciliation.setup.after_install"
+after_migrate = "advanced_bank_reconciliation.setup.after_migrate"
 
 # Uninstallation
 # ------------
