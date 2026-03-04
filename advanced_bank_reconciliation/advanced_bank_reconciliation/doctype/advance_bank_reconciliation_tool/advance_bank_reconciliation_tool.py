@@ -215,10 +215,19 @@ def create_journal_entry_bts(
 		"account_currency": second_account_currency,
 		"credit_in_account_currency": deposit,
 		"debit_in_account_currency": withdrawal,
-		"party_type": party_type,
-		"party": party,
 		"cost_center": resolved_cost_center,
 	}
+
+	if party_type and party:
+		if account_type in ["Receivable", "Payable"]:
+			second_account_dict["party_type"] = party_type
+			second_account_dict["party"] = party
+		else:
+			# Cannot use party_type/party on non-Receivable/Payable accounts because
+			# GL Entry validation (validate_account_party_type) rejects it. Store as
+			# reference instead (e.g., donation from a customer on an income account).
+			second_account_dict["reference_type"] = party_type
+			second_account_dict["reference_name"] = party
 
 	company_account_dict = {
 		"account": company_account,

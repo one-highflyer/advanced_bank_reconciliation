@@ -1031,3 +1031,81 @@ class TestRunBankRulesEndToEnd(FrappeTestCase):
 			self.assertEqual(result2["unmatched"], 0)
 		finally:
 			cleanup_bank_rule_test(bt.name, rule.name)
+
+	def test_je_rule_with_party_on_receivable_account_uses_party_fields(self):
+		"""Party on Receivable account should use standard party_type/party, not reference fields."""
+		cost_center = frappe.db.get_value("Company", TEST_COMPANY, "cost_center")
+		debtors_account = f"Debtors - {TEST_COMPANY_ABBR}"
+		bt = self._create_bt(deposit=400, description="Customer invoice payment", reference_number="RCV-001")
+		rule = self._create_rule(
+			entry_type="Journal Entry",
+			account=debtors_account,
+			party_type="Customer",
+			party="_Test Customer",
+			cost_center=cost_center,
+			conditions=[{"field_name": "Description", "condition": "Contains", "value": "invoice payment"}],
+		)
+		frappe.db.commit()
+
+		try:
+			result = run_bank_rules(self.bank_account, add_days(today(), -1), today())
+			self.assertEqual(result["matched"], 1)
+			self.assertEqual(result["errors"], 0)
+
+			bt.reload()
+			self.assertEqual(bt.unallocated_amount, 0)
+
+			je = frappe.get_doc("Journal Entry", bt.payment_entries[0].payment_entry)
+			self.assertEqual(je.docstatus, 1)
+
+			second_row = next(
+				(row for row in je.accounts if row.account == debtors_account), None
+			)
+			self.assertIsNotNone(second_row)
+			self.assertEqual(second_row.party_type, "Customer")
+			self.assertEqual(second_row.party, "_Test Customer")
+			self.assertFalse(second_row.reference_type)
+			self.assertFalse(second_row.reference_name)
+			self.assertEqual(second_row.credit_in_account_currency, 400)
+		finally:
+			cleanup_bank_rule_test(bt.name, rule.name)
+
+	def test_je_rule_with_party_on_income_account_stores_as_reference(self):
+		"""Party on non-Receivable/Payable account should be stored as reference_type/reference_name."""
+		cost_center = frappe.db.get_value("Company", TEST_COMPANY, "cost_center")
+		bt = self._create_bt(deposit=250, description="Donation from member", reference_number="DON-001")
+		rule = self._create_rule(
+			entry_type="Journal Entry",
+			account=f"Sales - {TEST_COMPANY_ABBR}",
+			party_type="Customer",
+			party="_Test Customer",
+			cost_center=cost_center,
+			conditions=[{"field_name": "Description", "condition": "Contains", "value": "Donation"}],
+		)
+		frappe.db.commit()
+
+		try:
+			result = run_bank_rules(self.bank_account, add_days(today(), -1), today())
+			self.assertEqual(result["matched"], 1)
+			self.assertEqual(result["errors"], 0)
+
+			bt.reload()
+			self.assertEqual(bt.unallocated_amount, 0)
+			self.assertTrue(len(bt.payment_entries) > 0)
+
+			je = frappe.get_doc("Journal Entry", bt.payment_entries[0].payment_entry)
+			self.assertEqual(je.docstatus, 1)
+
+			# Verify the second account row does NOT have party set (Income account)
+			second_row = next(
+				(row for row in je.accounts if row.account == f"Sales - {TEST_COMPANY_ABBR}"), None
+			)
+			self.assertIsNotNone(second_row)
+			self.assertFalse(second_row.party_type)
+			self.assertFalse(second_row.party)
+			# Party should be stored as reference instead
+			self.assertEqual(second_row.reference_type, "Customer")
+			self.assertEqual(second_row.reference_name, "_Test Customer")
+			self.assertEqual(second_row.credit_in_account_currency, 250)
+		finally:
+			cleanup_bank_rule_test(bt.name, rule.name)
