@@ -15,6 +15,9 @@ from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.abr_bank_
 	evaluate_condition,
 	run_bank_rules,
 )
+from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool import (
+	_sanitize_dimensions,
+)
 
 # --- Constants ---
 
@@ -1109,3 +1112,217 @@ class TestRunBankRulesEndToEnd(FrappeTestCase):
 			self.assertEqual(second_row.credit_in_account_currency, 250)
 		finally:
 			cleanup_bank_rule_test(bt.name, rule.name)
+
+	def test_je_rule_stamps_abr_bank_rule_on_journal_entry(self):
+		"""Created JE should have abr_bank_rule set to the rule name."""
+		bt = self._create_bt(deposit=150, description="PAYROLL stamp test", reference_number="STAMP-JE-001")
+		rule = self._create_rule(
+			entry_type="Journal Entry",
+			account=f"Sales - {TEST_COMPANY_ABBR}",
+			conditions=[{"field_name": "Description", "condition": "Contains", "value": "PAYROLL stamp"}],
+		)
+		frappe.db.commit()
+
+		try:
+			result = run_bank_rules(self.bank_account, add_days(today(), -1), today())
+			self.assertEqual(result["matched"], 1)
+			self.assertEqual(result["errors"], 0)
+
+			bt.reload()
+			je = frappe.get_doc("Journal Entry", bt.payment_entries[0].payment_entry)
+			self.assertEqual(je.abr_bank_rule, rule.name)
+		finally:
+			cleanup_bank_rule_test(bt.name, rule.name)
+
+	def test_pe_rule_stamps_abr_bank_rule_on_payment_entry(self):
+		"""Created PE should have abr_bank_rule set to the rule name."""
+		bt = self._create_bt(deposit=175, description="Customer Payment stamp", reference_number="STAMP-PE-001")
+		rule = self._create_rule(
+			entry_type="Payment Entry",
+			account="",
+			party_type="Customer",
+			party="_Test Customer",
+			conditions=[
+				{"field_name": "Description", "condition": "Contains", "value": "Customer Payment stamp"}
+			],
+		)
+		frappe.db.commit()
+
+		try:
+			result = run_bank_rules(self.bank_account, add_days(today(), -1), today())
+			self.assertEqual(result["matched"], 1)
+			self.assertEqual(result["errors"], 0)
+
+			bt.reload()
+			pe = frappe.get_doc("Payment Entry", bt.payment_entries[0].payment_entry)
+			self.assertEqual(pe.abr_bank_rule, rule.name)
+		finally:
+			cleanup_bank_rule_test(bt.name, rule.name)
+
+
+# ============================================================================
+# Group 7: _sanitize_dimensions (unit tests, mocked dimensions)
+# ============================================================================
+
+DIMENSIONS_IMPORT_PATH = (
+	"erpnext.accounts.doctype.accounting_dimension"
+	".accounting_dimension.get_accounting_dimensions"
+)
+
+
+class TestSanitizeDimensions(FrappeTestCase):
+	"""Test _sanitize_dimensions() with mocked get_accounting_dimensions."""
+
+	def test_returns_none_for_none_input(self):
+		self.assertIsNone(_sanitize_dimensions(None))
+
+	def test_returns_none_for_empty_dict(self):
+		self.assertIsNone(_sanitize_dimensions({}))
+
+	@patch(DIMENSIONS_IMPORT_PATH, return_value=["location"])
+	def test_filters_to_valid_dimensions_only(self, _mock):
+		result = _sanitize_dimensions({"location": "AK", "bogus": "val"})
+		self.assertEqual(result, {"location": "AK"})
+
+	@patch(DIMENSIONS_IMPORT_PATH, return_value=["location"])
+	def test_returns_empty_dict_when_all_invalid(self, _mock):
+		result = _sanitize_dimensions({"bogus": "val"})
+		self.assertEqual(result, {})
+
+	@patch(DIMENSIONS_IMPORT_PATH, return_value=["location"])
+	def test_handles_string_input(self, _mock):
+		result = _sanitize_dimensions('{"location": "AK"}')
+		self.assertEqual(result, {"location": "AK"})
+
+	def test_returns_none_for_non_dict_input(self):
+		self.assertIsNone(_sanitize_dimensions([1, 2]))
+
+	@patch(DIMENSIONS_IMPORT_PATH, side_effect=ImportError("mocked"))
+	def test_returns_none_on_import_error(self, _mock):
+		self.assertIsNone(_sanitize_dimensions({"location": "AK"}))
+
+
+# ============================================================================
+# Group 8: on_trash cleanup (integration, real DB)
+# ============================================================================
+
+
+class TestOnTrashCleanup(FrappeTestCase):
+	"""Test ABRBankRule.on_trash clears abr_bank_rule on linked JE/PE."""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls.bank_account = setup_test_bank_account()
+
+	def _create_rule(self, title="Trash Test Rule", **kwargs):
+		defaults = {
+			"doctype": "ABR Bank Rule",
+			"title": title,
+			"enabled": 1,
+			"priority": 10,
+			"company": TEST_COMPANY,
+			"bank_account": self.bank_account,
+			"entry_type": "Journal Entry",
+			"account": f"Sales - {TEST_COMPANY_ABBR}",
+			"conditions": [
+				{"field_name": "Description", "condition": "Contains", "value": "trash-test"}
+			],
+		}
+		defaults.update(kwargs)
+		return frappe.get_doc(defaults).insert()
+
+	def test_on_trash_clears_je_reference(self):
+		rule = self._create_rule()
+		frappe.db.commit()
+
+		cost_center = frappe.db.get_value("Company", TEST_COMPANY, "cost_center")
+		je = frappe.get_doc({
+			"doctype": "Journal Entry",
+			"company": TEST_COMPANY,
+			"posting_date": today(),
+			"accounts": [
+				{
+					"account": f"_Test Bank - {TEST_COMPANY_ABBR}",
+					"debit_in_account_currency": 100,
+					"cost_center": cost_center,
+				},
+				{
+					"account": f"Sales - {TEST_COMPANY_ABBR}",
+					"credit_in_account_currency": 100,
+					"cost_center": cost_center,
+				},
+			],
+			"abr_bank_rule": rule.name,
+		})
+		je.insert()
+		frappe.db.commit()
+
+		try:
+			frappe.delete_doc("ABR Bank Rule", rule.name, force=True)
+			frappe.db.commit()
+
+			je.reload()
+			self.assertFalse(je.abr_bank_rule)
+		finally:
+			if frappe.db.exists("Journal Entry", je.name):
+				je_doc = frappe.get_doc("Journal Entry", je.name)
+				if je_doc.docstatus == 1:
+					je_doc.cancel()
+				frappe.delete_doc("Journal Entry", je.name, force=True)
+			if frappe.db.exists("ABR Bank Rule", rule.name):
+				frappe.delete_doc("ABR Bank Rule", rule.name, force=True)
+			frappe.db.commit()
+
+	def test_on_trash_clears_pe_reference(self):
+		rule = self._create_rule(
+			entry_type="Payment Entry",
+			account="",
+			party_type="Customer",
+			party="_Test Customer",
+		)
+		frappe.db.commit()
+
+		pe = frappe.get_doc({
+			"doctype": "Payment Entry",
+			"company": TEST_COMPANY,
+			"posting_date": today(),
+			"payment_type": "Receive",
+			"party_type": "Customer",
+			"party": "_Test Customer",
+			"paid_from": f"Debtors - {TEST_COMPANY_ABBR}",
+			"paid_to": f"_Test Bank - {TEST_COMPANY_ABBR}",
+			"paid_amount": 100,
+			"received_amount": 100,
+			"reference_no": "TRASH-PE-001",
+			"reference_date": today(),
+			"abr_bank_rule": rule.name,
+		})
+		pe.insert()
+		frappe.db.commit()
+
+		try:
+			frappe.delete_doc("ABR Bank Rule", rule.name, force=True)
+			frappe.db.commit()
+
+			pe.reload()
+			self.assertFalse(pe.abr_bank_rule)
+		finally:
+			if frappe.db.exists("Payment Entry", pe.name):
+				pe_doc = frappe.get_doc("Payment Entry", pe.name)
+				if pe_doc.docstatus == 1:
+					pe_doc.cancel()
+				frappe.delete_doc("Payment Entry", pe.name, force=True)
+			if frappe.db.exists("ABR Bank Rule", rule.name):
+				frappe.delete_doc("ABR Bank Rule", rule.name, force=True)
+			frappe.db.commit()
+
+	def test_on_trash_no_error_when_no_linked_docs(self):
+		rule = self._create_rule(title="Orphan Rule")
+		frappe.db.commit()
+
+		try:
+			frappe.delete_doc("ABR Bank Rule", rule.name, force=True)
+			frappe.db.commit()
+		except Exception:
+			self.fail("on_trash raised an error when no linked JE/PE exist")

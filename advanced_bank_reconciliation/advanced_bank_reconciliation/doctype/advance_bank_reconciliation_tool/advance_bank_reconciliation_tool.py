@@ -153,6 +153,46 @@ def update_bank_transaction(bank_transaction_name, reference_number, party_type=
 	)[0]
 
 
+def _sanitize_dimensions(dimensions):
+	"""Filter dimensions dict to only include valid accounting dimension fieldnames."""
+	if not dimensions:
+		return None
+	if isinstance(dimensions, str):
+		try:
+			dimensions = frappe.parse_json(dimensions)
+		except (ValueError, json.JSONDecodeError):
+			get_logger().warning(
+				"Could not parse dimensions string as JSON: %s. Ignoring.",
+				dimensions,
+			)
+			return None
+	if not isinstance(dimensions, dict):
+		get_logger().warning(
+			"Expected dimensions to be a dict, got %s. Ignoring.",
+			type(dimensions).__name__,
+		)
+		return None
+	try:
+		from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
+			get_accounting_dimensions,
+		)
+		valid_dims = set(get_accounting_dimensions())
+	except ImportError:
+		get_logger().warning(
+			"Could not import get_accounting_dimensions from ERPNext. "
+			"Supplied dimensions %s will not be applied.",
+			list(dimensions.keys()),
+		)
+		return None
+	invalid_keys = set(dimensions.keys()) - valid_dims
+	if invalid_keys:
+		get_logger().warning(
+			"Ignoring invalid accounting dimension keys: %s. Valid dimensions: %s",
+			invalid_keys, valid_dims,
+		)
+	return {k: v for k, v in dimensions.items() if k in valid_dims}
+
+
 @frappe.whitelist()
 def create_journal_entry_bts(
 	bank_transaction_name,
@@ -166,6 +206,9 @@ def create_journal_entry_bts(
 	party=None,
 	allow_edit=None,
 	cost_center=None,
+	project=None,
+	abr_bank_rule=None,
+	dimensions=None,
 ):
 	# Create a new journal entry based on the bank transaction
 	bank_transaction = frappe.db.get_values(
@@ -218,6 +261,13 @@ def create_journal_entry_bts(
 		"cost_center": resolved_cost_center,
 	}
 
+	if project:
+		second_account_dict["project"] = project
+
+	sanitized_dimensions = _sanitize_dimensions(dimensions)
+	if sanitized_dimensions:
+		second_account_dict.update(sanitized_dimensions)
+
 	if party_type and party:
 		if account_type in ["Receivable", "Payable"]:
 			second_account_dict["party_type"] = party_type
@@ -237,6 +287,11 @@ def create_journal_entry_bts(
 		"debit_in_account_currency": deposit,
 		"cost_center": resolved_cost_center,
 	}
+
+	if project:
+		company_account_dict["project"] = project
+	if sanitized_dimensions:
+		company_account_dict.update(sanitized_dimensions)
 
 	# convert transaction amount to company currency
 	if is_multi_currency:
@@ -309,6 +364,9 @@ def create_journal_entry_bts(
 	journal_entry.update(journal_entry_dict)
 	journal_entry.set("accounts", accounts)
 
+	if abr_bank_rule:
+		journal_entry.abr_bank_rule = abr_bank_rule
+
 	if allow_edit:
 		return journal_entry
 
@@ -343,6 +401,8 @@ def create_payment_entry_bts(
 	project=None,
 	cost_center=None,
 	allow_edit=None,
+	abr_bank_rule=None,
+	dimensions=None,
 ):
 	from erpnext.accounts.party import get_party_account
 
@@ -389,6 +449,12 @@ def create_payment_entry_bts(
 		pe.project = project
 	if cost_center:
 		pe.cost_center = cost_center
+	if abr_bank_rule:
+		pe.abr_bank_rule = abr_bank_rule
+	sanitized_dimensions = _sanitize_dimensions(dimensions)
+	if sanitized_dimensions:
+		for dim_field, dim_value in sanitized_dimensions.items():
+			pe.set(dim_field, dim_value)
 
 	pe.validate()
 

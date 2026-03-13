@@ -39,6 +39,7 @@ class ABRBankRule(Document):
 		party: DF.DynamicLink | None
 		party_type: DF.Link | None
 		priority: DF.Int
+		project: DF.Link | None
 		title: DF.Data
 	# end: auto-generated types
 
@@ -49,6 +50,20 @@ class ABRBankRule(Document):
 		"Equals", "Not Equals", "Greater than", "Greater than or Equals",
 		"Less Than", "Less Than or Equals", "Contains", "Not Contains",
 	}
+
+	def on_trash(self):
+		"""Clear the abr_bank_rule reference on any JE/PE that was created by this rule."""
+		for dt in ("Journal Entry", "Payment Entry"):
+			if not frappe.db.has_column(dt, "abr_bank_rule"):
+				get_logger().warning(
+					"Column 'abr_bank_rule' does not exist on '%s'. "
+					"Skipping reference cleanup for rule '%s'.",
+					dt, self.name,
+				)
+				continue
+			frappe.db.set_value(
+				dt, {"abr_bank_rule": self.name}, "abr_bank_rule", "", update_modified=False
+			)
 
 	def validate(self):
 		if not self.conditions:
@@ -224,8 +239,35 @@ def _conditions_match(transaction, rule, logger):
 	return all(evaluate_condition(transaction, cond, logger) for cond in rule.conditions)
 
 
+def _get_rule_dimensions(rule):
+	"""Read custom accounting dimension values from the rule."""
+	try:
+		from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
+			get_accounting_dimensions,
+		)
+	except ImportError:
+		get_logger().warning(
+			"Could not import get_accounting_dimensions from ERPNext. "
+			"Custom accounting dimensions will not be applied to entries "
+			"created by ABR Bank Rules."
+		)
+		return {}
+
+	excluded = {"cost_center", "project"}
+	dimensions = {}
+	for dim in get_accounting_dimensions():
+		if dim in excluded:
+			continue
+		val = rule.get(dim)
+		if val is not None and val != "":
+			dimensions[dim] = val
+	return dimensions
+
+
 def _execute_rule_action(transaction, rule, logger):
 	"""Create a JE or PE based on the rule's action configuration."""
+	dimensions = _get_rule_dimensions(rule)
+
 	if rule.entry_type == "Journal Entry":
 		create_journal_entry_bts(
 			transaction.name,
@@ -237,6 +279,9 @@ def _execute_rule_action(transaction, rule, logger):
 			party_type=rule.party_type,
 			party=rule.party,
 			cost_center=rule.cost_center,
+			project=rule.project,
+			abr_bank_rule=rule.name,
+			dimensions=dimensions,
 		)
 	elif rule.entry_type == "Payment Entry":
 		create_payment_entry_bts(
@@ -247,6 +292,9 @@ def _execute_rule_action(transaction, rule, logger):
 			party=rule.party,
 			posting_date=transaction.date,
 			cost_center=rule.cost_center,
+			project=rule.project,
+			abr_bank_rule=rule.name,
+			dimensions=dimensions,
 		)
 	else:
 		frappe.throw("Unsupported entry type '%s' in rule '%s'" % (rule.entry_type, rule.title))

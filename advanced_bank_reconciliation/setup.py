@@ -1,4 +1,5 @@
 import frappe
+from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.custom.doctype.property_setter.property_setter import make_property_setter
 
 from advanced_bank_reconciliation.utils.logger import get_logger
@@ -7,11 +8,49 @@ logger = get_logger()
 
 
 def after_install():
+    create_abr_custom_fields()
     create_property_setters()
 
 
 def after_migrate():
+    create_abr_custom_fields()
     create_property_setters()
+
+
+def create_abr_custom_fields():
+    """Create custom fields needed by ABR on other doctypes."""
+    try:
+        create_custom_fields(get_custom_fields(), ignore_validate=True, update=True)
+    except Exception as e:
+        logger.error("ABR setup: Failed to create custom fields", exc_info=True)
+        frappe.db.rollback()
+        frappe.log_error(
+            message="Failed to create custom fields during ABR setup.\n\n%s" % e,
+            title="ABR Setup: Custom Field Creation Failed",
+        )
+        frappe.db.commit()
+        raise
+
+
+def get_custom_fields():
+    abr_bank_rule_field = {
+        "fieldname": "abr_bank_rule",
+        "fieldtype": "Link",
+        "options": "ABR Bank Rule",
+        "label": "ABR Bank Rule",
+        "read_only": 1,
+        "insert_after": "cheque_no",
+        "no_copy": 1,
+    }
+    return {
+        "Journal Entry": [abr_bank_rule_field],
+        "Payment Entry": [
+            {
+                **abr_bank_rule_field,
+                "insert_after": "reference_no",
+            }
+        ],
+    }
 
 
 def create_property_setters():
@@ -34,6 +73,7 @@ def create_property_setters():
             title="ABR Setup: Property Setter Creation Failed",
         )
         frappe.db.commit()
+        raise
 
 
 def get_property_setters():
