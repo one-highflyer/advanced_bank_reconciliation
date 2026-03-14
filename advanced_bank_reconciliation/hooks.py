@@ -221,9 +221,6 @@ override_doctype_class = {
 # 	"advanced_bank_reconciliation.auth.validate"
 # ]
 
-# Automatically update python controller files with type annotations for this app.
-# export_python_type_annotations = True
-
 # default_log_clearing_doctypes = {
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
@@ -239,6 +236,12 @@ get_matching_queries = [
 
 required_apps = ["erpnext"]
 
+# Extend ERPNext's accounting dimension doctypes so that custom dimensions
+# (e.g., Location, Department) are automatically added to ABR Bank Rules.
+accounting_dimension_doctypes = [
+    "ABR Bank Rule",
+]
+
 fixtures = [
     {
         "dt": "Custom Field",
@@ -252,6 +255,13 @@ fixtures = [
         "filters": [
             ["dt", "=", "Bank Transaction"],
             ["fieldname", "in", ["custom_particulars", "custom_code"]],
+        ],
+    },
+    {
+        "dt": "Custom Field",
+        "filters": [
+            ["dt", "in", ["Journal Entry", "Payment Entry"]],
+            ["fieldname", "=", "abr_bank_rule"],
         ],
     },
 ]
