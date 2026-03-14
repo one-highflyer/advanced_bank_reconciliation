@@ -1,3 +1,11 @@
+## [1.2.1](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.2.0...v1.2.1) (2026-03-14)
+
+
+### Bug Fixes
+
+* **bank-rules:** add traceability and accounting dimensions support ([2f7727d](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/2f7727d5bccc87084c766f08ad38c54a72e58c0d)), closes [#56](https://github.com/one-highflyer/advanced_bank_reconciliation/issues/56)
+* **setup:** sync existing accounting dimensions to ABR Bank Rule on migrate ([40620c0](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/40620c0e662fae34e6714474edbb8eacaefea3a7))
+
 # [1.2.0](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.1.3...v1.2.0) (2026-03-04)
 
 
