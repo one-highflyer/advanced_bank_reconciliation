@@ -10,11 +10,13 @@ logger = get_logger()
 def after_install():
     create_abr_custom_fields()
     create_property_setters()
+    sync_accounting_dimensions()
 
 
 def after_migrate():
     create_abr_custom_fields()
     create_property_setters()
+    sync_accounting_dimensions()
 
 
 def create_abr_custom_fields():
@@ -51,6 +53,40 @@ def get_custom_fields():
             }
         ],
     }
+
+
+def sync_accounting_dimensions():
+    """Ensure existing accounting dimensions have their fields on ABR Bank Rule.
+
+    When ABR is installed on a site that already has accounting dimensions,
+    those dimensions won't have fields on ABR Bank Rule yet (since
+    make_dimension_in_accounting_doctypes only runs on dimension creation).
+    This function fills that gap on every install/migrate.
+    """
+    try:
+        from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
+            get_accounting_dimensions,
+            make_dimension_in_accounting_doctypes,
+        )
+    except ImportError:
+        logger.warning(
+            "ABR setup: Could not import accounting dimension utilities from ERPNext. "
+            "Skipping dimension sync for ABR Bank Rule."
+        )
+        return
+
+    for fieldname in get_accounting_dimensions():
+        dim_doc = frappe.get_doc("Accounting Dimension", {"fieldname": fieldname})
+        if not frappe.db.exists(
+            "Custom Field", {"dt": "ABR Bank Rule", "fieldname": fieldname}
+        ):
+            logger.info(
+                "ABR setup: Adding accounting dimension '%s' to ABR Bank Rule",
+                fieldname,
+            )
+            make_dimension_in_accounting_doctypes(
+                doc=dim_doc, doclist=["ABR Bank Rule"]
+            )
 
 
 def create_property_setters():
