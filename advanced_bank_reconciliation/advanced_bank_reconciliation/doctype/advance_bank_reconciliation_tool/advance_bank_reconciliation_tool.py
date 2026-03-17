@@ -621,8 +621,15 @@ def unreconcile_bank_transaction(bank_transaction_name, cancel_linked_documents=
 	# Remove payment entries first (clears clearance dates and unlinks)
 	transaction.remove_payment_entries()
 
-	# Then cancel the collected documents
+	# Then cancel documents that are no longer referenced by any other bank transaction
 	for doctype, docname in docs_to_cancel:
+		if _is_allocated_in_other_bank_transactions(doctype, docname):
+			logger.info(
+				"Skipping cancellation of %s %s, still allocated to other bank transactions",
+				doctype,
+				docname,
+			)
+			continue
 		doc = frappe.get_doc(doctype, docname)
 		if doc.docstatus == 1:
 			doc.cancel()
@@ -632,6 +639,18 @@ def unreconcile_bank_transaction(bank_transaction_name, cancel_linked_documents=
 				docname,
 				bank_transaction_name,
 			)
+
+
+def _is_allocated_in_other_bank_transactions(doctype, docname):
+	"""Check if a document is still referenced by any submitted bank transaction."""
+	return frappe.db.exists(
+		"Bank Transaction Payments",
+		{
+			"payment_document": doctype,
+			"payment_entry": docname,
+			"docstatus": 1,
+		},
+	)
 
 
 @frappe.whitelist()
