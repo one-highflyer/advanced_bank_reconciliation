@@ -594,6 +594,65 @@ def reconcile_vouchers(bank_transaction_name, vouchers):
 	return transaction
 
 
+CANCELLABLE_DOCTYPES = frozenset({"Payment Entry", "Journal Entry"})
+
+
+@frappe.whitelist()
+def unreconcile_bank_transaction(bank_transaction_name, cancel_linked_documents=False):
+	"""Remove all payment entries from a bank transaction and optionally cancel linked documents.
+
+	Args:
+		bank_transaction_name: Name of the Bank Transaction to unreconcile
+		cancel_linked_documents: If True, cancel linked Payment Entries and Journal Entries
+	"""
+	cancel_linked_documents = cint(cancel_linked_documents)
+	transaction = frappe.get_doc("Bank Transaction", bank_transaction_name)
+
+	if not transaction.payment_entries:
+		frappe.throw(_("Bank Transaction {0} has no payment entries to unreconcile").format(bank_transaction_name))
+
+	# Collect documents to cancel before removing payment entries (which deletes the rows)
+	docs_to_cancel = []
+	if cancel_linked_documents:
+		for pe in transaction.payment_entries:
+			if pe.payment_document in CANCELLABLE_DOCTYPES:
+				docs_to_cancel.append((pe.payment_document, pe.payment_entry))
+
+	# Remove payment entries first (clears clearance dates and unlinks)
+	transaction.remove_payment_entries()
+
+	# Then cancel documents that are no longer referenced by any other bank transaction
+	for doctype, docname in docs_to_cancel:
+		if _is_allocated_in_other_bank_transactions(doctype, docname):
+			logger.info(
+				"Skipping cancellation of %s %s, still allocated to other bank transactions",
+				doctype,
+				docname,
+			)
+			continue
+		doc = frappe.get_doc(doctype, docname)
+		if doc.docstatus == 1:
+			doc.cancel()
+			logger.info(
+				"Cancelled %s %s during unreconciliation of %s",
+				doctype,
+				docname,
+				bank_transaction_name,
+			)
+
+
+def _is_allocated_in_other_bank_transactions(doctype, docname):
+	"""Check if a document is still referenced by any submitted bank transaction."""
+	return frappe.db.exists(
+		"Bank Transaction Payments",
+		{
+			"payment_document": doctype,
+			"payment_entry": docname,
+			"docstatus": 1,
+		},
+	)
+
+
 @frappe.whitelist()
 def get_linked_payments(
 	bank_transaction_name,

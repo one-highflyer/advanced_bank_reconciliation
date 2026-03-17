@@ -181,6 +181,15 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 				editable: false,
 				width: 150,
 				format: (value) => `<span class="px-2">${format_currency(value, this.currency)}</span>`,
+			},
+			{
+				name: __(""),
+				editable: false,
+				sortable: false,
+				focusable: false,
+				dropdown: false,
+				width: 120,
+				format: (value) => value || "",
 			}
 		];
 	}
@@ -210,21 +219,22 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 			row["withdrawal"],
 			row["unallocated_amount"],
 			`
-			<Button class="btn btn-primary btn-xs center"  data-name = ${row["name"]} >
+			<button class="btn btn-primary btn-xs center" data-name="${row["name"]}">
 				${__("Actions")}
-			</Button>
+			</button>
 			`,
 		];
 	}
 
 	format_row_reconciled_transaction(row, show_bank_transaction) {
 		let transaction = [];
+		let unreconcile_btn = "";
 		if (!show_bank_transaction) {
 			transaction = [
 				"",
 				"",
 				"",
-				"",	
+				"",
 			]
 		} else {
 			transaction = [
@@ -233,12 +243,14 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 				row["deposit"],
 				row["withdrawal"]
 			];
+			unreconcile_btn = `<button class="btn btn-danger btn-xs btn-unreconcile" data-bank-transaction="${row["name"]}">${__("Unreconcile")}</button>`;
 		}
 		return [
 			...transaction,
 			row["payment_document"],
 			row["payment_entry"],
 			row["allocated_amount"],
+			unreconcile_btn,
 		];
 	}
 
@@ -280,6 +292,8 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 			this.$reconciled_transactions_dt.hide();
 			this.$no_reconciled_transactions.show();
 		}
+
+		this.set_unreconcile_listeners();
 	}
 
 	set_listeners() {
@@ -289,6 +303,77 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 				me.update_dt_cards(bank_transaction)
 			);
 			return true;
+		});
+	}
+
+	set_unreconcile_listeners() {
+		var me = this;
+		$(`.${this.reconciled_datatable.style.scopeClass} .dt-scrollable`).on("click", ".btn-unreconcile", function () {
+			const bank_transaction_name = $(this).attr("data-bank-transaction");
+			me.show_unreconcile_dialog(bank_transaction_name);
+			return true;
+		});
+	}
+
+	show_unreconcile_dialog(bank_transaction_name) {
+		var me = this;
+		const d = new frappe.ui.Dialog({
+			title: __("Unreconcile {0}", [bank_transaction_name]),
+			fields: [
+				{
+					fieldtype: "HTML",
+					options: `<p>${__("This will remove all matched entries from this bank transaction. What would you like to do?")}</p>`,
+				}
+			],
+			primary_action_label: __("Unreconcile Only"),
+			primary_action: () => {
+				d.hide();
+				me.do_unreconcile(bank_transaction_name, false);
+			},
+			secondary_action_label: __("Cancel"),
+			secondary_action: () => d.hide(),
+		});
+		d.add_custom_action(
+			__("Unreconcile and Cancel PE/JE"),
+			() => {
+				d.hide();
+				frappe.confirm(
+					__("This will also cancel linked Payment Entries and Journal Entries. Are you sure?"),
+					() => me.do_unreconcile(bank_transaction_name, true)
+				);
+			},
+			"btn-danger"
+		);
+		d.show();
+	}
+
+	do_unreconcile(bank_transaction_name, cancel_linked_documents) {
+		var me = this;
+		frappe.call({
+			method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.unreconcile_bank_transaction",
+			args: {
+				bank_transaction_name: bank_transaction_name,
+				cancel_linked_documents: cancel_linked_documents ? 1 : 0,
+			},
+			freeze: true,
+			freeze_message: __("Unreconciling..."),
+			callback: function () {
+				frappe.show_alert({ message: __("Bank transaction unreconciled"), indicator: "green" });
+				me.make_dt();
+				me.make_reconciled_dt();
+				me.get_cleared_balance().then(() => {
+					me.cards_manager.$cards[1].set_value(format_currency(me.cleared_balance), me.currency);
+					me.cards_manager.$cards[2].set_value(
+						format_currency(me.bank_statement_closing_balance - me.cleared_balance),
+						me.currency
+					);
+					me.cards_manager.$cards[2].set_value_color(
+						me.bank_statement_closing_balance - me.cleared_balance == 0
+							? "text-success"
+							: "text-danger"
+					);
+				});
+			},
 		});
 	}
 
