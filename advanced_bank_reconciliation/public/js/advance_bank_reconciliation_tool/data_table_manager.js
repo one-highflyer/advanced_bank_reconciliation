@@ -243,7 +243,7 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 				row["deposit"],
 				row["withdrawal"]
 			];
-			unreconcile_btn = `<button class="btn btn-danger btn-xs btn-unreconcile" data-bank-transaction="${row["name"]}">${__("Unreconcile")}</button>`;
+			unreconcile_btn = `<button class="btn btn-default btn-xs btn-unreconcile" data-bank-transaction="${row["name"]}">${__("Unreconcile")}</button>`;
 		}
 		return [
 			...transaction,
