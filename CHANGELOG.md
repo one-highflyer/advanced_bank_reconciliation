@@ -1,3 +1,15 @@
+# [1.3.0](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.2.1...v1.3.0) (2026-03-17)
+
+
+### Bug Fixes
+
+* **bank-rec:** skip cancellation of documents still allocated to other bank transactions ([a183fc1](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/a183fc1a05847f23f16ad28ebda279362763fa6e))
+
+
+### Features
+
+* **bank-rec:** add Unreconcile button for matched transactions ([6e18fed](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/6e18fede625958c85392da9143740e7acd091778)), closes [#59](https://github.com/one-highflyer/advanced_bank_reconciliation/issues/59)
+
 ## [1.2.1](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.2.0...v1.2.1) (2026-03-14)
 
 
