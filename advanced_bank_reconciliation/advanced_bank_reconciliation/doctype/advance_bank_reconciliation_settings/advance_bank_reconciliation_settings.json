@@ -5,11 +5,51 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "default_actions_section",
+  "default_reconciliation_action",
+  "default_document_type",
+  "column_break_defaults",
+  "default_journal_entry_type",
   "reconciling_unpaid_invoices_section",
   "validate_selection_against_unallocated_amount",
   "reconcile_unpaid_invoices_in_background"
  ],
  "fields": [
+  {
+   "fieldname": "default_actions_section",
+   "fieldtype": "Section Break",
+   "label": "Default Actions"
+  },
+  {
+   "default": "Match Against Voucher",
+   "description": "The default action selected when clicking Actions on an unmatched transaction.",
+   "fieldname": "default_reconciliation_action",
+   "fieldtype": "Select",
+   "label": "Default Reconciliation Action",
+   "options": "Match Against Voucher\nCreate Voucher"
+  },
+  {
+   "default": "Payment Entry",
+   "depends_on": "eval:doc.default_reconciliation_action=='Create Voucher'",
+   "description": "The default document type when creating vouchers.",
+   "fieldname": "default_document_type",
+   "fieldtype": "Select",
+   "label": "Default Document Type",
+   "options": "Payment Entry\nJournal Entry"
+  },
+  {
+   "fieldname": "column_break_defaults",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Bank Entry",
+   "depends_on": "eval:doc.default_reconciliation_action=='Create Voucher' && doc.default_document_type=='Journal Entry'",
+   "description": "The default Journal Entry type when creating Journal Entry vouchers.",
+   "fieldname": "default_journal_entry_type",
+   "fieldtype": "Select",
+   "label": "Default Journal Entry Type",
+   "options": "Journal Entry\nInter Company Journal Entry\nBank Entry\nCash Entry\nCredit Card Entry\nDebit Note\nCredit Note\nContra Entry\nExcise Entry\nWrite Off Entry\nOpening Entry\nDepreciation Entry\nExchange Rate Revaluation\nDeferred Revenue\nDeferred Expense"
+  },
   {
    "fieldname": "reconciling_unpaid_invoices_section",
    "fieldtype": "Section Break",
@@ -34,7 +74,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-10-29 07:38:47.051364",
+ "modified": "2026-03-23 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Advanced Bank Reconciliation",
  "name": "Advance Bank Reconciliation Settings",

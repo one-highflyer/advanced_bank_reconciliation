@@ -172,6 +172,8 @@
   },
   {
    "default": "Auto",
+   "depends_on": "eval:doc.data_fetched == true",
+   "description": "Select the date format used in your bank statement CSV.<br>d/m/Y = 25/03/2026 (NZ/AU/UK)<br>m/d/Y = 03/25/2026 (US)<br>Y-m-d = 2026-03-25 (ISO)<br>Tip: open your CSV in a text editor to check the date format before selecting.",
    "fieldname": "date_format",
    "fieldtype": "Select",
    "label": "Date Format",
@@ -206,7 +208,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-03-03 12:00:00.000000",
+ "modified": "2026-03-23 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Advanced Bank Reconciliation",
  "name": "Bank Statement Importer",

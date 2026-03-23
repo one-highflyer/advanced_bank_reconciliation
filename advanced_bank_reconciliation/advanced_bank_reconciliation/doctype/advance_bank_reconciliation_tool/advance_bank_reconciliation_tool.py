@@ -25,6 +25,200 @@ class AdvanceBankReconciliationTool(Document):
 	pass
 
 
+def _get_party_display_value(doctype, docname, display_cache=None, meta_cache=None):
+	"""Resolve a human-readable display value for a linked party-like document."""
+	if not doctype or not docname:
+		return ""
+
+	cache_key = (doctype, docname)
+	if display_cache is not None and cache_key in display_cache:
+		return display_cache[cache_key]
+
+	title_field_map = {
+		"Customer": "customer_name",
+		"Supplier": "supplier_name",
+		"Employee": "employee_name",
+	}
+
+	fieldname = title_field_map.get(doctype)
+	if not fieldname:
+		try:
+			meta = meta_cache.get(doctype) if meta_cache is not None else None
+			if meta is None:
+				meta = frappe.get_meta(doctype)
+				if meta_cache is not None:
+					meta_cache[doctype] = meta
+			fieldname = meta.title_field or "name"
+		except Exception:
+			fieldname = "name"
+
+	try:
+		display_value = frappe.db.get_value(doctype, docname, fieldname)
+	except Exception:
+		display_value = None
+
+	display_value = display_value or docname
+	if display_cache is not None:
+		display_cache[cache_key] = display_value
+
+	return display_value
+
+
+def _get_je_linked_party_reference(accounts, bank_account):
+	"""Find the non-bank-side party source for a Journal Entry allocation."""
+	for account in accounts:
+		if account.get("account") == bank_account:
+			continue
+		if account.get("party_type") and account.get("party"):
+			return account.get("party_type"), account.get("party")
+		if account.get("reference_type") and account.get("reference_name"):
+			return account.get("reference_type"), account.get("reference_name")
+
+	return None, None
+
+
+def _add_party_display_to_reconciled_transactions(transactions):
+	"""Populate a generic Party display for reconciled rows based on linked ERPNext docs."""
+	if not transactions:
+		return
+
+	payment_entry_names = {
+		t.get("payment_entry")
+		for t in transactions
+		if t.get("payment_document") == "Payment Entry" and t.get("payment_entry")
+	}
+	journal_entry_names = {
+		t.get("payment_entry")
+		for t in transactions
+		if t.get("payment_document") == "Journal Entry" and t.get("payment_entry")
+	}
+	sales_invoice_names = {
+		t.get("payment_entry")
+		for t in transactions
+		if t.get("payment_document") == "Sales Invoice" and t.get("payment_entry")
+	}
+	purchase_invoice_names = {
+		t.get("payment_entry")
+		for t in transactions
+		if t.get("payment_document") == "Purchase Invoice" and t.get("payment_entry")
+	}
+
+	payment_entries = {}
+	if payment_entry_names:
+		for row in frappe.get_all(
+			"Payment Entry",
+			filters={"name": ["in", list(payment_entry_names)]},
+			fields=["name", "party_type", "party"],
+		):
+			payment_entries[row.name] = row
+
+	journal_entry_accounts = {}
+	if journal_entry_names:
+		for row in frappe.get_all(
+			"Journal Entry Account",
+			filters={"parent": ["in", list(journal_entry_names)]},
+			fields=["parent", "account", "party_type", "party", "reference_type", "reference_name", "idx"],
+			order_by="idx asc",
+		):
+			journal_entry_accounts.setdefault(row.parent, []).append(row)
+
+	sales_invoices = {}
+	if sales_invoice_names:
+		for row in frappe.get_all(
+			"Sales Invoice",
+			filters={"name": ["in", list(sales_invoice_names)]},
+			fields=["name", "customer"],
+		):
+			sales_invoices[row.name] = row
+
+	purchase_invoices = {}
+	if purchase_invoice_names:
+		for row in frappe.get_all(
+			"Purchase Invoice",
+			filters={"name": ["in", list(purchase_invoice_names)]},
+			fields=["name", "supplier"],
+		):
+			purchase_invoices[row.name] = row
+
+	display_cache = {}
+	meta_cache = {}
+
+	bank_gl_account_cache = {}
+
+	for transaction in transactions:
+		transaction["party_display"] = ""
+		payment_document = transaction.get("payment_document")
+		docname = transaction.get("payment_entry")
+
+		party_type = None
+		party = None
+
+		if payment_document == "Payment Entry" and docname in payment_entries:
+			party_type = payment_entries[docname].get("party_type")
+			party = payment_entries[docname].get("party")
+		elif payment_document == "Journal Entry" and docname in journal_entry_accounts:
+			bank_account_name = transaction.get("bank_account")
+			if bank_account_name not in bank_gl_account_cache:
+				bank_gl_account_cache[bank_account_name] = frappe.get_cached_value(
+					"Bank Account", bank_account_name, "account"
+				) or ""
+			party_type, party = _get_je_linked_party_reference(
+				journal_entry_accounts.get(docname, []),
+				bank_gl_account_cache[bank_account_name],
+			)
+		elif payment_document == "Sales Invoice" and docname in sales_invoices:
+			party_type = "Customer"
+			party = sales_invoices[docname].get("customer")
+		elif payment_document == "Purchase Invoice" and docname in purchase_invoices:
+			party_type = "Supplier"
+			party = purchase_invoices[docname].get("supplier")
+
+		transaction["party_display"] = _get_party_display_value(
+			party_type,
+			party,
+			display_cache=display_cache,
+			meta_cache=meta_cache,
+		)
+
+
+@frappe.whitelist()
+def get_abr_default_settings():
+	"""Return default action settings for the reconciliation dialog."""
+	settings = frappe.get_single("Advance Bank Reconciliation Settings")
+	return {
+		"default_reconciliation_action": settings.default_reconciliation_action or "Match Against Voucher",
+		"default_document_type": settings.default_document_type or "Payment Entry",
+		"default_journal_entry_type": settings.default_journal_entry_type or "Bank Entry",
+	}
+
+
+@frappe.whitelist()
+def get_accounting_dimensions_for_dialog():
+	"""Return accounting dimension fields for use in the reconciliation dialog."""
+	try:
+		from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
+			get_accounting_dimensions,
+		)
+		dimensions = get_accounting_dimensions(as_list=False)
+	except ImportError:
+		return []
+	except Exception:
+		logger.warning("Failed to fetch accounting dimensions for dialog", exc_info=True)
+		return []
+
+	result = []
+	for dim in dimensions:
+		has_company_field = bool(frappe.get_meta(dim.document_type).has_field("company"))
+		result.append({
+			"fieldname": dim.fieldname,
+			"fieldtype": "Link",
+			"label": dim.label,
+			"options": dim.document_type,
+			"has_company_field": has_company_field,
+		})
+	return result
+
+
 @frappe.whitelist()
 def get_bank_transactions(bank_account, from_date=None, to_date=None):
 	# returns bank transactions for a bank account
@@ -52,6 +246,7 @@ def get_bank_transactions(bank_account, from_date=None, to_date=None):
 			"party_type",
 			"party",
 			"custom_particulars",
+			"custom_code",
 			"bank_party_name",
 		],
 		filters=filters,
@@ -82,11 +277,14 @@ def get_reconciled_bank_transactions(bank_account, from_date=None, to_date=None)
 			bt_payments.payment_document,
 			bt_payments.payment_entry,
 			bt_payments.allocated_amount,
+			bank_transaction.custom_particulars,
+			bank_transaction.custom_code,
+			bank_transaction.bank_party_name,
 		)
 		.left_join(bt_payments).on(bank_transaction.name == bt_payments.parent)
 		.where(bank_transaction.bank_account == bank_account)
 		.where(bank_transaction.docstatus == 1)
-		# Include reconciled transactions with a negative unallocated amount to avoid 
+		# Include reconciled transactions with a negative unallocated amount to avoid
 		# missing reconciled transactions from both tables.
 		.where(bank_transaction.unallocated_amount <= 0.0)
 		.orderby(bank_transaction.date)
@@ -98,6 +296,7 @@ def get_reconciled_bank_transactions(bank_account, from_date=None, to_date=None)
 		query = query.where(bank_transaction.date >= from_date)
 
 	transactions = query.run(as_dict=True)
+	_add_party_display_to_reconciled_transactions(transactions)
 	return transactions
 
 @frappe.whitelist()
@@ -148,6 +347,7 @@ def update_bank_transaction(bank_transaction_name, reference_number, party_type=
 			"party_type",
 			"party",
 			"custom_particulars",
+			"custom_code",
 			"bank_party_name",
 		],
 	)[0]
@@ -456,10 +656,10 @@ def create_payment_entry_bts(
 		for dim_field, dim_value in sanitized_dimensions.items():
 			pe.set(dim_field, dim_value)
 
-	pe.validate()
-
 	if allow_edit:
 		return pe
+
+	pe.validate()
 
 	pe.insert()
 	pe.submit()
