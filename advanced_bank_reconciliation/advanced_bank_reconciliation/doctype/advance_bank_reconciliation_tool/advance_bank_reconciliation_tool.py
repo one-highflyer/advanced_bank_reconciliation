@@ -143,6 +143,8 @@ def _add_party_display_to_reconciled_transactions(transactions):
 	display_cache = {}
 	meta_cache = {}
 
+	bank_gl_account_cache = {}
+
 	for transaction in transactions:
 		transaction["party_display"] = ""
 		payment_document = transaction.get("payment_document")
@@ -155,9 +157,14 @@ def _add_party_display_to_reconciled_transactions(transactions):
 			party_type = payment_entries[docname].get("party_type")
 			party = payment_entries[docname].get("party")
 		elif payment_document == "Journal Entry" and docname in journal_entry_accounts:
+			bank_account_name = transaction.get("bank_account")
+			if bank_account_name not in bank_gl_account_cache:
+				bank_gl_account_cache[bank_account_name] = frappe.get_cached_value(
+					"Bank Account", bank_account_name, "account"
+				) or ""
 			party_type, party = _get_je_linked_party_reference(
 				journal_entry_accounts.get(docname, []),
-				transaction.get("bank_account"),
+				bank_gl_account_cache[bank_account_name],
 			)
 		elif payment_document == "Sales Invoice" and docname in sales_invoices:
 			party_type = "Customer"
@@ -201,11 +208,13 @@ def get_accounting_dimensions_for_dialog():
 
 	result = []
 	for dim in dimensions:
+		has_company_field = bool(frappe.get_meta(dim.document_type).has_field("company"))
 		result.append({
 			"fieldname": dim.fieldname,
 			"fieldtype": "Link",
 			"label": dim.label,
 			"options": dim.document_type,
+			"has_company_field": has_company_field,
 		})
 	return result
 

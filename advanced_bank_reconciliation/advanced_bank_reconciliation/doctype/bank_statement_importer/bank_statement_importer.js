@@ -23,7 +23,15 @@ frappe.ui.form.on('Bank Statement Importer', {
 			const target_bank_account = frappe.route_options.bank_account;
 			delete frappe.route_options.bank_account;
 			if (frm.doc.bank_account !== target_bank_account) {
-				frm.set_value("bank_account", target_bank_account);
+				frappe.db.get_value("Bank Account", target_bank_account, "company", (r) => {
+					if (r && r.company) {
+						frm.set_value("company", r.company).then(() => {
+							frm.set_value("bank_account", target_bank_account);
+						});
+					} else {
+						frm.set_value("bank_account", target_bank_account);
+					}
+				});
 			}
 		}
 	},

@@ -635,20 +635,23 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 
 		if (this.accounting_dimensions && this.accounting_dimensions.length) {
 			for (const dim of this.accounting_dimensions) {
-				voucher_fields.push({
+				const field_def = {
 					fieldname: dim.fieldname,
 					fieldtype: dim.fieldtype,
 					label: dim.label,
 					options: dim.options,
 					depends_on: "eval:doc.action=='Create Voucher'",
-					get_query: () => {
+				};
+				if (dim.has_company_field) {
+					field_def.get_query = () => {
 						return {
 							filters: {
 								company: this.company,
 							},
 						};
-					},
-				});
+					};
+				}
+				voucher_fields.push(field_def);
 			}
 		}
 
