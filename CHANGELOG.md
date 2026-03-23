@@ -1,3 +1,15 @@
+# [1.4.0](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.3.0...v1.4.0) (2026-03-23)
+
+
+### Bug Fixes
+
+* **bank-rec:** resolve JE party lookup, BSI company sync, and dimension filters ([bd812b9](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/bd812b95c7dde2c47f53de5f7172372664709707))
+
+
+### Features
+
+* **bank-rec:** improve ABR tool UX for bank reconciliation workflow ([cc4d3ac](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/cc4d3aca418ed92f66ff2d36ec320498c16b327f)), closes [#63](https://github.com/one-highflyer/advanced_bank_reconciliation/issues/63)
+
 # [1.3.0](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.2.1...v1.3.0) (2026-03-17)
 
 
