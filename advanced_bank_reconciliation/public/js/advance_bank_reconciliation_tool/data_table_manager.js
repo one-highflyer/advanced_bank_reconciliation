@@ -75,7 +75,7 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 			{
 				name: __("Bank Transaction"),
 				editable: false,
-				width: 150,
+				width: 140,
 				format: (value, row) => {
 					return frappe.form.formatters.Link(value, { options: "Bank Transaction" });
 				}
@@ -83,41 +83,46 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 			{
 				name: __("Description"),
 				editable: false,
-				width: 150
+				width: 180,
 			},
 			{
 				name: __("Reference Number"),
 				editable: false,
-				width: 150,
+				width: 120,
 			},
 			{
 				name: __("Particulars"),
 				editable: false,
-				width: 150
+				width: 120
+			},
+			{
+				name: __("Code"),
+				editable: false,
+				width: 80,
 			},
 			{
 				name: __("Bank Party"),
 				editable: false,
-				width: 150
+				width: 120
 			},
 			{
 				name: __("Deposit"),
 				editable: false,
-				width: 120,
+				width: 100,
 				format: (value) =>
 					"<span style='color:green;'>" + format_currency(value, this.currency) + "</span>",
 			},
 			{
 				name: __("Withdrawal"),
 				editable: false,
-				width: 120,
+				width: 100,
 				format: (value) =>
 					"<span style='color:red;'>" + format_currency(value, this.currency) + "</span>",
 			},
 			{
 				name: __("Unallocated Amount"),
 				editable: false,
-				width: 120,
+				width: 100,
 				format: (value) =>
 					"<span style='color:var(--blue-500);'>" +
 					format_currency(value, this.currency) +
@@ -139,7 +144,7 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 			{
 				name: __("Date"),
 				editable: false,
-				width: 110,
+				width: 100,
 			},
 			{
 				name: __("Bank Transaction"),
@@ -148,6 +153,26 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 				format: (value, row) => {
 					return frappe.form.formatters.Link(value, { options: "Bank Transaction" });
 				}
+			},
+			{
+				name: __("Party"),
+				editable: false,
+				width: 140,
+			},
+			{
+				name: __("Particulars"),
+				editable: false,
+				width: 120,
+			},
+			{
+				name: __("Code"),
+				editable: false,
+				width: 80,
+			},
+			{
+				name: __("Reference"),
+				editable: false,
+				width: 120,
 			},
 			{
 				name: __("Deposit"),
@@ -166,20 +191,20 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 			{
 				name: __("Payment Document"),
 				editable: false,
-				width: 150,
+				width: 130,
 			},
 			{
 				name: __("Payment Entry"),
 				editable: false,
-				width: 200,
+				width: 180,
 				format: (value, row) => {
-					return frappe.form.formatters.Link(value, { options: row[5].content });
+					return frappe.form.formatters.Link(value, { options: row[9].content });
 				}
 			},
 			{
 				name: __("Allocated Amount"),
 				editable: false,
-				width: 150,
+				width: 120,
 				format: (value) => `<span class="px-2">${format_currency(value, this.currency)}</span>`,
 			},
 			{
@@ -211,9 +236,10 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 		return [
 			row["date"],
 			row["name"],
-			row["description"],
+			row["description"] || "",
 			row["reference_number"],
 			row["custom_particulars"],
+			row["custom_code"],
 			row["bank_party_name"],
 			row["deposit"],
 			row["withdrawal"],
@@ -235,13 +261,21 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 				"",
 				"",
 				"",
+				"",
+				"",
+				"",
+				"",
 			]
 		} else {
 			transaction = [
 				row["date"],
 				row["name"],
+				row["party_display"] || "",
+				row["custom_particulars"] || "",
+				row["custom_code"] || "",
+				row["reference_number"] || "",
 				row["deposit"],
-				row["withdrawal"]
+				row["withdrawal"],
 			];
 			unreconcile_btn = `<button class="btn btn-default btn-xs btn-unreconcile" data-bank-transaction="${row["name"]}">${__("Unreconcile")}</button>`;
 		}

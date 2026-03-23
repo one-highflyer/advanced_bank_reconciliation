@@ -42,21 +42,12 @@ frappe.ui.form.on("Advance Bank Reconciliation Tool", {
 		frappe.require("advance-bank-reconciliation-tool.bundle.js", () => frm.trigger("make_reconciliation_tool"));
 
 		frm.add_custom_button(__("Upload Bank Statement"), () => {
-			frappe.set_route("Form", "Bank Statement Importer");
-		});
-
-		frm.add_custom_button(__("Auto Reconcile"), function () {
-			frappe.call({
-				method: "erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.auto_reconcile_vouchers",
-				args: {
-					bank_account: frm.doc.bank_account,
-					from_date: frm.doc.bank_statement_from_date,
-					to_date: frm.doc.bank_statement_to_date,
-					filter_by_reference_date: frm.doc.filter_by_reference_date,
-					from_reference_date: frm.doc.from_reference_date,
-					to_reference_date: frm.doc.to_reference_date,
-				},
-			});
+			const route = "Bank Statement Importer";
+			if (frm.doc.bank_account) {
+				frappe.set_route("Form", route, { bank_account: frm.doc.bank_account });
+			} else {
+				frappe.set_route("Form", route);
+			}
 		});
 
 		frm.add_custom_button(__("Get Unreconciled Entries"), function () {
@@ -64,11 +55,6 @@ frappe.ui.form.on("Advance Bank Reconciliation Tool", {
 			frm.trigger("validate_bank_transactions");
 		});
 		frm.change_custom_button_type("Get Unreconciled Entries", null, "primary");
-
-		// Add validation button
-		frm.add_custom_button(__("Batch Validate Transactions"), function () {
-			frm.trigger("batch_validate_transactions");
-		}, __("Validation"));
 
 		frm.add_custom_button(__("Run Bank Rules"), function () {
 			if (!frm.doc.bank_account || !frm.doc.bank_statement_from_date || !frm.doc.bank_statement_to_date) {
@@ -86,6 +72,31 @@ frappe.ui.form.on("Advance Bank Reconciliation Tool", {
 					frm.refresh();
 				},
 			});
+		}, __("Reconcile"));
+
+		frm.add_custom_button(__("Auto Reconcile"), function () {
+			if (!frm.doc.bank_account) {
+				frappe.msgprint(__("Please select a bank account first"));
+				return;
+			}
+			frappe.call({
+				method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.auto_reconcile_vouchers",
+				args: {
+					bank_account: frm.doc.bank_account,
+					from_date: frm.doc.bank_statement_from_date,
+					to_date: frm.doc.bank_statement_to_date,
+					filter_by_reference_date: frm.doc.filter_by_reference_date,
+					from_reference_date: frm.doc.from_reference_date,
+					to_reference_date: frm.doc.to_reference_date,
+				},
+				callback: function () {
+					frm.refresh();
+				},
+			});
+		}, __("Reconcile"));
+
+		frm.add_custom_button(__("Batch Validate Transactions"), function () {
+			frm.trigger("batch_validate_transactions");
 		}, __("Validation"));
 	},
 

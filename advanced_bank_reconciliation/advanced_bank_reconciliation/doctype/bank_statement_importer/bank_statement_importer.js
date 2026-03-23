@@ -19,6 +19,13 @@ frappe.ui.form.on('Bank Statement Importer', {
 				},
 			};
 		});
+		if (frappe.route_options && frappe.route_options.bank_account) {
+			const target_bank_account = frappe.route_options.bank_account;
+			delete frappe.route_options.bank_account;
+			if (frm.doc.bank_account !== target_bank_account) {
+				frm.set_value("bank_account", target_bank_account);
+			}
+		}
 	},
 	bank_account(frm) {
 		const wrapper = frm.get_field("last_transaction_html").$wrapper;

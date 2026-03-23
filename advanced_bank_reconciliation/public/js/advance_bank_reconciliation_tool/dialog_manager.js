@@ -23,6 +23,10 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		this.to_reference_date = to_reference_date;
 	}
 	show_dialog(bank_transaction_name, update_dt_cards) {
+		if (!this.dialog) {
+			frappe.msgprint(__("The reconciliation dialog failed to initialize. Please reload the page."));
+			return;
+		}
 		this.bank_transaction_name = bank_transaction_name;
 		this.update_dt_cards = update_dt_cards;
 		frappe.call({
@@ -45,6 +49,9 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 					"unallocated_amount",
 					"allocated_amount",
 					"transaction_type",
+					"custom_particulars",
+					"custom_code",
+					"bank_party_name",
 				],
 			},
 			callback: (r) => {
@@ -52,6 +59,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 					this.bank_transaction = r.message;
 					r.message.payment_entry = 1;
 					r.message.journal_entry = 1;
+					r.message.bt_reference_number = r.message.reference_number || "";
 					this.dialog.set_values(r.message);
 					this.copy_data_to_voucher();
 					this.dialog.show();
@@ -94,8 +102,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				to_reference_date: this.to_reference_date,
 			},
 		});
-		console.log("get payment entries result", result.message.length);
-		let data = result.message;
+		let data = (result && result.message) || [];
 
 		if (data && data.length > 0) {
 			data = await this.apply_customer_group_filter(data);
@@ -337,13 +344,33 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		const me = this;
 		me.selected_payment = null;
 
+		try {
+			const settings_res = await frappe.call({
+				method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_abr_default_settings"
+			});
+			this.default_settings = (settings_res && settings_res.message) || {};
+		} catch (e) {
+			console.error("Failed to load ABR default settings", e);
+			this.default_settings = {};
+		}
+
+		try {
+			const dims_res = await frappe.call({
+				method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_accounting_dimensions_for_dialog"
+			});
+			this.accounting_dimensions = (dims_res && dims_res.message) || [];
+		} catch (e) {
+			console.error("Failed to load accounting dimensions", e);
+			this.accounting_dimensions = [];
+		}
+
 		const fields = [
 			{
 				label: __("Action"),
 				fieldname: "action",
 				fieldtype: "Select",
 				options: `Match Against Voucher\nCreate Voucher\nUpdate Bank Transaction`,
-				default: "Match Against Voucher",
+				default: this.default_settings.default_reconciliation_action || "Match Against Voucher",
 			},
 			{
 				fieldname: "column_break_4",
@@ -354,7 +381,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				fieldname: "document_type",
 				fieldtype: "Select",
 				options: `Payment Entry\nJournal Entry`,
-				default: "Payment Entry",
+				default: this.default_settings.default_document_type || "Payment Entry",
 				depends_on: "eval:doc.action=='Create Voucher'",
 			},
 			{
@@ -365,39 +392,44 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			},
 		];
 
-		const r = await frappe.call({
-			method: "erpnext.accounts.doctype.bank_transaction.bank_transaction.get_doctypes_for_bank_reconciliation"
-		});
-		console.log("get_doctypes_for_bank_reconciliation", r.message);
-		$.each(r.message, (_i, entry) => {
-			// Create more balanced columns: 2-3-2 distribution for typical 7 checkboxes
-			if (fields.length % 4 == 0) {
-				fields.push({
-					fieldtype: "Column Break",
-				});
-			}
-			fields.push({
-				fieldtype: "Check",
-				label: entry,
-				fieldname: frappe.scrub(entry),
-				onchange: () => this.update_options(),
+		try {
+			const r = await frappe.call({
+				method: "erpnext.accounts.doctype.bank_transaction.bank_transaction.get_doctypes_for_bank_reconciliation"
 			});
-		});
+			$.each((r && r.message) || [], (_i, entry) => {
+				if (fields.length % 4 == 0) {
+					fields.push({
+						fieldtype: "Column Break",
+					});
+				}
+				fields.push({
+					fieldtype: "Check",
+					label: entry,
+					fieldname: frappe.scrub(entry),
+					onchange: () => this.update_options(),
+				});
+			});
+		} catch (e) {
+			console.error("Failed to load reconciliation doctypes", e);
+		}
 
-		const filters_res = await frappe.call({
-			method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_additional_filters"
-		});
-		console.log("additional filters response", filters_res.message);
-		this.additional_filters = filters_res.message;
-		$.each(filters_res.message, (_i, entry) => {
-			console.log("Adding custom filter", entry.fieldname);
-			fields.push({
-				fieldtype: entry.fieldtype,
-				label: entry.label || entry.fieldname,
-				fieldname: entry.fieldname,
-				onchange: () => this.update_options()
-			})
-		});
+		try {
+			const filters_res = await frappe.call({
+				method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.get_additional_filters"
+			});
+			this.additional_filters = (filters_res && filters_res.message) || [];
+			$.each(this.additional_filters, (_i, entry) => {
+				fields.push({
+					fieldtype: entry.fieldtype,
+					label: entry.label || entry.fieldname,
+					fieldname: entry.fieldname,
+					onchange: () => this.update_options()
+				})
+			});
+		} catch (e) {
+			console.error("Failed to load additional filters", e);
+			this.additional_filters = [];
+		}
 
 		fields.push(...this.get_voucher_fields());
 
@@ -410,7 +442,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 	}
 
 	get_voucher_fields() {
-		return [
+		const voucher_fields = [
 			{
 				fieldtype: "Check",
 				label: "Show Only Exact Amount",
@@ -441,7 +473,6 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				fieldname: "from_date",
 				default: this.from_date,
 				onchange: (e) => {
-					console.log('Date changed', e.target.value);
 					this.from_date = frappe.datetime.user_to_str(e.target.value);
 					this.update_options()
 				},
@@ -449,17 +480,16 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			{
 				fieldtype: "Date",
 				label: "To Date",
-				fieldname: "from_date",
+				fieldname: "to_date",
 				default: this.to_date,
 				onchange: (e) => {
-					console.log('Date changed', e.target.value);
 					this.to_date = frappe.datetime.user_to_str(e.target.value);
 					this.update_options()
 				},
 			},
 			{
 				fieldtype: "Section Break",
-				fieldname: "section_break_1",
+				fieldname: "section_break_vouchers",
 				label: __("Select Vouchers to Match"),
 				depends_on: "eval:doc.action=='Match Against Voucher'",
 			},
@@ -527,24 +557,24 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				fieldtype: "Column Break",
 			},
 			{
-				default: "Bank Entry",
+				default: this.default_settings.default_journal_entry_type || "Bank Entry",
 				fieldname: "journal_entry_type",
 				fieldtype: "Select",
 				label: "Journal Entry Type",
 				options:
 					"Journal Entry\nInter Company Journal Entry\nBank Entry\nCash Entry\nCredit Card Entry\nDebit Note\nCredit Note\nContra Entry\nExcise Entry\nWrite Off Entry\nOpening Entry\nDepreciation Entry\nExchange Rate Revaluation\nDeferred Revenue\nDeferred Expense",
-				depends_on: "eval:doc.action=='Create Voucher' &&  doc.document_type=='Journal Entry'",
+				depends_on: "eval:doc.action=='Create Voucher' && doc.document_type=='Journal Entry'",
 				mandatory_depends_on:
-					"eval:doc.action=='Create Voucher' &&  doc.document_type=='Journal Entry'",
+					"eval:doc.action=='Create Voucher' && doc.document_type=='Journal Entry'",
 			},
 			{
 				fieldname: "second_account",
 				fieldtype: "Link",
 				label: "Account",
 				options: "Account",
-				depends_on: "eval:doc.action=='Create Voucher' &&  doc.document_type=='Journal Entry'",
+				depends_on: "eval:doc.action=='Create Voucher' && doc.document_type=='Journal Entry'",
 				mandatory_depends_on:
-					"eval:doc.action=='Create Voucher' &&  doc.document_type=='Journal Entry'",
+					"eval:doc.action=='Create Voucher' && doc.document_type=='Journal Entry'",
 				get_query: () => {
 					return {
 						filters: {
@@ -559,8 +589,9 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				fieldtype: "Link",
 				label: "Party Type",
 				options: "DocType",
+				depends_on: "eval:doc.action=='Create Voucher'",
 				mandatory_depends_on:
-					"eval:doc.action=='Create Voucher' &&  doc.document_type=='Payment Entry'",
+					"eval:doc.action=='Create Voucher' && doc.document_type=='Payment Entry'",
 				get_query: function () {
 					return {
 						filters: {
@@ -574,6 +605,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				fieldtype: "Dynamic Link",
 				label: "Party",
 				options: "party_type",
+				depends_on: "eval:doc.action=='Create Voucher'",
 				mandatory_depends_on:
 					"eval:doc.action=='Create Voucher' && doc.document_type=='Payment Entry'",
 			},
@@ -582,15 +614,45 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				fieldtype: "Link",
 				label: "Project",
 				options: "Project",
-				depends_on: "eval:doc.action=='Create Voucher' && doc.document_type=='Payment Entry'",
+				depends_on: "eval:doc.action=='Create Voucher'",
 			},
 			{
 				fieldname: "cost_center",
 				fieldtype: "Link",
 				label: "Cost Center",
 				options: "Cost Center",
-				depends_on: "eval:doc.action=='Create Voucher' && doc.document_type=='Payment Entry'",
+				depends_on: "eval:doc.action=='Create Voucher'",
+				get_query: () => {
+					return {
+						filters: {
+							is_group: 0,
+							company: this.company,
+						},
+					};
+				},
 			},
+		];
+
+		if (this.accounting_dimensions && this.accounting_dimensions.length) {
+			for (const dim of this.accounting_dimensions) {
+				voucher_fields.push({
+					fieldname: dim.fieldname,
+					fieldtype: dim.fieldtype,
+					label: dim.label,
+					options: dim.options,
+					depends_on: "eval:doc.action=='Create Voucher'",
+					get_query: () => {
+						return {
+							filters: {
+								company: this.company,
+							},
+						};
+					},
+				});
+			}
+		}
+
+		voucher_fields.push(
 			{
 				fieldtype: "Section Break",
 				fieldname: "details_section",
@@ -619,6 +681,17 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			{
 				fieldname: "column_break_17",
 				fieldtype: "Column Break",
+			},
+			{
+				fieldname: "bank_party_name",
+				fieldtype: "Data",
+				label: "Bank Party",
+				read_only: 1,
+			},
+			{
+				fieldname: "bt_reference_number",
+				fieldtype: "Data",
+				label: "Reference Number",
 				read_only: 1,
 			},
 			{
@@ -626,6 +699,26 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				fieldtype: "Small Text",
 				label: "Description",
 				read_only: 1,
+			},
+			{
+				fieldtype: "Section Break",
+				fieldname: "details_section_2",
+			},
+			{
+				fieldname: "custom_particulars",
+				fieldtype: "Data",
+				label: "Particulars",
+				read_only: 1,
+			},
+			{
+				fieldname: "custom_code",
+				fieldtype: "Data",
+				label: "Code",
+				read_only: 1,
+			},
+			{
+				fieldname: "column_break_18",
+				fieldtype: "Column Break",
 			},
 			{
 				fieldname: "allocated_amount",
@@ -649,7 +742,9 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				read_only: 1,
 				hidden: 1,
 			},
-		];
+		);
+
+		return voucher_fields;
 	}
 
 	get_selected_attributes() {
@@ -670,26 +765,32 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 	}
 
 	reconciliation_dialog_primary_action(values) {
-		if (values.action == "Match Against Voucher") this.match(values);
-		if (values.action == "Create Voucher" && values.document_type == "Payment Entry")
+		if (values.action == "Match Against Voucher") {
+			this.match(values);
+		} else if (values.action == "Create Voucher" && values.document_type == "Payment Entry") {
 			this.add_payment_entry(values);
-		if (values.action == "Create Voucher" && values.document_type == "Journal Entry")
+		} else if (values.action == "Create Voucher" && values.document_type == "Journal Entry") {
 			this.add_journal_entry(values);
-		else if (values.action == "Update Bank Transaction") this.update_transaction(values);
+		} else if (values.action == "Update Bank Transaction") {
+			this.update_transaction(values);
+		}
 	}
 
 	match() {
 		var selected_map = this.datatable.rowmanager.checkMap;
-		let rows = [];
 		let selectedRows = [];
 		selected_map.forEach((val, index) => {
 			if (val == 1) {
-				rows.push(this.datatable.datamanager.rows[index]);
-				selectedRows.push(this.vouchers[index]);
+				const filteredRowData = this.datatable.datamanager.data[index];
+				const voucher = this.vouchers.find(v =>
+					v[1] === filteredRowData[0] && v[2] === filteredRowData[1]
+				);
+				if (voucher) {
+					selectedRows.push(voucher);
+				}
 			}
 		});
-		console.log("Selected vouchers", selectedRows);
-		
+
 		if (selectedRows.length === 0) {
 			frappe.msgprint(__("Please select at least one voucher to match"));
 			return;
@@ -907,8 +1008,10 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				mode_of_payment: values.mode_of_payment,
 				project: values.project,
 				cost_center: values.cost_center,
+				dimensions: this._get_dimensions_from_dialog(values),
 			},
 			callback: (response) => {
+				if (!response || !response.message) return;
 				const alert_string = __("Bank Transaction {0} added as Payment Entry", [
 					this.bank_transaction.name,
 				]);
@@ -917,6 +1020,17 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				this.dialog.hide();
 			},
 		});
+	}
+
+	_get_dimensions_from_dialog(values) {
+		if (!this.accounting_dimensions || !this.accounting_dimensions.length) return null;
+		const dims = {};
+		for (const dim of this.accounting_dimensions) {
+			if (values[dim.fieldname]) {
+				dims[dim.fieldname] = values[dim.fieldname];
+			}
+		}
+		return Object.keys(dims).length ? JSON.stringify(dims) : null;
 	}
 
 	add_journal_entry(values) {
@@ -932,8 +1046,12 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				mode_of_payment: values.mode_of_payment,
 				entry_type: values.journal_entry_type,
 				second_account: values.second_account,
+				cost_center: values.cost_center,
+				project: values.project,
+				dimensions: this._get_dimensions_from_dialog(values),
 			},
 			callback: (response) => {
+				if (!response || !response.message) return;
 				const alert_string = __("Bank Transaction {0} added as Journal Entry", [
 					this.bank_transaction.name,
 				]);
@@ -966,7 +1084,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		const values = this.dialog.get_values(true);
 		if (values.document_type == "Payment Entry") {
 			frappe.call({
-				method: "erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.create_payment_entry_bts",
+				method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.create_payment_entry_bts",
 				args: {
 					bank_transaction_name: this.bank_transaction.name,
 					reference_number: values.reference_number,
@@ -977,6 +1095,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 					mode_of_payment: values.mode_of_payment,
 					project: values.project,
 					cost_center: values.cost_center,
+					dimensions: this._get_dimensions_from_dialog(values),
 					allow_edit: true,
 				},
 				callback: (r) => {
@@ -986,7 +1105,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			});
 		} else {
 			frappe.call({
-				method: "erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.create_journal_entry_bts",
+				method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.create_journal_entry_bts",
 				args: {
 					bank_transaction_name: this.bank_transaction.name,
 					reference_number: values.reference_number,
@@ -997,6 +1116,9 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 					mode_of_payment: values.mode_of_payment,
 					entry_type: values.journal_entry_type,
 					second_account: values.second_account,
+					cost_center: values.cost_center,
+					project: values.project,
+					dimensions: this._get_dimensions_from_dialog(values),
 					allow_edit: true,
 				},
 				callback: (r) => {
