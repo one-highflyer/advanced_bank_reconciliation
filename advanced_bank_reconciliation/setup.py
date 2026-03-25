@@ -131,13 +131,13 @@ def get_property_setters():
 
 
 def get_extended_reference_type_options():
-    """Extend JE Account reference_type options with Customer/Supplier.
+    """Extend JE Account reference_type options with Customer/Supplier/Employee.
 
     This allows bank rules to store a party reference on non-Receivable/Payable
     accounts (e.g., tracking a customer donation on an income account) without
     triggering ERPNext's party-account-type validation.
     """
-    new_types = ["Customer", "Supplier"]
+    new_types = ["Customer", "Supplier", "Employee"]
 
     try:
         meta = frappe.get_meta("Journal Entry Account")
