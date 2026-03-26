@@ -1,3 +1,10 @@
+## [1.4.2](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.4.1...v1.4.2) (2026-03-26)
+
+
+### Bug Fixes
+
+* **bank-rule:** fallback to transaction name when reference_number is empty ([f920537](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/f920537829dc9d1932b99ae9d907d306eff33b0b))
+
 ## [1.4.1](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.4.0...v1.4.1) (2026-03-26)
 
 
