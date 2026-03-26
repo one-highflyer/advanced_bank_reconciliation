@@ -1,3 +1,10 @@
+## [1.4.1](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.4.0...v1.4.1) (2026-03-26)
+
+
+### Bug Fixes
+
+* **bank-rec:** add Employee as JE Account reference_type option ([a19d635](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/a19d63590ab9fb0726b171116617244516f297b9))
+
 # [1.4.0](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.3.0...v1.4.0) (2026-03-23)
 
 
