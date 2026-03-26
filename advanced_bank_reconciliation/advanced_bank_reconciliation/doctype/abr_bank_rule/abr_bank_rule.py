@@ -286,7 +286,7 @@ def _execute_rule_action(transaction, rule, logger):
 	elif rule.entry_type == "Payment Entry":
 		create_payment_entry_bts(
 			transaction.name,
-			transaction.reference_number,
+			transaction.reference_number or transaction.name,
 			transaction.date,
 			party_type=rule.party_type,
 			party=rule.party,
