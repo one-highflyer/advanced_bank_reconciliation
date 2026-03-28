@@ -1,3 +1,11 @@
+# [1.5.0](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.4.2...v1.5.0) (2026-03-28)
+
+
+### Features
+
+* add Accounts Manager and Accounts User roles to Bank Statement Importer ([173b3bb](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/173b3bbe04087bad29035157d4713af71ed31b13))
+* add create permission for ABR Bank Rule to Accounts User role ([d6b9082](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/d6b9082f549c91211960220283752b62e4c51378))
+
 ## [1.4.2](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.4.1...v1.4.2) (2026-03-26)
 
 
