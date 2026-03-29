@@ -1,3 +1,16 @@
+# [1.7.0](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.6.0...v1.7.0) (2026-03-29)
+
+
+### Bug Fixes
+
+* default Particulars condition to Equals instead of Contains ([78eabb4](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/78eabb4e83c8ec8a5f21dbe38d833133e1917aa8))
+
+
+### Features
+
+* inline save-as-rule opt-in, deposit/withdrawal condition, bank party column ([0d70642](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/0d706426342ee94bc29ad4824f7d09ed9913eb40))
+* prompt to save bank rule after manual voucher creation ([8eb209f](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/8eb209f1764ea47d1f016e4c53e2eaa803987240))
+
 # [1.6.0](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.5.0...v1.6.0) (2026-03-29)
 
 
