@@ -160,6 +160,11 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 				width: 140,
 			},
 			{
+				name: __("Bank Party"),
+				editable: false,
+				width: 140,
+			},
+			{
 				name: __("Particulars"),
 				editable: false,
 				width: 120,
@@ -198,7 +203,7 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 				editable: false,
 				width: 180,
 				format: (value, row) => {
-					return frappe.form.formatters.Link(value, { options: row[9].content });
+					return frappe.form.formatters.Link(value, { options: row[10].content });
 				}
 			},
 			{
@@ -265,12 +270,14 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 				"",
 				"",
 				"",
+				"",
 			]
 		} else {
 			transaction = [
 				row["date"],
 				row["name"],
 				row["party_display"] || "",
+				row["bank_party_name"] || "",
 				row["custom_particulars"] || "",
 				row["custom_code"] || "",
 				row["reference_number"] || "",

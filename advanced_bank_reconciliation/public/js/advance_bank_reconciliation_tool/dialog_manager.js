@@ -658,6 +658,19 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		voucher_fields.push(
 			{
 				fieldtype: "Section Break",
+				fieldname: "save_rule_section",
+				depends_on: "eval:doc.action=='Create Voucher'",
+			},
+			{
+				label: __("Save as Bank Rule"),
+				fieldname: "save_as_bank_rule",
+				fieldtype: "Check",
+				default: 0,
+				depends_on: "eval:doc.action=='Create Voucher'",
+				description: __("Save this allocation as a bank rule for future auto-matching"),
+			},
+			{
+				fieldtype: "Section Break",
 				fieldname: "details_section",
 				label: "Transaction Details",
 			},
@@ -1020,7 +1033,11 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				]);
 				frappe.show_alert(alert_string);
 				this.update_dt_cards(response.message);
-				this.dialog.hide();
+				if (values.save_as_bank_rule) {
+					this._show_save_bank_rule_dialog("Payment Entry", values);
+				} else {
+					this.dialog.hide();
+				}
 			},
 		});
 	}
@@ -1034,6 +1051,263 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			}
 		}
 		return Object.keys(dims).length ? JSON.stringify(dims) : null;
+	}
+
+	_show_save_bank_rule_dialog(entry_type, dialog_values) {
+		// Build condition rows from bank transaction fields
+		const bt = this.bank_transaction;
+		const text_operator_options = "Equals\nContains\nNot Equals\nNot Contains";
+		const numeric_operator_options = "Greater than\nGreater than or Equals\nEquals\nNot Equals\nLess Than\nLess Than or Equals";
+
+		const condition_fields = [
+			{ key: "reference_number", label: "Reference Number", field_name: "Reference Number", default_op: "Equals", default_checked: true, operators: text_operator_options },
+			{ key: "custom_particulars", label: "Particulars", field_name: "Particulars", default_op: "Equals", default_checked: true, operators: text_operator_options },
+			{ key: "custom_code", label: "Code", field_name: "Code", default_op: "Equals", default_checked: true, operators: text_operator_options },
+			{ key: "description", label: "Description", field_name: "Description", default_op: "Contains", default_checked: false, operators: text_operator_options },
+			{ key: "bank_party_name", label: "Other Party", field_name: "Other Party", default_op: "Equals", default_checked: true, operators: text_operator_options },
+		];
+
+		// Add deposit or withdrawal condition based on the transaction direction
+		if (bt.deposit > 0) {
+			condition_fields.push({ key: "deposit", label: "Deposit > 0", field_name: "Deposit", default_op: "Greater than", default_checked: false, operators: numeric_operator_options, fixed_value: "0" });
+		} else if (bt.withdrawal > 0) {
+			condition_fields.push({ key: "withdrawal", label: "Withdrawal > 0", field_name: "Withdrawal", default_op: "Greater than", default_checked: false, operators: numeric_operator_options, fixed_value: "0" });
+		}
+
+		// Only include fields that have non-empty values (deposit/withdrawal use fixed_value so always pass)
+		const available_conditions = condition_fields.filter(f => f.fixed_value !== undefined || bt[f.key]);
+
+		// If no condition fields are available, skip the prompt and hide the main dialog
+		if (available_conditions.length === 0) {
+			this.dialog.hide();
+			return;
+		}
+
+		// Pre-fill title from first non-empty of: particulars, other party, description
+		const default_title = (bt.custom_particulars || bt.bank_party_name || bt.description || "").substring(0, 140);
+
+		// Build dialog fields
+		const fields = [
+			{
+				label: __("Rule Title"),
+				fieldname: "rule_title",
+				fieldtype: "Data",
+				reqd: 1,
+				default: default_title,
+			},
+			{ fieldtype: "Section Break", label: __("Match Conditions") },
+			{
+				label: __("Match Any Condition"),
+				fieldname: "match_any_condition",
+				fieldtype: "Check",
+				default: 0,
+				description: __("If checked, the rule matches when ANY condition is met (OR logic). If unchecked, ALL conditions must match (AND logic)."),
+			},
+			{ fieldtype: "Section Break" },
+		];
+
+		// One row per available condition field
+		available_conditions.forEach((cf, idx) => {
+			const val = cf.fixed_value !== undefined ? cf.fixed_value : (bt[cf.key] || "").toString().substring(0, 140);
+			fields.push(
+				{
+					label: __(cf.label),
+					fieldname: `match_${cf.key}`,
+					fieldtype: "Check",
+					default: cf.default_checked ? 1 : 0,
+					description: cf.fixed_value !== undefined ? "" : val,
+				},
+				{ fieldtype: "Column Break" },
+				{
+					label: __("Operator"),
+					fieldname: `op_${cf.key}`,
+					fieldtype: "Select",
+					options: cf.operators,
+					default: cf.default_op,
+					depends_on: `eval:doc.match_${cf.key}`,
+				},
+				{ fieldtype: "Column Break" },
+				{
+					label: __("Value"),
+					fieldname: `val_${cf.key}`,
+					fieldtype: "Data",
+					default: val,
+					read_only: 1,
+					depends_on: `eval:doc.match_${cf.key}`,
+				}
+			);
+			// Add section break between condition rows (not after the last one)
+			if (idx < available_conditions.length - 1) {
+				fields.push({ fieldtype: "Section Break" });
+			}
+		});
+
+		// Action section (all read-only, pre-filled from what was just created)
+		fields.push({ fieldtype: "Section Break", label: __("Action") });
+		fields.push({
+			label: __("Entry Type"),
+			fieldname: "action_entry_type",
+			fieldtype: "Data",
+			default: entry_type,
+			read_only: 1,
+		});
+
+		if (entry_type === "Journal Entry" && dialog_values.second_account) {
+			fields.push({ fieldtype: "Column Break" });
+			fields.push({
+				label: __("Account"),
+				fieldname: "action_account",
+				fieldtype: "Link",
+				options: "Account",
+				default: dialog_values.second_account,
+				read_only: 1,
+			});
+		}
+
+		if (dialog_values.party_type) {
+			fields.push({ fieldtype: "Column Break" });
+			fields.push({
+				label: __("Party Type"),
+				fieldname: "action_party_type",
+				fieldtype: "Data",
+				default: dialog_values.party_type,
+				read_only: 1,
+			});
+		}
+
+		if (dialog_values.party) {
+			fields.push({ fieldtype: "Column Break" });
+			fields.push({
+				label: __("Party"),
+				fieldname: "action_party",
+				fieldtype: "Data",
+				default: dialog_values.party,
+				read_only: 1,
+			});
+		}
+
+		if (dialog_values.cost_center) {
+			fields.push({ fieldtype: "Column Break" });
+			fields.push({
+				label: __("Cost Center"),
+				fieldname: "action_cost_center",
+				fieldtype: "Link",
+				options: "Cost Center",
+				default: dialog_values.cost_center,
+				read_only: 1,
+			});
+		}
+
+		if (dialog_values.project) {
+			fields.push({ fieldtype: "Column Break" });
+			fields.push({
+				label: __("Project"),
+				fieldname: "action_project",
+				fieldtype: "Link",
+				options: "Project",
+				default: dialog_values.project,
+				read_only: 1,
+			});
+		}
+
+		// Accounting dimensions
+		if (this.accounting_dimensions && this.accounting_dimensions.length) {
+			this.accounting_dimensions.forEach(dim => {
+				const dim_val = dialog_values[dim.fieldname];
+				if (dim_val) {
+					fields.push({ fieldtype: "Column Break" });
+					fields.push({
+						label: dim.label,
+						fieldname: `action_dim_${dim.fieldname}`,
+						fieldtype: "Link",
+						options: dim.options,
+						default: dim_val,
+						read_only: 1,
+					});
+				}
+			});
+		}
+
+		const me = this;
+		const rule_dialog = new frappe.ui.Dialog({
+			title: __("Save as Bank Rule"),
+			size: "large",
+			fields: fields,
+			primary_action_label: __("Save Rule"),
+			primary_action(values) {
+				// Validate at least one condition is checked
+				const conditions = [];
+				available_conditions.forEach(cf => {
+					if (values[`match_${cf.key}`]) {
+						conditions.push({
+							field_name: cf.field_name,
+							condition: values[`op_${cf.key}`],
+							value: values[`val_${cf.key}`],
+						});
+					}
+				});
+
+				if (conditions.length === 0) {
+					frappe.msgprint(__("Please select at least one match condition."));
+					return;
+				}
+
+				// Build dimensions dict
+				const dimensions = {};
+				if (me.accounting_dimensions && me.accounting_dimensions.length) {
+					me.accounting_dimensions.forEach(dim => {
+						const dim_val = dialog_values[dim.fieldname];
+						if (dim_val) {
+							dimensions[dim.fieldname] = dim_val;
+						}
+					});
+				}
+
+				frappe.call({
+					method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.abr_bank_rule.abr_bank_rule.create_bank_rule_from_voucher",
+					args: {
+						bank_transaction_name: me.bank_transaction.name,
+						title: values.rule_title,
+						entry_type: entry_type,
+						match_any_condition: values.match_any_condition ? 1 : 0,
+						conditions: JSON.stringify(conditions),
+						second_account: (entry_type === "Journal Entry") ? dialog_values.second_account : null,
+						party_type: dialog_values.party_type || null,
+						party: dialog_values.party || null,
+						cost_center: dialog_values.cost_center || null,
+						project: dialog_values.project || null,
+						dimensions: JSON.stringify(dimensions),
+					},
+					freeze: true,
+					freeze_message: __("Saving bank rule..."),
+					callback(r) {
+						if (r.message) {
+							const title = frappe.utils.escape_html(r.message.title);
+							frappe.show_alert({
+								message: __("Bank Rule {0} created", [`<a href="/app/abr-bank-rule/${r.message.name}">${title}</a>`]),
+								indicator: "green",
+							});
+						}
+						rule_dialog.hide();
+						me.dialog.hide();
+					},
+					error() {
+						rule_dialog.get_primary_btn().prop("disabled", false);
+					},
+				});
+			},
+			secondary_action_label: __("Skip"),
+			secondary_action() {
+				rule_dialog.hide();
+				me.dialog.hide();
+			},
+		});
+
+		rule_dialog.onhide = () => {
+			me.dialog.hide();
+		};
+
+		rule_dialog.show();
 	}
 
 	add_journal_entry(values) {
@@ -1060,7 +1334,11 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				]);
 				frappe.show_alert(alert_string);
 				this.update_dt_cards(response.message);
-				this.dialog.hide();
+				if (values.save_as_bank_rule) {
+					this._show_save_bank_rule_dialog("Journal Entry", values);
+				} else {
+					this.dialog.hide();
+				}
 			},
 		});
 	}
