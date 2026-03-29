@@ -658,6 +658,19 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		voucher_fields.push(
 			{
 				fieldtype: "Section Break",
+				fieldname: "save_rule_section",
+				depends_on: "eval:doc.action=='Create Voucher'",
+			},
+			{
+				label: __("Save as Bank Rule"),
+				fieldname: "save_as_bank_rule",
+				fieldtype: "Check",
+				default: 0,
+				depends_on: "eval:doc.action=='Create Voucher'",
+				description: __("Save this allocation as a bank rule for future auto-matching"),
+			},
+			{
+				fieldtype: "Section Break",
 				fieldname: "details_section",
 				label: "Transaction Details",
 			},
@@ -1020,7 +1033,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				]);
 				frappe.show_alert(alert_string);
 				this.update_dt_cards(response.message);
-				if (this.default_settings.prompt_to_save_bank_rule) {
+				if (values.save_as_bank_rule) {
 					this._show_save_bank_rule_dialog("Payment Entry", values);
 				} else {
 					this.dialog.hide();
@@ -1043,16 +1056,26 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 	_show_save_bank_rule_dialog(entry_type, dialog_values) {
 		// Build condition rows from bank transaction fields
 		const bt = this.bank_transaction;
+		const text_operator_options = "Equals\nContains\nNot Equals\nNot Contains";
+		const numeric_operator_options = "Greater than\nGreater than or Equals\nEquals\nNot Equals\nLess Than\nLess Than or Equals";
+
 		const condition_fields = [
-			{ key: "reference_number", label: "Reference Number", field_name: "Reference Number", default_op: "Equals", default_checked: true },
-			{ key: "custom_particulars", label: "Particulars", field_name: "Particulars", default_op: "Equals", default_checked: true },
-			{ key: "custom_code", label: "Code", field_name: "Code", default_op: "Equals", default_checked: true },
-			{ key: "description", label: "Description", field_name: "Description", default_op: "Contains", default_checked: false },
-			{ key: "bank_party_name", label: "Other Party", field_name: "Other Party", default_op: "Equals", default_checked: true },
+			{ key: "reference_number", label: "Reference Number", field_name: "Reference Number", default_op: "Equals", default_checked: true, operators: text_operator_options },
+			{ key: "custom_particulars", label: "Particulars", field_name: "Particulars", default_op: "Equals", default_checked: true, operators: text_operator_options },
+			{ key: "custom_code", label: "Code", field_name: "Code", default_op: "Equals", default_checked: true, operators: text_operator_options },
+			{ key: "description", label: "Description", field_name: "Description", default_op: "Contains", default_checked: false, operators: text_operator_options },
+			{ key: "bank_party_name", label: "Other Party", field_name: "Other Party", default_op: "Equals", default_checked: true, operators: text_operator_options },
 		];
 
-		// Only include fields that have non-empty values
-		const available_conditions = condition_fields.filter(f => bt[f.key]);
+		// Add deposit or withdrawal condition based on the transaction direction
+		if (bt.deposit > 0) {
+			condition_fields.push({ key: "deposit", label: "Deposit > 0", field_name: "Deposit", default_op: "Greater than", default_checked: false, operators: numeric_operator_options, fixed_value: "0" });
+		} else if (bt.withdrawal > 0) {
+			condition_fields.push({ key: "withdrawal", label: "Withdrawal > 0", field_name: "Withdrawal", default_op: "Greater than", default_checked: false, operators: numeric_operator_options, fixed_value: "0" });
+		}
+
+		// Only include fields that have non-empty values (deposit/withdrawal use fixed_value so always pass)
+		const available_conditions = condition_fields.filter(f => f.fixed_value !== undefined || bt[f.key]);
 
 		// If no condition fields are available, skip the prompt and hide the main dialog
 		if (available_conditions.length === 0) {
@@ -1073,26 +1096,33 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				default: default_title,
 			},
 			{ fieldtype: "Section Break", label: __("Match Conditions") },
+			{
+				label: __("Match Any Condition"),
+				fieldname: "match_any_condition",
+				fieldtype: "Check",
+				default: 0,
+				description: __("If checked, the rule matches when ANY condition is met (OR logic). If unchecked, ALL conditions must match (AND logic)."),
+			},
+			{ fieldtype: "Section Break" },
 		];
 
 		// One row per available condition field
-		const operator_options = "Equals\nContains\nNot Equals\nNot Contains";
 		available_conditions.forEach((cf, idx) => {
-			const val = (bt[cf.key] || "").toString().substring(0, 140);
+			const val = cf.fixed_value !== undefined ? cf.fixed_value : (bt[cf.key] || "").toString().substring(0, 140);
 			fields.push(
 				{
 					label: __(cf.label),
 					fieldname: `match_${cf.key}`,
 					fieldtype: "Check",
 					default: cf.default_checked ? 1 : 0,
-					description: val,
+					description: cf.fixed_value !== undefined ? "" : val,
 				},
 				{ fieldtype: "Column Break" },
 				{
 					label: __("Operator"),
 					fieldname: `op_${cf.key}`,
 					fieldtype: "Select",
-					options: operator_options,
+					options: cf.operators,
 					default: cf.default_op,
 					depends_on: `eval:doc.match_${cf.key}`,
 				},
@@ -1239,6 +1269,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 						bank_transaction_name: me.bank_transaction.name,
 						title: values.rule_title,
 						entry_type: entry_type,
+						match_any_condition: values.match_any_condition ? 1 : 0,
 						conditions: JSON.stringify(conditions),
 						second_account: (entry_type === "Journal Entry") ? dialog_values.second_account : null,
 						party_type: dialog_values.party_type || null,
@@ -1303,7 +1334,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				]);
 				frappe.show_alert(alert_string);
 				this.update_dt_cards(response.message);
-				if (this.default_settings.prompt_to_save_bank_rule) {
+				if (values.save_as_bank_rule) {
 					this._show_save_bank_rule_dialog("Journal Entry", values);
 				} else {
 					this.dialog.hide();

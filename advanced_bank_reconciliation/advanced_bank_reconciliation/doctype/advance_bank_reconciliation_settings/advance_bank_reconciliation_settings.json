@@ -12,9 +12,7 @@
   "default_journal_entry_type",
   "reconciling_unpaid_invoices_section",
   "validate_selection_against_unallocated_amount",
-  "reconcile_unpaid_invoices_in_background",
-  "bank_rules_section",
-  "prompt_to_save_bank_rule"
+  "reconcile_unpaid_invoices_in_background"
  ],
  "fields": [
   {
@@ -70,25 +68,13 @@
    "fieldname": "reconcile_unpaid_invoices_in_background",
    "fieldtype": "Check",
    "label": "Reconcile unpaid invoices in background"
-  },
-  {
-   "fieldname": "bank_rules_section",
-   "fieldtype": "Section Break",
-   "label": "Bank Rules"
-  },
-  {
-   "default": "0",
-   "description": "After manually creating a voucher from the reconciliation dialog, prompt the user to save the allocation as a bank rule for future auto-matching.",
-   "fieldname": "prompt_to_save_bank_rule",
-   "fieldtype": "Check",
-   "label": "Prompt to save bank rule after manual voucher creation"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-03-29 18:00:00.000000",
+ "modified": "2026-03-29 19:00:00.000000",
  "modified_by": "Administrator",
  "module": "Advanced Bank Reconciliation",
  "name": "Advance Bank Reconciliation Settings",
