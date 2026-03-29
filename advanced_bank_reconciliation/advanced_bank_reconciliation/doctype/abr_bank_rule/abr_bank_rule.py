@@ -210,6 +210,74 @@ def run_bank_rules(bank_account, from_date, to_date):
 	}
 
 
+@frappe.whitelist()
+def create_bank_rule_from_voucher(
+	bank_transaction_name,
+	title,
+	entry_type,
+	conditions,
+	second_account=None,
+	party_type=None,
+	party=None,
+	cost_center=None,
+	project=None,
+	dimensions=None,
+):
+	"""Create an ABR Bank Rule pre-populated from a manually created voucher."""
+	frappe.has_permission("ABR Bank Rule", "create", throw=True)
+
+	conditions = frappe.parse_json(conditions) if isinstance(conditions, str) else conditions
+	if not conditions or not isinstance(conditions, list):
+		frappe.throw(frappe._("At least one condition is required to create a bank rule"))
+
+	bank_account = frappe.db.get_value("Bank Transaction", bank_transaction_name, "bank_account")
+	company = frappe.db.get_value("Bank Transaction", bank_transaction_name, "company")
+	if not bank_account or not company:
+		frappe.throw(frappe._("Bank Transaction {0} not found").format(bank_transaction_name))
+
+	dimensions = frappe.parse_json(dimensions) if isinstance(dimensions, str) else (dimensions or {})
+
+	try:
+		from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
+			get_accounting_dimensions,
+		)
+
+		valid_dimension_keys = set(get_accounting_dimensions()) - {"cost_center", "project"}
+	except ImportError:
+		valid_dimension_keys = set()
+
+	doc = frappe.get_doc({
+		"doctype": "ABR Bank Rule",
+		"title": title,
+		"enabled": 1,
+		"priority": 10,
+		"company": company,
+		"bank_account": bank_account,
+		"match_any_condition": 0,
+		"entry_type": entry_type,
+		"account": second_account or None,
+		"party_type": party_type or None,
+		"party": party or None,
+		"cost_center": cost_center or None,
+		"project": project or None,
+	})
+
+	for key, value in dimensions.items():
+		if key in valid_dimension_keys:
+			doc.set(key, value)
+
+	for cond in conditions:
+		doc.append("conditions", {
+			"field_name": cond.get("field_name"),
+			"condition": cond.get("condition"),
+			"value": cond.get("value"),
+		})
+
+	doc.insert()
+
+	return {"name": doc.name, "title": title}
+
+
 def _load_rules(bank_account):
 	"""Load all enabled rules for the bank account, ordered by priority."""
 	rule_names = frappe.get_all(

@@ -1020,7 +1020,11 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				]);
 				frappe.show_alert(alert_string);
 				this.update_dt_cards(response.message);
-				this.dialog.hide();
+				if (this.default_settings.prompt_to_save_bank_rule) {
+					this._show_save_bank_rule_dialog("Payment Entry", values);
+				} else {
+					this.dialog.hide();
+				}
 			},
 		});
 	}
@@ -1034,6 +1038,245 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			}
 		}
 		return Object.keys(dims).length ? JSON.stringify(dims) : null;
+	}
+
+	_show_save_bank_rule_dialog(entry_type, dialog_values) {
+		// Build condition rows from bank transaction fields
+		const bt = this.bank_transaction;
+		const condition_fields = [
+			{ key: "reference_number", label: "Reference Number", field_name: "Reference Number", default_op: "Equals", default_checked: true },
+			{ key: "custom_particulars", label: "Particulars", field_name: "Particulars", default_op: "Contains", default_checked: true },
+			{ key: "custom_code", label: "Code", field_name: "Code", default_op: "Equals", default_checked: true },
+			{ key: "description", label: "Description", field_name: "Description", default_op: "Contains", default_checked: false },
+			{ key: "bank_party_name", label: "Other Party", field_name: "Other Party", default_op: "Equals", default_checked: true },
+		];
+
+		// Only include fields that have non-empty values
+		const available_conditions = condition_fields.filter(f => bt[f.key]);
+
+		// If no condition fields are available, skip the prompt and hide the main dialog
+		if (available_conditions.length === 0) {
+			this.dialog.hide();
+			return;
+		}
+
+		// Pre-fill title from first non-empty of: particulars, other party, description
+		const default_title = (bt.custom_particulars || bt.bank_party_name || bt.description || "").substring(0, 140);
+
+		// Build dialog fields
+		const fields = [
+			{
+				label: __("Rule Title"),
+				fieldname: "rule_title",
+				fieldtype: "Data",
+				reqd: 1,
+				default: default_title,
+			},
+			{ fieldtype: "Section Break", label: __("Match Conditions") },
+		];
+
+		// One row per available condition field
+		const operator_options = "Equals\nContains\nNot Equals\nNot Contains";
+		available_conditions.forEach((cf, idx) => {
+			const val = (bt[cf.key] || "").toString().substring(0, 140);
+			fields.push(
+				{
+					label: __(cf.label),
+					fieldname: `match_${cf.key}`,
+					fieldtype: "Check",
+					default: cf.default_checked ? 1 : 0,
+					description: val,
+				},
+				{ fieldtype: "Column Break" },
+				{
+					label: __("Operator"),
+					fieldname: `op_${cf.key}`,
+					fieldtype: "Select",
+					options: operator_options,
+					default: cf.default_op,
+					depends_on: `eval:doc.match_${cf.key}`,
+				},
+				{ fieldtype: "Column Break" },
+				{
+					label: __("Value"),
+					fieldname: `val_${cf.key}`,
+					fieldtype: "Data",
+					default: val,
+					read_only: 1,
+					depends_on: `eval:doc.match_${cf.key}`,
+				}
+			);
+			// Add section break between condition rows (not after the last one)
+			if (idx < available_conditions.length - 1) {
+				fields.push({ fieldtype: "Section Break" });
+			}
+		});
+
+		// Action section (all read-only, pre-filled from what was just created)
+		fields.push({ fieldtype: "Section Break", label: __("Action") });
+		fields.push({
+			label: __("Entry Type"),
+			fieldname: "action_entry_type",
+			fieldtype: "Data",
+			default: entry_type,
+			read_only: 1,
+		});
+
+		if (entry_type === "Journal Entry" && dialog_values.second_account) {
+			fields.push({ fieldtype: "Column Break" });
+			fields.push({
+				label: __("Account"),
+				fieldname: "action_account",
+				fieldtype: "Link",
+				options: "Account",
+				default: dialog_values.second_account,
+				read_only: 1,
+			});
+		}
+
+		if (dialog_values.party_type) {
+			fields.push({ fieldtype: "Column Break" });
+			fields.push({
+				label: __("Party Type"),
+				fieldname: "action_party_type",
+				fieldtype: "Data",
+				default: dialog_values.party_type,
+				read_only: 1,
+			});
+		}
+
+		if (dialog_values.party) {
+			fields.push({ fieldtype: "Column Break" });
+			fields.push({
+				label: __("Party"),
+				fieldname: "action_party",
+				fieldtype: "Data",
+				default: dialog_values.party,
+				read_only: 1,
+			});
+		}
+
+		if (dialog_values.cost_center) {
+			fields.push({ fieldtype: "Column Break" });
+			fields.push({
+				label: __("Cost Center"),
+				fieldname: "action_cost_center",
+				fieldtype: "Link",
+				options: "Cost Center",
+				default: dialog_values.cost_center,
+				read_only: 1,
+			});
+		}
+
+		if (dialog_values.project) {
+			fields.push({ fieldtype: "Column Break" });
+			fields.push({
+				label: __("Project"),
+				fieldname: "action_project",
+				fieldtype: "Link",
+				options: "Project",
+				default: dialog_values.project,
+				read_only: 1,
+			});
+		}
+
+		// Accounting dimensions
+		if (this.accounting_dimensions && this.accounting_dimensions.length) {
+			this.accounting_dimensions.forEach(dim => {
+				const dim_val = dialog_values[dim.fieldname];
+				if (dim_val) {
+					fields.push({ fieldtype: "Column Break" });
+					fields.push({
+						label: dim.label,
+						fieldname: `action_dim_${dim.fieldname}`,
+						fieldtype: "Link",
+						options: dim.options,
+						default: dim_val,
+						read_only: 1,
+					});
+				}
+			});
+		}
+
+		const me = this;
+		const rule_dialog = new frappe.ui.Dialog({
+			title: __("Save as Bank Rule"),
+			size: "large",
+			fields: fields,
+			primary_action_label: __("Save Rule"),
+			primary_action(values) {
+				// Validate at least one condition is checked
+				const conditions = [];
+				available_conditions.forEach(cf => {
+					if (values[`match_${cf.key}`]) {
+						conditions.push({
+							field_name: cf.field_name,
+							condition: values[`op_${cf.key}`],
+							value: values[`val_${cf.key}`],
+						});
+					}
+				});
+
+				if (conditions.length === 0) {
+					frappe.msgprint(__("Please select at least one match condition."));
+					return;
+				}
+
+				// Build dimensions dict
+				const dimensions = {};
+				if (me.accounting_dimensions && me.accounting_dimensions.length) {
+					me.accounting_dimensions.forEach(dim => {
+						const dim_val = dialog_values[dim.fieldname];
+						if (dim_val) {
+							dimensions[dim.fieldname] = dim_val;
+						}
+					});
+				}
+
+				frappe.call({
+					method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.abr_bank_rule.abr_bank_rule.create_bank_rule_from_voucher",
+					args: {
+						bank_transaction_name: me.bank_transaction.name,
+						title: values.rule_title,
+						entry_type: entry_type,
+						conditions: JSON.stringify(conditions),
+						second_account: (entry_type === "Journal Entry") ? dialog_values.second_account : null,
+						party_type: dialog_values.party_type || null,
+						party: dialog_values.party || null,
+						cost_center: dialog_values.cost_center || null,
+						project: dialog_values.project || null,
+						dimensions: JSON.stringify(dimensions),
+					},
+					freeze: true,
+					freeze_message: __("Saving bank rule..."),
+					callback(r) {
+						if (r.message) {
+							const title = frappe.utils.escape_html(r.message.title);
+							frappe.show_alert({
+								message: __("Bank Rule {0} created", [`<a href="/app/abr-bank-rule/${r.message.name}">${title}</a>`]),
+								indicator: "green",
+							});
+						}
+						rule_dialog.hide();
+						me.dialog.hide();
+					},
+					error() {
+						rule_dialog.get_primary_btn().prop("disabled", false);
+					},
+				});
+			},
+			secondary_action_label: __("Skip"),
+			secondary_action() {
+				rule_dialog.hide();
+				me.dialog.hide();
+			},
+		});
+
+		rule_dialog.onhide = () => {
+			me.dialog.hide();
+		};
+
+		rule_dialog.show();
 	}
 
 	add_journal_entry(values) {
@@ -1060,7 +1303,11 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				]);
 				frappe.show_alert(alert_string);
 				this.update_dt_cards(response.message);
-				this.dialog.hide();
+				if (this.default_settings.prompt_to_save_bank_rule) {
+					this._show_save_bank_rule_dialog("Journal Entry", values);
+				} else {
+					this.dialog.hide();
+				}
 			},
 		});
 	}
