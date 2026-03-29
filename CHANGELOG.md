@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.5.0...v1.6.0) (2026-03-29)
+
+
+### Features
+
+* add Accounts User role to Reconciliation Tool and Settings ([eda983d](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/eda983d61d583f1f82476ea9641750117b60f2b2))
+
 # [1.5.0](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.4.2...v1.5.0) (2026-03-28)
 
 
