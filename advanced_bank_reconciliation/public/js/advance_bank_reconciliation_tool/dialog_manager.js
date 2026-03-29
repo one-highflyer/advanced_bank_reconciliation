@@ -1045,7 +1045,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		const bt = this.bank_transaction;
 		const condition_fields = [
 			{ key: "reference_number", label: "Reference Number", field_name: "Reference Number", default_op: "Equals", default_checked: true },
-			{ key: "custom_particulars", label: "Particulars", field_name: "Particulars", default_op: "Contains", default_checked: true },
+			{ key: "custom_particulars", label: "Particulars", field_name: "Particulars", default_op: "Equals", default_checked: true },
 			{ key: "custom_code", label: "Code", field_name: "Code", default_op: "Equals", default_checked: true },
 			{ key: "description", label: "Description", field_name: "Description", default_op: "Contains", default_checked: false },
 			{ key: "bank_party_name", label: "Other Party", field_name: "Other Party", default_op: "Equals", default_checked: true },
