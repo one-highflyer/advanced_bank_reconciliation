@@ -136,7 +136,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2024-05-05 05:58:48.170133",
+ "modified": "2026-03-29 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Advanced Bank Reconciliation",
  "name": "Advance Bank Reconciliation Tool",
@@ -158,6 +158,15 @@
    "print": 1,
    "read": 1,
    "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Accounts User",
    "share": 1,
    "write": 1
   }
