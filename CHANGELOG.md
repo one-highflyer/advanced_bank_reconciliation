@@ -1,3 +1,10 @@
+## [1.7.1](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.0...v1.7.1) (2026-03-30)
+
+
+### Bug Fixes
+
+* exclude ABR Bank Rule from company transaction deletion ([c0c3389](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/c0c33894e3b3ffdb62d93c7e0174a5be3a55f4df))
+
 # [1.7.0](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.6.0...v1.7.0) (2026-03-29)
 
 
