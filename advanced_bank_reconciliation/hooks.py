@@ -266,5 +266,7 @@ fixtures = [
     },
 ]
 
+company_data_to_be_ignored = ["ABR Bank Rule"]
+
 # Automatically update python controller files with type annotations for this app.
 export_python_type_annotations = True
