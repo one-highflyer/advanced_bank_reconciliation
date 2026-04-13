@@ -1722,11 +1722,15 @@ def create_payment_entries_bulk(bank_transaction_name, invoices, regular_voucher
 		if amt:
 			total_regular_amount += amt
 
-	# 3) Combined total must not exceed BT unallocated amount (within small tolerance)
+	# 3) Combined total must equal BT unallocated amount (within small tolerance)
+	# when the site has opted into strict validation.
 	combined_total = total_invoices_amount + total_regular_amount
 	if validate_selection_against_unallocated_amount and abs(combined_total - bt.unallocated_amount) > 0.01:
 		frappe.throw(_(
-			"Selected allocations total {0} differ from Bank Transaction unallocated amount {1} by more than 0.01"
+			"Selected allocations total {0} but this Bank Transaction has {1} unallocated. "
+			"Please add or remove vouchers so the totals match, split the Bank Transaction, "
+			"or disable \"Validate Selection Against Unallocated Amount\" in "
+			"Advance Bank Reconciliation Settings."
 		).format(
 			frappe.utils.fmt_money(combined_total, 2),
 			frappe.utils.fmt_money(bt.unallocated_amount, 2),

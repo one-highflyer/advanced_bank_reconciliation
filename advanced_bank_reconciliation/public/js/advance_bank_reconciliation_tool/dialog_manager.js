@@ -12,6 +12,15 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 	) {
 		this.bank_account = bank_account;
 		this.company = company;
+		// Strict-match mode: when the site opts in, the selected allocations
+		// must equal the bank transaction's unallocated amount. We cache the
+		// value so match() can pre-validate before hitting the backend.
+		this.validate_selection = false;
+		frappe.db
+			.get_single_value("Advance Bank Reconciliation Settings", "validate_selection_against_unallocated_amount")
+			.then((value) => {
+				this.validate_selection = !!cint(value);
+			});
 		this.make_dialog();
 		this.bank_statement_from_date = bank_statement_from_date;
 		this.bank_statement_to_date = bank_statement_to_date;
@@ -282,10 +291,16 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		const cap_note = Math.abs(raw_total - effective_total) > 0.005
 			? ` <small class="text-muted">(allocating ${format_currency(effective_total, currency)} after bank remaining cap)</small>`
 			: "";
+		const bt_unallocated = flt(this.bank_transaction.unallocated_amount);
+		const strict_warning = this.validate_selection
+			&& Math.abs(effective_total - bt_unallocated) > 0.01
+			? `<div class="text-center pb-2 text-danger"><small>Strict matching is enabled: allocations must equal ${format_currency(bt_unallocated, currency)}. Add or remove vouchers to match.</small></div>`
+			: "";
 		transactions_wrapper.html(`
 			<div class="text-center pb-2">
 				<h5 class="font-bold">Total (${transactions.length} selected): ${format_currency(raw_total, currency)}${cap_note}</h5>
 			</div>
+			${strict_warning}
 		`);
 	}
 
@@ -856,7 +871,22 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		let unpaidInvoices = [];
 		let regularVouchers = [];
 
-		const { effective } = this.compute_effective_allocations(selectedRows);
+		const { effective, total: effective_total } = this.compute_effective_allocations(selectedRows);
+
+		// Strict match: mirror the backend pre-check so the user sees a
+		// clear in-dialog message instead of a server-side throw mid-submit.
+		const bt_unallocated = flt(this.bank_transaction.unallocated_amount);
+		if (this.validate_selection && Math.abs(effective_total - bt_unallocated) > 0.01) {
+			frappe.msgprint({
+				title: __("Allocation does not match Bank Transaction"),
+				indicator: "red",
+				message: __(
+					"Selected allocations total {0} but this Bank Transaction has {1} unallocated. Please add or remove vouchers so the totals match.",
+					[format_currency(effective_total, this.bank_transaction.currency), format_currency(bt_unallocated, this.bank_transaction.currency)]
+				),
+			});
+			return;
+		}
 
 		selectedRows.forEach((x, idx) => {
 			const allocation = effective[idx];
