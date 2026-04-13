@@ -19,7 +19,13 @@ jobs:
   tests:
     runs-on: self-hosted
     timeout-minutes: 60
-    if: "!contains(github.event.head_commit.message, 'chore(release):')"
+    # Skip workflow-payload commits and fork-originated PRs. Fork PRs would
+    # otherwise execute arbitrary code on the self-hosted runner because
+    # this is a public repo and a fork can modify .github/workflows/ci.yml.
+    if: >-
+      !contains(github.event.head_commit.message, 'chore(release):')
+      && (github.event_name == 'push'
+          || github.event.pull_request.head.repo.full_name == github.repository)
     name: Server
 
     services:
