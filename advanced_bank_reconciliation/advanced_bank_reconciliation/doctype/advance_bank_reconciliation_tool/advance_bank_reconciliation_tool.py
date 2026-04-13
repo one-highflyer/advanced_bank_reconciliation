@@ -1517,7 +1517,9 @@ def get_unpaid_si_matching_query(exact_match, for_withdrawal=False, from_date=No
 			AND status NOT IN ('Paid', 'Cancelled', 'Credit Note Issued')
 			AND {amount_condition}
 			{date_filter}
-		ORDER BY posting_date DESC
+		-- FIFO: same-rank matches cascade to the oldest invoice first, which is
+		-- the standard AR convention and what users expect for partial allocation.
+		ORDER BY posting_date ASC, name ASC
 	"""
 
 
@@ -1566,7 +1568,9 @@ def get_unpaid_pi_matching_query(exact_match, for_deposit=False, from_date=None,
 			AND status NOT IN ('Paid', 'Cancelled', 'Debit Note Issued')
 			AND {amount_condition}
 			{date_filter}
-		ORDER BY posting_date DESC
+		-- FIFO: same-rank matches cascade to the oldest invoice first, which is
+		-- the standard AP convention and what users expect for partial allocation.
+		ORDER BY posting_date ASC, name ASC
 	"""
 
 
