@@ -2034,17 +2034,24 @@ def _signed_cap(allocated_amount, outstanding_amount):
 
 
 def _normalise_pe_to_target_invoice(pe, invoice_doc, allocated_amount):
-	"""Collapse PE references to a single row for the target invoice and
-	reset paid/received amounts to the caller's allocation.
+	"""Restrict PE references to the target invoice, cascade the
+	allocation across payment term rows if present, clear any
+	auto-added deductions, and lock paid/received to the caller's
+	allocation. Mutates pe in place.
 
-	This protects against three issues from ERPNext's get_payment_entry():
-	- Payment Terms Templates with allocate_payment_based_on_payment_terms=1
-	  append one reference row per payment term. We keep only the first row
-	  for the target invoice and drop the rest.
-	- get_payment_entry() may attach deductions rows (e.g. early payment
-	  discount) that mutate the effective paid amount; we clear them so
-	  the PE reflects exactly the caller's allocation.
-	- Stray reference rows pointing at other documents are removed.
+	Behaviour covered:
+	- Non-PTT invoice: single reference row kept, allocated_amount
+	  capped at the invoice outstanding.
+	- Payment Terms Template (allocate_payment_based_on_payment_terms=1):
+	  multiple rows per term. Cascade the allocation across term rows in
+	  order, capping each at its payment_term_outstanding, until the full
+	  allocation is placed. Rows that receive nothing are dropped. This
+	  keeps ERPNext's PTT validator happy for allocations that exceed the
+	  first term's outstanding but stay within the invoice total.
+	- Any reference rows not pointing at the target invoice are removed
+	  defensively.
+	- Deductions (e.g. early-payment discount) added by get_payment_entry
+	  are cleared so the PE reflects exactly the caller's allocation.
 	"""
 	target_dt = invoice_doc.doctype
 	target_dn = invoice_doc.name
@@ -2059,17 +2066,23 @@ def _normalise_pe_to_target_invoice(pe, invoice_doc, allocated_amount):
 			_("Unable to build payment reference for {0} {1}").format(target_dt, target_dn)
 		)
 
-	surviving = target_refs[0]
-	surviving.allocated_amount = _signed_cap(allocated_amount, surviving.outstanding_amount)
+	kept = []
+	remaining = flt(allocated_amount)
+	for ref in target_refs:
+		if remaining == 0:
+			break
+		row_cap = flt(getattr(ref, "payment_term_outstanding", None) or ref.outstanding_amount)
+		share = _signed_cap(remaining, row_cap)
+		ref.allocated_amount = share
+		kept.append(ref)
+		remaining = flt(remaining) - flt(share)
 
-	pe.references = [surviving]
+	pe.references = kept
 	pe.deductions = []
 
 	abs_allocated = abs(flt(allocated_amount))
 	pe.paid_amount = abs_allocated
 	pe.received_amount = abs_allocated
-
-	return pe
 
 
 def create_payment_entry_for_invoice(invoice_doc, bank_transaction, allocated_amount, payment_type, party_type, party):
