@@ -1,3 +1,14 @@
+## [1.7.2](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.1...v1.7.2) (2026-04-13)
+
+
+### Bug Fixes
+
+* **abr:** cap per-row allocation at bank transaction remaining in UI ([a7eb5a9](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/a7eb5a9196a8262d9c09b2af98ede07cd0e87c95))
+* **abr:** collapse PE references to target invoice on partial allocation ([43c9041](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/43c9041d692eceb8ab910c1980c0e1062293a15d))
+* **abr:** harden partial allocation cascade against silent imbalance ([956cea8](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/956cea81869be82899b0ee7ffcf8e97a7653ba16))
+* **abr:** respect validate_selection_against_unallocated_amount in UI ([29a85d2](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/29a85d23a1dcdb7d1515f19b7ed3ea0e7302272a))
+* **abr:** show raw selection total with cap note in reconcile dialog ([f41015b](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/f41015bce83d0acabbfad34b767c48a3748c5cb1))
+
 ## [1.7.1](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.0...v1.7.1) (2026-03-30)
 
 
