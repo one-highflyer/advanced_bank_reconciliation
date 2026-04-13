@@ -258,14 +258,33 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			transactions_wrapper.show();
 		}
 
-		const { total } = this.compute_effective_allocations(transactions);
-		const currency = transactions.length ? transactions[transactions.length - 1][9] : "";
+		// "Total (N selected)" reflects the raw sum of what the user ticked
+		// so they can see what they have selected. The Allocated / Unallocated
+		// fields below use the effective (capped) allocations so they stay in
+		// sync with what will actually be submitted to the backend.
+		let raw_total = 0;
+		let currency = "";
+		for (const x of transactions) {
+			raw_total += flt(x[3]);
+			currency = x[9];
+		}
+		const { total: effective_total } = this.compute_effective_allocations(transactions);
 
-		this.dialog.set_value("allocated_amount", total + this.bank_transaction.allocated_amount);
-		this.dialog.set_value("unallocated_amount", this.bank_transaction.unallocated_amount - total);
+		this.dialog.set_value(
+			"allocated_amount",
+			effective_total + this.bank_transaction.allocated_amount,
+		);
+		this.dialog.set_value(
+			"unallocated_amount",
+			this.bank_transaction.unallocated_amount - effective_total,
+		);
+
+		const cap_note = Math.abs(raw_total - effective_total) > 0.005
+			? ` <small class="text-muted">(allocating ${format_currency(effective_total, currency)} after bank remaining cap)</small>`
+			: "";
 		transactions_wrapper.html(`
 			<div class="text-center pb-2">
-				<h5 class="font-bold">Total (${transactions.length} selected): ${format_currency(total, currency)}</h5>
+				<h5 class="font-bold">Total (${transactions.length} selected): ${format_currency(raw_total, currency)}${cap_note}</h5>
 			</div>
 		`);
 	}
