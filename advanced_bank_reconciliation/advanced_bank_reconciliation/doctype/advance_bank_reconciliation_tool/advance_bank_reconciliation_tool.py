@@ -2040,14 +2040,21 @@ def _normalise_pe_to_target_invoice(pe, invoice_doc, allocated_amount):
 	allocation. Mutates pe in place.
 
 	Behaviour covered:
-	- Non-PTT invoice: single reference row kept, allocated_amount
-	  capped at the invoice outstanding.
+	- Non-PTT invoice: single reference row kept, allocated_amount capped
+	  at the invoice outstanding via a signed cap that preserves sign for
+	  credit notes.
 	- Payment Terms Template (allocate_payment_based_on_payment_terms=1):
 	  multiple rows per term. Cascade the allocation across term rows in
 	  order, capping each at its payment_term_outstanding, until the full
-	  allocation is placed. Rows that receive nothing are dropped. This
-	  keeps ERPNext's PTT validator happy for allocations that exceed the
-	  first term's outstanding but stay within the invoice total.
+	  allocation is placed. Terms with zero outstanding are skipped (so a
+	  fully-paid term never swallows allocation). Rows that end up with a
+	  zero share are dropped. This keeps ERPNext's PTT validator happy for
+	  allocations that exceed the first term's outstanding but stay within
+	  the invoice total.
+	- Over-allocation guard: if the cascade cannot place the full caller
+	  amount (e.g. allocation exceeds the sum of target-invoice
+	  outstanding), raise a validation error rather than silently let the
+	  PE submit with paid_amount > sum(references.allocated_amount).
 	- Any reference rows not pointing at the target invoice are removed
 	  defensively.
 	- Deductions (e.g. early-payment discount) added by get_payment_entry
@@ -2069,13 +2076,28 @@ def _normalise_pe_to_target_invoice(pe, invoice_doc, allocated_amount):
 	kept = []
 	remaining = flt(allocated_amount)
 	for ref in target_refs:
-		if remaining == 0:
+		if abs(remaining) < 0.005:
 			break
-		row_cap = flt(getattr(ref, "payment_term_outstanding", None) or ref.outstanding_amount)
+		if getattr(ref, "payment_term", None):
+			row_cap = flt(getattr(ref, "payment_term_outstanding", 0))
+		else:
+			row_cap = flt(ref.outstanding_amount)
+		if row_cap == 0:
+			continue
 		share = _signed_cap(remaining, row_cap)
+		if share == 0:
+			continue
 		ref.allocated_amount = share
 		kept.append(ref)
 		remaining = flt(remaining) - flt(share)
+
+	if abs(remaining) >= 0.005:
+		placed = flt(allocated_amount) - flt(remaining)
+		frappe.throw(
+			_(
+				"Cannot allocate {0} against {1} {2}: only {3} is available across its open references."
+			).format(flt(allocated_amount), invoice_doc.doctype, invoice_doc.name, placed)
+		)
 
 	pe.references = kept
 	pe.deductions = []

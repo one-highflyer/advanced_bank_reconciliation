@@ -395,3 +395,97 @@ class TestPartialAllocation(FrappeTestCase):
 		# When both negative, cap must keep allocation within outstanding
 		self.assertEqual(_signed_cap(-20, -50), -20)
 		self.assertEqual(_signed_cap(-80, -50), -50)
+
+	def test_normalise_helper_throws_on_over_allocation(self):
+		invoice = SimpleNamespace(doctype="Sales Invoice", name="_ABR-SI-UNIT-002")
+		pe = SimpleNamespace(
+			references=[
+				SimpleNamespace(
+					reference_doctype="Sales Invoice",
+					reference_name="_ABR-SI-UNIT-002",
+					outstanding_amount=50,
+					allocated_amount=50,
+					payment_term="Term-1",
+					payment_term_outstanding=50,
+				),
+				SimpleNamespace(
+					reference_doctype="Sales Invoice",
+					reference_name="_ABR-SI-UNIT-002",
+					outstanding_amount=50,
+					allocated_amount=50,
+					payment_term="Term-2",
+					payment_term_outstanding=50,
+				),
+			],
+			deductions=[],
+			paid_amount=0,
+			received_amount=0,
+		)
+		with self.assertRaises(frappe.ValidationError):
+			_normalise_pe_to_target_invoice(pe, invoice, allocated_amount=150)
+
+	def test_normalise_helper_skips_fully_paid_term(self):
+		invoice = SimpleNamespace(doctype="Sales Invoice", name="_ABR-SI-UNIT-003")
+		# First term is fully paid (payment_term_outstanding=0); second still open.
+		pe = SimpleNamespace(
+			references=[
+				SimpleNamespace(
+					reference_doctype="Sales Invoice",
+					reference_name="_ABR-SI-UNIT-003",
+					outstanding_amount=50,
+					allocated_amount=50,
+					payment_term="Term-1",
+					payment_term_outstanding=0,
+				),
+				SimpleNamespace(
+					reference_doctype="Sales Invoice",
+					reference_name="_ABR-SI-UNIT-003",
+					outstanding_amount=50,
+					allocated_amount=50,
+					payment_term="Term-2",
+					payment_term_outstanding=50,
+				),
+			],
+			deductions=[],
+			paid_amount=0,
+			received_amount=0,
+		)
+		_normalise_pe_to_target_invoice(pe, invoice, allocated_amount=30)
+
+		self.assertEqual(len(pe.references), 1)
+		self.assertEqual(pe.references[0].payment_term, "Term-2")
+		self.assertEqual(flt(pe.references[0].allocated_amount), 30.0)
+
+	def test_normalise_helper_cascade_negative_credit_note(self):
+		invoice = SimpleNamespace(doctype="Sales Invoice", name="_ABR-SI-UNIT-004")
+		# Credit note split across two payment terms, both negative.
+		pe = SimpleNamespace(
+			references=[
+				SimpleNamespace(
+					reference_doctype="Sales Invoice",
+					reference_name="_ABR-SI-UNIT-004",
+					outstanding_amount=-50,
+					allocated_amount=-50,
+					payment_term="Term-1",
+					payment_term_outstanding=-50,
+				),
+				SimpleNamespace(
+					reference_doctype="Sales Invoice",
+					reference_name="_ABR-SI-UNIT-004",
+					outstanding_amount=-50,
+					allocated_amount=-50,
+					payment_term="Term-2",
+					payment_term_outstanding=-50,
+				),
+			],
+			deductions=[],
+			paid_amount=0,
+			received_amount=0,
+		)
+		_normalise_pe_to_target_invoice(pe, invoice, allocated_amount=-75)
+
+		self.assertEqual(len(pe.references), 2)
+		self.assertEqual(flt(pe.references[0].allocated_amount), -50.0)
+		self.assertEqual(flt(pe.references[1].allocated_amount), -25.0)
+		self.assertEqual(flt(pe.paid_amount), 75.0)
+		self.assertEqual(flt(pe.received_amount), 75.0)
