@@ -2021,54 +2021,98 @@ def cleanup_failed_reconciliation(vouchers):
 			continue
 
 
+def _signed_cap(allocated_amount, outstanding_amount):
+	"""Cap allocated_amount at outstanding_amount while preserving sign.
+
+	For credit notes / returns, both values are negative, so we must use
+	max() to keep the allocation within the (negative) outstanding. For
+	normal invoices both values are positive and we use min().
+	"""
+	if allocated_amount < 0:
+		return max(allocated_amount, flt(outstanding_amount))
+	return min(allocated_amount, flt(outstanding_amount))
+
+
+def _normalise_pe_to_target_invoice(pe, invoice_doc, allocated_amount):
+	"""Collapse PE references to a single row for the target invoice and
+	reset paid/received amounts to the caller's allocation.
+
+	This protects against three issues from ERPNext's get_payment_entry():
+	- Payment Terms Templates with allocate_payment_based_on_payment_terms=1
+	  append one reference row per payment term. We keep only the first row
+	  for the target invoice and drop the rest.
+	- get_payment_entry() may attach deductions rows (e.g. early payment
+	  discount) that mutate the effective paid amount; we clear them so
+	  the PE reflects exactly the caller's allocation.
+	- Stray reference rows pointing at other documents are removed.
+	"""
+	target_dt = invoice_doc.doctype
+	target_dn = invoice_doc.name
+
+	target_refs = [
+		ref for ref in (pe.references or [])
+		if ref.reference_doctype == target_dt and ref.reference_name == target_dn
+	]
+
+	if not target_refs:
+		frappe.throw(
+			_("Unable to build payment reference for {0} {1}").format(target_dt, target_dn)
+		)
+
+	surviving = target_refs[0]
+	surviving.allocated_amount = _signed_cap(allocated_amount, surviving.outstanding_amount)
+
+	pe.references = [surviving]
+	pe.deductions = []
+
+	abs_allocated = abs(flt(allocated_amount))
+	pe.paid_amount = abs_allocated
+	pe.received_amount = abs_allocated
+
+	return pe
+
+
 def create_payment_entry_for_invoice(invoice_doc, bank_transaction, allocated_amount, payment_type, party_type, party):
 	"""Create a payment entry for an unpaid invoice."""
 	from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
-	
+
 	# Get the bank account from bank transaction
 	bank_account_doc = frappe.get_doc("Bank Account", bank_transaction.bank_account)
 	bank_gl_account = bank_account_doc.account
-	
-	# Get payment entry template from the invoice
-	payment_entry = get_payment_entry(invoice_doc.doctype, invoice_doc.name)
-	
+
+	# Pass party_amount so ERPNext sizes the PE references to the partial
+	# allocation from the start rather than requiring post-hoc surgery on
+	# the references table. Sign is preserved so credit-note/return paths
+	# keep negative references.
+	signed_allocated_amount = flt(allocated_amount)
+	payment_entry = get_payment_entry(
+		invoice_doc.doctype,
+		invoice_doc.name,
+		party_amount=signed_allocated_amount,
+	)
+
 	# Set the correct bank account based on payment type
 	if payment_type == "Receive":
 		payment_entry.paid_to = bank_gl_account
 	else:  # Pay
 		payment_entry.paid_from = bank_gl_account
-	
-	# Set the payment amount to the absolute value of allocated amount
-	# For negative amounts, we still use the absolute value for payment amounts
-	abs_allocated_amount = abs(allocated_amount)
-	payment_entry.paid_amount = abs_allocated_amount
-	payment_entry.received_amount = abs_allocated_amount
-	
+
+	# Collapse Payment Terms rows, strip deductions, and lock paid amounts
+	# to the caller's allocation. See helper for the full rationale.
+	_normalise_pe_to_target_invoice(payment_entry, invoice_doc, allocated_amount)
+
 	# Set reference details from bank transaction
 	payment_entry.reference_no = bank_transaction.reference_number or bank_transaction.description
 	payment_entry.reference_date = bank_transaction.date
 	payment_entry.posting_date = bank_transaction.date
-	
-	# Update the references table to allocate only the specified amount
-	if payment_entry.references:
-		for ref in payment_entry.references:
-			if ref.reference_name == invoice_doc.name:
-				# For negative invoices (returns), both the outstanding amount and allocated amount should be negative
-				if allocated_amount < 0:
-					# Keep the allocated amount negative to match the negative outstanding amount
-					ref.allocated_amount = max(allocated_amount, ref.outstanding_amount)  # max because both are negative
-				else:
-					# For normal invoices, use the regular logic
-					ref.allocated_amount = min(allocated_amount, ref.outstanding_amount)
-				break
-	
+
 	# Validate the payment entry
 	payment_entry.validate()
-	
+
 	# Save and submit the payment entry
 	payment_entry.insert()
 	payment_entry.submit()
-	
+
 	return payment_entry
 
 
