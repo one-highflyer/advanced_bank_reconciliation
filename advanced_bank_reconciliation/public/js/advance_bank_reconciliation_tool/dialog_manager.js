@@ -226,6 +226,28 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		this.dialog.show();
 	}
 
+	compute_effective_allocations(rows) {
+		// Cap each row's allocation at the bank transaction's remaining
+		// unallocated amount (sign preserved), carrying the cap across rows
+		// so later selections only see what is left. Returns the per-row
+		// effective allocations plus the total so preview and submission
+		// use identical numbers.
+		const bt_unallocated = Math.abs(flt(this.bank_transaction.unallocated_amount || 0));
+		let bt_remaining = bt_unallocated;
+		let total = 0;
+		const effective = [];
+		for (const x of rows || []) {
+			const raw = flt(x[3]);
+			const sign = raw < 0 ? -1 : 1;
+			const magnitude = Math.min(Math.abs(raw), bt_remaining);
+			const allocation = sign * magnitude;
+			bt_remaining = Math.max(0, bt_remaining - magnitude);
+			effective.push(allocation);
+			total += allocation;
+		}
+		return { effective, total };
+	}
+
 	show_selected_transactions(transactions) {
 		if (!this.bank_transaction) return;
 
@@ -236,13 +258,9 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			transactions_wrapper.show();
 		}
 
-		let total = 0;
-		let currency = "";
-		for (let i = 0; i < transactions.length; i++) {
-			const x = transactions[i];
-			total += x[3];
-			currency = x[9];
-		}
+		const { total } = this.compute_effective_allocations(transactions);
+		const currency = transactions.length ? transactions[transactions.length - 1][9] : "";
+
 		this.dialog.set_value("allocated_amount", total + this.bank_transaction.allocated_amount);
 		this.dialog.set_value("unallocated_amount", this.bank_transaction.unallocated_amount - total);
 		transactions_wrapper.html(`
@@ -812,29 +830,18 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			return;
 		}
 		
-		// Separate unpaid invoices from regular vouchers.
 		// Cap each row's allocation by the bank transaction's remaining
 		// unallocated amount so we never send more than the deposit /
-		// withdrawal. Without this cap the UI submits the invoice's full
-		// outstanding, which would over-allocate the bank transaction
-		// (negative unallocated_amount) and close the invoice even when
-		// only a partial payment arrived.
+		// withdrawal. The preview totals in show_selected_transactions
+		// use the same helper so what the user sees matches what is sent.
 		let unpaidInvoices = [];
 		let regularVouchers = [];
 
-		const bt_unallocated = Math.abs(flt(this.bank_transaction.unallocated_amount || 0));
-		let bt_remaining = bt_unallocated;
+		const { effective } = this.compute_effective_allocations(selectedRows);
 
-		selectedRows.forEach((x) => {
-			let allocation = flt(x[3]);
-			const sign = allocation < 0 ? -1 : 1;
-			const magnitude = Math.min(Math.abs(allocation), bt_remaining);
-			allocation = sign * magnitude;
-			bt_remaining = Math.max(0, bt_remaining - magnitude);
-
-			if (magnitude === 0) {
-				return;
-			}
+		selectedRows.forEach((x, idx) => {
+			const allocation = effective[idx];
+			if (!allocation) return;
 
 			if (x[1] === "Unpaid Sales Invoice" || x[1] === "Unpaid Purchase Invoice") {
 				unpaidInvoices.push({
