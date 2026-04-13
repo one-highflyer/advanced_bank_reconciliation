@@ -1957,7 +1957,7 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 			
 	except Exception as e:
 		frappe.db.rollback()
-		logger.error("Bulk reconciliation failed: %s: %s", str(e), exc_info=True)
+		logger.error("Bulk reconciliation failed: %s", str(e), exc_info=True)
 		
 		# Try to delete any partially created payment entries
 		cleanup_failed_reconciliation(all_vouchers)
@@ -2048,7 +2048,7 @@ def _normalise_pe_to_target_invoice(pe, invoice_doc, allocated_amount):
 	  at the invoice outstanding via a signed cap that preserves sign for
 	  credit notes.
 	- Payment Terms Template (allocate_payment_based_on_payment_terms=1):
-	  multiple rows per term. Cascade the allocation across term rows in
+	  one reference row per payment term. Cascade the allocation across term rows in
 	  order, capping each at its payment_term_outstanding, until the full
 	  allocation is placed. Terms with zero outstanding are skipped (so a
 	  fully-paid term never swallows allocation). Rows that end up with a
