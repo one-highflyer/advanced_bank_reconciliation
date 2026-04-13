@@ -12,6 +12,15 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 	) {
 		this.bank_account = bank_account;
 		this.company = company;
+		// Strict-match mode: when the site opts in, the selected allocations
+		// must equal the bank transaction's unallocated amount. We cache the
+		// value so match() can pre-validate before hitting the backend.
+		this.validate_selection = false;
+		frappe.db
+			.get_single_value("Advance Bank Reconciliation Settings", "validate_selection_against_unallocated_amount")
+			.then((value) => {
+				this.validate_selection = !!cint(value);
+			});
 		this.make_dialog();
 		this.bank_statement_from_date = bank_statement_from_date;
 		this.bank_statement_to_date = bank_statement_to_date;
@@ -226,6 +235,28 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		this.dialog.show();
 	}
 
+	compute_effective_allocations(rows) {
+		// Cap each row's allocation at the bank transaction's remaining
+		// unallocated amount (sign preserved), carrying the cap across rows
+		// so later selections only see what is left. Returns the per-row
+		// effective allocations plus the total so preview and submission
+		// use identical numbers.
+		const bt_unallocated = Math.abs(flt(this.bank_transaction.unallocated_amount || 0));
+		let bt_remaining = bt_unallocated;
+		let total = 0;
+		const effective = [];
+		for (const x of rows || []) {
+			const raw = flt(x[3]);
+			const sign = raw < 0 ? -1 : 1;
+			const magnitude = Math.min(Math.abs(raw), bt_remaining);
+			const allocation = sign * magnitude;
+			bt_remaining = Math.max(0, bt_remaining - magnitude);
+			effective.push(allocation);
+			total += allocation;
+		}
+		return { effective, total };
+	}
+
 	show_selected_transactions(transactions) {
 		if (!this.bank_transaction) return;
 
@@ -236,19 +267,40 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			transactions_wrapper.show();
 		}
 
-		let total = 0;
+		// "Total (N selected)" reflects the raw sum of what the user ticked
+		// so they can see what they have selected. The Allocated / Unallocated
+		// fields below use the effective (capped) allocations so they stay in
+		// sync with what will actually be submitted to the backend.
+		let raw_total = 0;
 		let currency = "";
-		for (let i = 0; i < transactions.length; i++) {
-			const x = transactions[i];
-			total += x[3];
+		for (const x of transactions) {
+			raw_total += flt(x[3]);
 			currency = x[9];
 		}
-		this.dialog.set_value("allocated_amount", total + this.bank_transaction.allocated_amount);
-		this.dialog.set_value("unallocated_amount", this.bank_transaction.unallocated_amount - total);
+		const { total: effective_total } = this.compute_effective_allocations(transactions);
+
+		this.dialog.set_value(
+			"allocated_amount",
+			effective_total + this.bank_transaction.allocated_amount,
+		);
+		this.dialog.set_value(
+			"unallocated_amount",
+			this.bank_transaction.unallocated_amount - effective_total,
+		);
+
+		const cap_note = Math.abs(raw_total - effective_total) > 0.005
+			? ` <small class="text-muted">(allocating ${format_currency(effective_total, currency)} after bank remaining cap)</small>`
+			: "";
+		const bt_unallocated = flt(this.bank_transaction.unallocated_amount);
+		const strict_warning = this.validate_selection
+			&& Math.abs(effective_total - bt_unallocated) > 0.01
+			? `<div class="text-center pb-2 text-danger"><small>Strict matching is enabled: allocations must equal ${format_currency(bt_unallocated, currency)}. Add or remove vouchers to match.</small></div>`
+			: "";
 		transactions_wrapper.html(`
 			<div class="text-center pb-2">
-				<h5 class="font-bold">Total (${transactions.length} selected): ${format_currency(total, currency)}</h5>
+				<h5 class="font-bold">Total (${transactions.length} selected): ${format_currency(raw_total, currency)}${cap_note}</h5>
 			</div>
+			${strict_warning}
 		`);
 	}
 
@@ -812,25 +864,53 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			return;
 		}
 		
-		// Separate unpaid invoices from regular vouchers
+		// Cap each row's allocation by the bank transaction's remaining
+		// unallocated amount so we never send more than the deposit /
+		// withdrawal. The preview totals in show_selected_transactions
+		// use the same helper so what the user sees matches what is sent.
 		let unpaidInvoices = [];
 		let regularVouchers = [];
-		
-		selectedRows.forEach((x) => {
+
+		const { effective, total: effective_total } = this.compute_effective_allocations(selectedRows);
+
+		// Strict match: mirror the backend pre-check so the user sees a
+		// clear in-dialog message instead of a server-side throw mid-submit.
+		const bt_unallocated = flt(this.bank_transaction.unallocated_amount);
+		if (this.validate_selection && Math.abs(effective_total - bt_unallocated) > 0.01) {
+			frappe.msgprint({
+				title: __("Allocation does not match Bank Transaction"),
+				indicator: "red",
+				message: __(
+					"Selected allocations total {0} but this Bank Transaction has {1} unallocated. Please add or remove vouchers so the totals match.",
+					[format_currency(effective_total, this.bank_transaction.currency), format_currency(bt_unallocated, this.bank_transaction.currency)]
+				),
+			});
+			return;
+		}
+
+		selectedRows.forEach((x, idx) => {
+			const allocation = effective[idx];
+			if (!allocation) return;
+
 			if (x[1] === "Unpaid Sales Invoice" || x[1] === "Unpaid Purchase Invoice") {
 				unpaidInvoices.push({
 					doctype: x[1],
 					name: x[2],
-					allocated_amount: x[3],
+					allocated_amount: allocation,
 				});
 			} else {
 				regularVouchers.push({
 					payment_doctype: x[1],
 					payment_name: x[2],
-					amount: x[3],
+					amount: allocation,
 				});
 			}
 		});
+
+		if (unpaidInvoices.length === 0 && regularVouchers.length === 0) {
+			frappe.msgprint(__("Bank transaction has no unallocated amount available."));
+			return;
+		}
 		
 		// Unified processing: always use background job (small or large)
 		this.processUnpaidInvoices(unpaidInvoices, regularVouchers);
