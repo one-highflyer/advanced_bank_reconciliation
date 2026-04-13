@@ -1,9 +1,10 @@
 # Copyright (c) 2024, HighFlyer and contributors
 # For license information, please see license.txt
 """Self-contained fixtures for advance_bank_reconciliation_tool partial
-allocation tests. All helpers are idempotent and safe to call from
-setUpClass on a fresh CI site that has ERPNext installed with
-_Test Company and related standard test records.
+allocation tests. Helpers are idempotent and safe to call from setUpClass
+on a fresh CI site that has ERPNext installed. setup_abr_test_data() also
+triggers ERPNext's test setup if _Test Company is missing, so individual
+test modules can run without relying on the before_tests hook firing.
 """
 import frappe
 from frappe.utils import add_days, flt, nowdate
@@ -121,8 +122,26 @@ def ensure_item():
 	return TEST_ITEM
 
 
+def ensure_erpnext_test_company():
+	"""Ensure _Test Company and its prerequisite standard records exist.
+
+	On a fresh site invoked via bench run-tests, the before_tests hook runs
+	ERPNext's setup wizard which creates these. When tests are invoked in
+	isolation (e.g. a single module via --module flag on a site that has
+	not yet been bootstrapped), this helper makes the fixtures truly
+	self-contained by triggering the same setup path on demand.
+	"""
+	if frappe.db.exists("Company", TEST_COMPANY):
+		return
+
+	from erpnext.setup.utils import before_tests as erpnext_before_tests
+
+	erpnext_before_tests()
+
+
 def setup_abr_test_data(company=TEST_COMPANY):
 	"""Idempotent top-level setup. Call from setUpClass and commit after."""
+	ensure_erpnext_test_company()
 	ensure_customer()
 	ensure_supplier()
 	ensure_item()

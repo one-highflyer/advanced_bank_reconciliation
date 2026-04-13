@@ -155,7 +155,7 @@ override_doctype_class = {
 # Testing
 # -------
 
-# before_tests = "advanced_bank_reconciliation.install.before_tests"
+before_tests = "advanced_bank_reconciliation.tests.test_utils.before_tests"
 
 # Overriding Methods
 # ------------------------------
