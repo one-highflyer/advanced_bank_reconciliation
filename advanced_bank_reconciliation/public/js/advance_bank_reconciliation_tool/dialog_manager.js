@@ -812,25 +812,49 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			return;
 		}
 		
-		// Separate unpaid invoices from regular vouchers
+		// Separate unpaid invoices from regular vouchers.
+		// Cap each row's allocation by the bank transaction's remaining
+		// unallocated amount so we never send more than the deposit /
+		// withdrawal. Without this cap the UI submits the invoice's full
+		// outstanding, which would over-allocate the bank transaction
+		// (negative unallocated_amount) and close the invoice even when
+		// only a partial payment arrived.
 		let unpaidInvoices = [];
 		let regularVouchers = [];
-		
+
+		const bt_unallocated = Math.abs(flt(this.bank_transaction.unallocated_amount || 0));
+		let bt_remaining = bt_unallocated;
+
 		selectedRows.forEach((x) => {
+			let allocation = flt(x[3]);
+			const sign = allocation < 0 ? -1 : 1;
+			const magnitude = Math.min(Math.abs(allocation), bt_remaining);
+			allocation = sign * magnitude;
+			bt_remaining = Math.max(0, bt_remaining - magnitude);
+
+			if (magnitude === 0) {
+				return;
+			}
+
 			if (x[1] === "Unpaid Sales Invoice" || x[1] === "Unpaid Purchase Invoice") {
 				unpaidInvoices.push({
 					doctype: x[1],
 					name: x[2],
-					allocated_amount: x[3],
+					allocated_amount: allocation,
 				});
 			} else {
 				regularVouchers.push({
 					payment_doctype: x[1],
 					payment_name: x[2],
-					amount: x[3],
+					amount: allocation,
 				});
 			}
 		});
+
+		if (unpaidInvoices.length === 0 && regularVouchers.length === 0) {
+			frappe.msgprint(__("Bank transaction has no unallocated amount available."));
+			return;
+		}
 		
 		// Unified processing: always use background job (small or large)
 		this.processUnpaidInvoices(unpaidInvoices, regularVouchers);
