@@ -2091,8 +2091,9 @@ def _normalise_pe_to_target_invoice(pe, invoice_doc, allocated_amount):
 		kept.append(ref)
 		remaining = flt(remaining) - flt(share)
 
+	placed = sum(flt(ref.allocated_amount) for ref in kept)
+
 	if abs(remaining) >= 0.005:
-		placed = flt(allocated_amount) - flt(remaining)
 		frappe.throw(
 			_(
 				"Cannot allocate {0} against {1} {2}: only {3} is available across its open references."
@@ -2102,9 +2103,14 @@ def _normalise_pe_to_target_invoice(pe, invoice_doc, allocated_amount):
 	pe.references = kept
 	pe.deductions = []
 
-	abs_allocated = abs(flt(allocated_amount))
-	pe.paid_amount = abs_allocated
-	pe.received_amount = abs_allocated
+	# Derive paid/received from what was actually placed in the references.
+	# Equivalent to abs(allocated_amount) today because the over-allocation
+	# guard above bails when placed != allocated, but sourcing from kept
+	# keeps the PE consistent with its own references without relying on
+	# that invariant.
+	abs_placed = abs(placed)
+	pe.paid_amount = abs_placed
+	pe.received_amount = abs_placed
 
 
 def create_payment_entry_for_invoice(invoice_doc, bank_transaction, allocated_amount, payment_type, party_type, party):
