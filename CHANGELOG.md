@@ -1,3 +1,10 @@
+## [1.7.3](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.2...v1.7.3) (2026-04-13)
+
+
+### Bug Fixes
+
+* **abr:** return unpaid invoices in FIFO order for partial allocation ([4b7d936](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/4b7d936b96dafe479c21e8fc44b7d9786eca4633))
+
 ## [1.7.2](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.1...v1.7.2) (2026-04-13)
 
 
