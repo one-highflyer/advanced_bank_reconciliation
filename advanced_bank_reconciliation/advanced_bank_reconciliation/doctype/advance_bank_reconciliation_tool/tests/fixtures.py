@@ -199,6 +199,7 @@ def create_test_sales_invoice(
 	company=TEST_COMPANY,
 	is_return=0,
 	do_not_submit=False,
+	posting_date=None,
 ):
 	"""Create and submit a Sales Invoice with the requested grand total."""
 	item_code = ensure_item()
@@ -206,14 +207,15 @@ def create_test_sales_invoice(
 
 	qty = -1 if is_return else 1
 	rate = abs(flt(outstanding))
+	posting = posting_date or nowdate()
 
 	doc = frappe.get_doc(
 		{
 			"doctype": "Sales Invoice",
 			"customer": customer,
 			"company": company,
-			"posting_date": nowdate(),
-			"due_date": add_days(nowdate(), 30),
+			"posting_date": posting,
+			"due_date": add_days(posting, 30),
 			"currency": currency or frappe.db.get_value("Company", company, "default_currency"),
 			"is_return": 1 if is_return else 0,
 			"update_stock": 0,
@@ -243,18 +245,20 @@ def create_test_purchase_invoice(
 	supplier=None,
 	company=TEST_COMPANY,
 	do_not_submit=False,
+	posting_date=None,
 ):
 	"""Create and submit a Purchase Invoice with the requested grand total."""
 	item_code = ensure_item()
 	supplier = supplier or ensure_supplier()
+	posting = posting_date or nowdate()
 
 	doc = frappe.get_doc(
 		{
 			"doctype": "Purchase Invoice",
 			"supplier": supplier,
 			"company": company,
-			"posting_date": nowdate(),
-			"due_date": add_days(nowdate(), 30),
+			"posting_date": posting,
+			"due_date": add_days(posting, 30),
 			"currency": currency or frappe.db.get_value("Company", company, "default_currency"),
 			"update_stock": 0,
 			"items": [
