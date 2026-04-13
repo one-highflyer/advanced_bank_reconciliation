@@ -16,9 +16,11 @@ def before_tests():
 	if not hasattr(frappe.local, "test_objects") or frappe.local.test_objects is None:
 		frappe.local.test_objects = {}
 
-	frappe.local.test_objects["BOM"] = []
-	for doctype in ["User", "Company", "Customer", "Supplier", "Item"]:
-		make_test_records(doctype, commit=True)
-	del frappe.local.test_objects["BOM"]
+	try:
+		frappe.local.test_objects["BOM"] = []
+		for doctype in ["User", "Company", "Customer", "Supplier", "Item"]:
+			make_test_records(doctype, commit=True)
+	finally:
+		frappe.local.test_objects.pop("BOM", None)
 
 	frappe.db.commit()
