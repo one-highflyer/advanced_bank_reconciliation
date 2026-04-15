@@ -1,3 +1,10 @@
+## [1.7.4](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.3...v1.7.4) (2026-04-15)
+
+
+### Bug Fixes
+
+* **abr:** round allocated_amount to field precision in bulk reconcile ([3c115ee](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/3c115ee056fed486f75f22d212baa7fb3bab6823))
+
 ## [1.7.3](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.2...v1.7.3) (2026-04-13)
 
 
