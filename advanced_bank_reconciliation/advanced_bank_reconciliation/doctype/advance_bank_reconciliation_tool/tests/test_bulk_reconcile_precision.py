@@ -39,9 +39,15 @@ class TestBulkReconcilePrecision(FrappeTestCase):
 		"""Regression: an unrounded float from JS arithmetic must round to
 		the field precision before append, so the second save() inside
 		reconcile_vouchers doesn't trip UpdateAfterSubmitError.
+
+		Invoices are created with round outstanding amounts large enough to
+		cover the partial allocations. The float quirk is in the allocation
+		amounts passed to reconcile_vouchers (what the UI sends), not in
+		the invoice totals — which can differ slightly on CI vs local if
+		tax/rounding defaults change grand_total.
 		"""
-		si1 = create_test_sales_invoice(outstanding=649.71)
-		si2 = create_test_sales_invoice(outstanding=110.29)
+		si1 = create_test_sales_invoice(outstanding=1000)
+		si2 = create_test_sales_invoice(outstanding=1000)
 		bt = create_test_bank_transaction(self.bank_account, deposit=760)
 
 		pe1 = create_payment_entry_for_invoice(
