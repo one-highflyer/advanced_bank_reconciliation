@@ -1,4 +1,4 @@
-# Copyright (c) 2024, HighFlyer and contributors
+# Copyright (c) 2026, HighFlyer and contributors
 # For license information, please see license.txt
 """Regression tests for float-precision handling in bulk reconciliation.
 
@@ -13,9 +13,10 @@ import json
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import flt, nowdate
+from frappe.utils import flt
 
 from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool import (
+	create_payment_entry_for_invoice,
 	reconcile_vouchers,
 )
 
@@ -34,32 +35,6 @@ class TestBulkReconcilePrecision(FrappeTestCase):
 		cls.bank_account = setup_abr_test_data(TEST_COMPANY)
 		frappe.db.commit()
 
-	def _make_payment_entry(self, si, amount):
-		"""Create and submit a Payment Entry that fully applies to the SI."""
-		from erpnext.accounts.doctype.payment_entry.payment_entry import (
-			get_payment_entry,
-		)
-
-		pe = get_payment_entry("Sales Invoice", si.name)
-		pe.paid_amount = amount
-		pe.received_amount = amount
-		pe.reference_no = "_ABR-TEST-REF"
-		pe.reference_date = nowdate()
-		pe.references = []
-		pe.append(
-			"references",
-			{
-				"reference_doctype": "Sales Invoice",
-				"reference_name": si.name,
-				"allocated_amount": amount,
-			},
-		)
-		pe.setup_party_account_field()
-		pe.set_missing_values()
-		pe.insert(ignore_permissions=True)
-		pe.submit()
-		return pe
-
 	def test_unrounded_float_allocation_does_not_raise(self):
 		"""Regression: an unrounded float from JS arithmetic must round to
 		the field precision before append, so the second save() inside
@@ -69,8 +44,22 @@ class TestBulkReconcilePrecision(FrappeTestCase):
 		si2 = create_test_sales_invoice(outstanding=110.29)
 		bt = create_test_bank_transaction(self.bank_account, deposit=760)
 
-		pe1 = self._make_payment_entry(si1, 649.71)
-		pe2 = self._make_payment_entry(si2, 110.29)
+		pe1 = create_payment_entry_for_invoice(
+			invoice_doc=si1,
+			bank_transaction=bt,
+			allocated_amount=649.71,
+			payment_type="Receive",
+			party_type="Customer",
+			party=si1.customer,
+		)
+		pe2 = create_payment_entry_for_invoice(
+			invoice_doc=si2,
+			bank_transaction=bt,
+			allocated_amount=110.29,
+			payment_type="Receive",
+			party_type="Customer",
+			party=si2.customer,
+		)
 
 		# Simulate what the bulk reconciliation UI sends: the second amount
 		# is computed as deposit - first_amount and carries a JS float error.
@@ -89,4 +78,8 @@ class TestBulkReconcilePrecision(FrappeTestCase):
 		self.assertEqual(flt(bt.allocated_amount), 760.0)
 		self.assertEqual(flt(bt.unallocated_amount), 0.0)
 		self.assertEqual(len(bt.payment_entries), 2)
-		self.assertEqual(flt(bt.payment_entries[1].allocated_amount), 110.29)
+
+		# Match by payment_entry name so the assertion is independent of row order
+		by_name = {row.payment_entry: row for row in bt.payment_entries}
+		self.assertEqual(flt(by_name[pe1.name].allocated_amount), 649.71)
+		self.assertEqual(flt(by_name[pe2.name].allocated_amount), 110.29)
