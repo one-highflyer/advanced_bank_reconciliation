@@ -1,6 +1,8 @@
 import logging
 
 import frappe
+from frappe.utils import flt
+
 from advanced_bank_reconciliation.utils.logger import (
     get_logger,
 )
@@ -181,10 +183,17 @@ class ExtendedBankTransaction(BankTransaction):
                 logger.info(
                     "Voucher: %s being added to bank transaction %s", voucher, self.name
                 )
+                # Round to the child field's precision so the in-memory value
+                # matches what gets persisted. Without this, an unrounded float
+                # (e.g. 110.28999999999996 from JS arithmetic) triggers
+                # UpdateAfterSubmitError on the subsequent save in
+                # reconcile_vouchers, because validate_update_after_submit
+                # compares the unrounded in-memory value against the DB value.
+                precision = self.precision("allocated_amount", "payment_entries")
                 pe = {
                     "payment_document": voucher["payment_doctype"],
                     "payment_entry": voucher["payment_name"],
-                    "allocated_amount": voucher["amount"],
+                    "allocated_amount": flt(voucher["amount"], precision),
                 }
                 self.append("payment_entries", pe)
                 added = True
