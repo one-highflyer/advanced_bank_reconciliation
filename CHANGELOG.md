@@ -1,3 +1,10 @@
+## [1.7.5](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.4...v1.7.5) (2026-04-23)
+
+
+### Bug Fixes
+
+* **abr:** prevent bulk reconcile failure on Bank Transactions with no reference ([857ee13](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/857ee13ae1baee1974089ab8370ca63406afb771))
+
 ## [1.7.4](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.3...v1.7.4) (2026-04-15)
 
 
