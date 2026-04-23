@@ -1806,6 +1806,11 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 	processed = 0
 	failed = 0
 	all_vouchers = []
+	# Keep the first per-invoice failure so we can surface it on the
+	# completion event. The background logger already has the full trace;
+	# the UI toast previously only said "No payment entries were created",
+	# which hides the actual validation reason.
+	first_error = None
 
 	try:
 		validate_selection_against_unallocated_amount = frappe.get_single_value("Advance Bank Reconciliation Settings", "validate_selection_against_unallocated_amount")
@@ -1871,6 +1876,11 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 				except Exception as e:
 					logger.exception("Error processing invoice %s: %s", invoice_data.get("name"), str(e))
 					failed += 1
+					if first_error is None:
+						first_error = {
+							"invoice": invoice_data.get("name"),
+							"message": str(e),
+						}
 					continue
 			
 			# Commit this batch
@@ -1957,6 +1967,10 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 				bank_transaction=updated_transaction.name
 			)
 		else:
+			if first_error:
+				raise Exception(
+					f"No payment entries were created. First failure on {first_error['invoice']}: {first_error['message']}"
+				)
 			raise Exception("No payment entries were created")
 			
 	except Exception as e:
@@ -2150,8 +2164,15 @@ def create_payment_entry_for_invoice(invoice_doc, bank_transaction, allocated_am
 	# to the caller's allocation. See helper for the full rationale.
 	_normalise_pe_to_target_invoice(payment_entry, invoice_doc, allocated_amount)
 
-	# Set reference details from bank transaction
-	payment_entry.reference_no = bank_transaction.reference_number or bank_transaction.description
+	# Set reference details from bank transaction. Fall back to the Bank
+	# Transaction name when both reference_number and description are empty,
+	# because ERPNext's Payment Entry validation rejects a Bank-type PE with
+	# no reference_no and we'd otherwise fail the whole bulk run.
+	payment_entry.reference_no = (
+		bank_transaction.reference_number
+		or bank_transaction.description
+		or bank_transaction.name
+	)
 	payment_entry.reference_date = bank_transaction.date
 	payment_entry.posting_date = bank_transaction.date
 
