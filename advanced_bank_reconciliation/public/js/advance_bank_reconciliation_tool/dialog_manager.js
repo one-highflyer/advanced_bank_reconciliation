@@ -379,6 +379,14 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				}
 			};
 			this.datatable = new frappe.DataTable(proposals_wrapper.get(0), datatable_options);
+			// Cap the matching-vouchers table at 300px so the Transaction Details
+			// section below stays close to the action. Fixed value (vs the viewport
+			// calc used by the outer table in data_table_manager.js) is intentional
+			// for modal context.
+			$(`.${this.datatable.style.scopeClass} .dt-scrollable`).css({
+				"max-height": "300px",
+				"height": "auto",
+			});
 		} else {
 			console.log("Refreshing data table");
 			this.datatable.refresh(this.data, this.columns);

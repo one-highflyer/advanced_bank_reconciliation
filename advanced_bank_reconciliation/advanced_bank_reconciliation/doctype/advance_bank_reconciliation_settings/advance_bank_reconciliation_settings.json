@@ -11,6 +11,7 @@
   "column_break_defaults",
   "default_journal_entry_type",
   "reconciling_unpaid_invoices_section",
+  "sort_unpaid_invoices_by_posting_date",
   "validate_selection_against_unallocated_amount",
   "reconcile_unpaid_invoices_in_background"
  ],
@@ -57,6 +58,13 @@
   },
   {
    "default": "0",
+   "description": "When enabled, unpaid invoices in the matching dialog are listed strictly by posting date (oldest first). When disabled (default), invoices whose outstanding amount exactly matches the bank transaction are surfaced first.",
+   "fieldname": "sort_unpaid_invoices_by_posting_date",
+   "fieldtype": "Check",
+   "label": "Sort unpaid invoices by posting date (FIFO)"
+  },
+  {
+   "default": "0",
    "description": "If checked, the unallocated amount from the bank transaction will be validated against the total of the selected unpaid invoices. If the total doesn't match, an error will be thrown.",
    "fieldname": "validate_selection_against_unallocated_amount",
    "fieldtype": "Check",
@@ -74,7 +82,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-03-29 12:00:00.000000",
+ "modified": "2026-04-28 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Advanced Bank Reconciliation",
  "name": "Advance Bank Reconciliation Settings",

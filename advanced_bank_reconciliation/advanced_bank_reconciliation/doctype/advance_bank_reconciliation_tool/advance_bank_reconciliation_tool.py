@@ -1485,6 +1485,17 @@ def get_unpaid_si_matching_query(exact_match, for_withdrawal=False, from_date=No
 		amount_condition = "outstanding_amount != 0.0"
 		amount_comparison = "outstanding_amount = %(amount)s"
 
+	# When strict FIFO is enabled in settings, neutralise the amount-match rank
+	# term so all candidate invoices share the same rank and the inner ORDER BY
+	# (posting_date ASC, name ASC) is the only thing that decides position.
+	strict_fifo = bool(
+		frappe.db.get_single_value(
+			"Advance Bank Reconciliation Settings",
+			"sort_unpaid_invoices_by_posting_date",
+		)
+	)
+	amount_rank_term = "0" if strict_fifo else f"CASE WHEN {amount_comparison} THEN 1 ELSE 0 END"
+
 	# Add date filters if provided
 	date_filter = ""
 	if from_date and to_date:
@@ -1497,7 +1508,7 @@ def get_unpaid_si_matching_query(exact_match, for_withdrawal=False, from_date=No
 	return f"""
 		SELECT
 			( CASE WHEN customer = %(party)s THEN 1 ELSE 0 END
-			+ CASE WHEN {amount_comparison} THEN 1 ELSE 0 END
+			+ {amount_rank_term}
 			+ CASE WHEN currency = %(currency)s THEN 1 ELSE 0 END
 			+ 1 ) AS rank,
 			'Unpaid Sales Invoice' as doctype,
@@ -1536,6 +1547,17 @@ def get_unpaid_pi_matching_query(exact_match, for_deposit=False, from_date=None,
 		amount_condition = "ABS(outstanding_amount) = ABS(%(amount)s)" if exact_match else "outstanding_amount > 0.0"
 		amount_comparison = "ABS(outstanding_amount) = ABS(%(amount)s)" if exact_match else "outstanding_amount = %(amount)s"
 
+	# When strict FIFO is enabled in settings, neutralise the amount-match rank
+	# term so all candidate invoices share the same rank and the inner ORDER BY
+	# (posting_date ASC, name ASC) is the only thing that decides position.
+	strict_fifo = bool(
+		frappe.db.get_single_value(
+			"Advance Bank Reconciliation Settings",
+			"sort_unpaid_invoices_by_posting_date",
+		)
+	)
+	amount_rank_term = "0" if strict_fifo else f"CASE WHEN {amount_comparison} THEN 1 ELSE 0 END"
+
 	# Add date filters if provided
 	date_filter = ""
 	if from_date and to_date:
@@ -1548,7 +1570,7 @@ def get_unpaid_pi_matching_query(exact_match, for_deposit=False, from_date=None,
 	return f"""
 		SELECT
 			( CASE WHEN supplier = %(party)s THEN 1 ELSE 0 END
-			+ CASE WHEN {amount_comparison} THEN 1 ELSE 0 END
+			+ {amount_rank_term}
 			+ CASE WHEN currency = %(currency)s THEN 1 ELSE 0 END
 			+ 1 ) AS rank,
 			'Unpaid Purchase Invoice' as doctype,
