@@ -1,3 +1,11 @@
+## [1.7.6](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.5...v1.7.6) (2026-04-28)
+
+
+### Bug Fixes
+
+* **abr:** add FIFO toggle for unpaid invoices and cap matching dialog table ([5b296b0](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/5b296b05229a153581cfdf35e0bb89c8c9965a16))
+* **abr:** gate compact matching vouchers table behind setting ([cd38e78](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/cd38e78ee6a3adedeea8b9658db2284bbb8cab25))
+
 ## [1.7.5](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.4...v1.7.5) (2026-04-23)
 
 
