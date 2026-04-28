@@ -189,6 +189,7 @@ def get_abr_default_settings():
 		"default_reconciliation_action": settings.default_reconciliation_action or "Match Against Voucher",
 		"default_document_type": settings.default_document_type or "Payment Entry",
 		"default_journal_entry_type": settings.default_journal_entry_type or "Bank Entry",
+		"compact_matching_vouchers_table": bool(settings.compact_matching_vouchers_table),
 	}
 
 
