@@ -379,6 +379,18 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				}
 			};
 			this.datatable = new frappe.DataTable(proposals_wrapper.get(0), datatable_options);
+			// Optionally cap the matching-vouchers table at 300px so the
+			// Transaction Details section below stays close to the action.
+			// Gated by the "Compact matching vouchers table" setting so sites
+			// that prefer scanning long lists at a glance keep the default
+			// behaviour. Fixed value (vs the viewport calc used by the outer
+			// table in data_table_manager.js) is intentional for modal context.
+			if (this.default_settings && this.default_settings.compact_matching_vouchers_table) {
+				$(`.${this.datatable.style.scopeClass} .dt-scrollable`).css({
+					"max-height": "300px",
+					"height": "auto",
+				});
+			}
 		} else {
 			console.log("Refreshing data table");
 			this.datatable.refresh(this.data, this.columns);

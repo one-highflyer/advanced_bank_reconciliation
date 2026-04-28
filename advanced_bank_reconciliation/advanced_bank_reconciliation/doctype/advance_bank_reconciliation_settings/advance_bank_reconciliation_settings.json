@@ -10,7 +10,10 @@
   "default_document_type",
   "column_break_defaults",
   "default_journal_entry_type",
+  "matching_dialog_section",
+  "compact_matching_vouchers_table",
   "reconciling_unpaid_invoices_section",
+  "sort_unpaid_invoices_by_posting_date",
   "validate_selection_against_unallocated_amount",
   "reconcile_unpaid_invoices_in_background"
  ],
@@ -51,9 +54,28 @@
    "options": "Journal Entry\nInter Company Journal Entry\nBank Entry\nCash Entry\nCredit Card Entry\nDebit Note\nCredit Note\nContra Entry\nExcise Entry\nWrite Off Entry\nOpening Entry\nDepreciation Entry\nExchange Rate Revaluation\nDeferred Revenue\nDeferred Expense"
   },
   {
+   "fieldname": "matching_dialog_section",
+   "fieldtype": "Section Break",
+   "label": "Matching Dialog"
+  },
+  {
+   "default": "0",
+   "description": "When enabled, the matching vouchers table in the reconciliation dialog auto-shrinks for few rows and caps at 300px when there are many. Keep disabled if your workflow involves scanning long lists of vouchers at a glance.",
+   "fieldname": "compact_matching_vouchers_table",
+   "fieldtype": "Check",
+   "label": "Compact matching vouchers table"
+  },
+  {
    "fieldname": "reconciling_unpaid_invoices_section",
    "fieldtype": "Section Break",
    "label": "Reconciling Unpaid Invoices"
+  },
+  {
+   "default": "0",
+   "description": "When enabled, unpaid invoices in the matching dialog are listed strictly by posting date (oldest first). When disabled (default), invoices whose outstanding amount exactly matches the bank transaction are surfaced first.",
+   "fieldname": "sort_unpaid_invoices_by_posting_date",
+   "fieldtype": "Check",
+   "label": "Sort unpaid invoices by posting date (FIFO)"
   },
   {
    "default": "0",
@@ -74,7 +96,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-03-29 12:00:00.000000",
+ "modified": "2026-04-28 13:00:00.000000",
  "modified_by": "Administrator",
  "module": "Advanced Bank Reconciliation",
  "name": "Advance Bank Reconciliation Settings",
