@@ -512,7 +512,7 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 	# Helper: directly invoke update_allocated_amount with synthetic rows
 	# -----------------------------------------------------------------------
 
-	def _bt_with_synthetic_rows(self, deposit=0, withdrawal=0, rows=None):
+	def _bt_with_synthetic_rows(self, deposit=0.0, withdrawal=0.0, rows=None):
 		"""Create a submitted BT, inject synthetic payment_entry child rows
 		directly via frappe.db.sql to bypass Dynamic Link validation, and invoke
 		update_allocated_amount + set_status explicitly.

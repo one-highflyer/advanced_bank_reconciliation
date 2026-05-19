@@ -192,7 +192,7 @@ def create_payment_terms_template(name, splits):
 
 
 def create_test_sales_invoice(
-	outstanding=100,
+	outstanding=100.0,
 	payment_terms_template=None,
 	currency=None,
 	customer=None,
@@ -265,7 +265,7 @@ def create_test_sales_invoice(
 
 
 def create_test_purchase_invoice(
-	outstanding=150,
+	outstanding=150.0,
 	currency=None,
 	supplier=None,
 	company=TEST_COMPANY,
@@ -348,8 +348,8 @@ def create_test_purchase_invoice(
 
 def create_test_bank_transaction(
 	bank_account,
-	deposit=0,
-	withdrawal=0,
+	deposit=0.0,
+	withdrawal=0.0,
 	date=None,
 	reference_number=None,
 	description="_ABR Test Bank Transaction",
