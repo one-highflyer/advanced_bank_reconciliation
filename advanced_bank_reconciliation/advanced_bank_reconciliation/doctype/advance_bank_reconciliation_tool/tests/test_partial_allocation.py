@@ -922,6 +922,69 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 		self.assertEqual(len(rows), 0, f"Expected no exact-match for mismatched amount, got: {rows}")
 
 	# -----------------------------------------------------------------------
+	# Sign gate on exact-match: refund branch must NOT surface positive PIs/SIs
+	# -----------------------------------------------------------------------
+
+	def test_pi_exact_match_for_deposit_excludes_normal_positive_paid_pi(self):
+		"""A normal paid PI (paid_amount>0) on the same bank account with a
+		magnitude equal to the deposit must NOT appear in the deposit
+		(refund-only) branch. Without the sign gate, ABS(paid_amount)=
+		ABS(amount) would surface normal positive PIs and let users match
+		them to deposits they don't belong to.
+		"""
+		pi = create_test_purchase_invoice(
+			outstanding=31.22,
+			is_paid=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=31.22,
+		)
+		bt = create_test_bank_transaction(self.bank_account, deposit=31.22)
+
+		matches = get_linked_payments(
+			bank_transaction_name=bt.name,
+			document_types=["purchase_invoice", "exact_match"],
+			from_date=add_days(nowdate(), -30),
+			to_date=add_days(nowdate(), 1),
+		)
+
+		rows = self._match_rows_for_doctype(matches, "Purchase Invoice", pi.name)
+		self.assertEqual(
+			len(rows), 0,
+			f"Deposit branch must be refund-only; positive paid PI leaked through: {rows}",
+		)
+
+	def test_si_exact_match_for_withdrawal_excludes_normal_positive_paid_si(self):
+		"""Symmetric: a normal paid SI (sip.amount>0) on the same bank account
+		with magnitude equal to the withdrawal must NOT appear in the
+		withdrawal (refund-only) branch.
+		"""
+		si = create_test_sales_invoice(outstanding=50.0)
+		# Override the SIP row to use the test bank GL with a POSITIVE amount
+		# (normal customer payment, not a refund). The fixture's default
+		# mode_of_payment may point at a different account, so we set the
+		# account explicitly to match the BT.
+		frappe.db.set_value(
+			"Sales Invoice Payment",
+			{"parent": si.name},
+			{"account": TEST_BANK_GL_ACCOUNT, "amount": 50.0, "base_amount": 50.0},
+		)
+
+		bt = create_test_bank_transaction(self.bank_account, withdrawal=50.0)
+
+		matches = get_linked_payments(
+			bank_transaction_name=bt.name,
+			document_types=["sales_invoice", "exact_match"],
+			from_date=add_days(nowdate(), -30),
+			to_date=add_days(nowdate(), 1),
+		)
+
+		rows = self._match_rows_for_doctype(matches, "Sales Invoice", si.name)
+		self.assertEqual(
+			len(rows), 0,
+			f"Withdrawal branch must be refund-only; positive paid SI leaked through: {rows}",
+		)
+
+	# -----------------------------------------------------------------------
 	# Test 16 — symmetry guard: withdrawal BT must not trigger deposit branch
 	# -----------------------------------------------------------------------
 
