@@ -932,13 +932,16 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 		ABS(amount) would surface normal positive PIs and let users match
 		them to deposits they don't belong to.
 		"""
+		# Use a round amount (no decimals) so validate_cash's grand_total vs
+		# paid_amount comparison doesn't trip on currency-precision rounding —
+		# see the same pattern in test_default_args_pi_matching_query_*.
 		pi = create_test_purchase_invoice(
-			outstanding=31.22,
+			outstanding=50.0,
 			is_paid=1,
 			cash_bank_account=TEST_BANK_GL_ACCOUNT,
-			paid_amount=31.22,
+			paid_amount=50.0,
 		)
-		bt = create_test_bank_transaction(self.bank_account, deposit=31.22)
+		bt = create_test_bank_transaction(self.bank_account, deposit=50.0)
 
 		matches = get_linked_payments(
 			bank_transaction_name=bt.name,
