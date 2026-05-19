@@ -1071,6 +1071,11 @@ def get_matching_queries(
 		query = get_unpaid_pi_matching_query(exact_match, for_deposit=True, from_date=from_date, to_date=to_date)
 		queries.append(query)
 
+	# Match paid refund purchase invoices (is_paid=1, paid_amount<0) against deposit transactions
+	if transaction.deposit > 0.0 and "purchase_invoice" in document_types:
+		query = get_pi_matching_query(exact_match, for_deposit=True)
+		queries.append(query)
+
 	if transaction.withdrawal > 0.0:
 		if "purchase_invoice" in document_types:
 			query = get_pi_matching_query(exact_match)
@@ -1084,6 +1089,11 @@ def get_matching_queries(
 		# This allows matching both customer refunds (negative) and returned payments (positive)
 		if "unpaid_sales_invoice" in document_types:
 			query = get_unpaid_si_matching_query(exact_match, for_withdrawal=False, from_date=from_date, to_date=to_date)
+			queries.append(query)
+
+		# Match paid refund sales invoices (is_paid=1, sip.amount<0) against withdrawal transactions
+		if "sales_invoice" in document_types:
+			query = get_si_matching_query(exact_match, for_withdrawal=True)
 			queries.append(query)
 
 	if "bank_transaction" in document_types:
@@ -1412,12 +1422,26 @@ def get_je_matching_query(
 	"""
 
 
-def get_si_matching_query(exact_match):
+def get_si_matching_query(exact_match, for_withdrawal=False):
 	# get matching sales invoice query
+	# for_withdrawal=True matches refund sales invoices (negative sip.amount) against withdrawal transactions
+	if for_withdrawal:
+		# Gate exact-match on negative sign too: ABS-only would let normal positive
+		# paid SIs with the same magnitude surface in the refund branch.
+		amount_condition = (
+			"sip.amount < 0.0 AND ABS(sip.amount) = ABS(%(amount)s)"
+			if exact_match
+			else "sip.amount < 0.0"
+		)
+		amount_rank_term = "CASE WHEN ABS(sip.amount) = ABS(%(amount)s) THEN 1 ELSE 0 END"
+	else:
+		amount_condition = "sip.amount = %(amount)s" if exact_match else "sip.amount > 0.0"
+		amount_rank_term = "CASE WHEN sip.amount = %(amount)s THEN 1 ELSE 0 END"
+
 	return f"""
 		SELECT
 			( CASE WHEN si.customer = %(party)s  THEN 1 ELSE 0 END
-			+ CASE WHEN sip.amount = %(amount)s THEN 1 ELSE 0 END
+			+ {amount_rank_term}
 			+ 1 ) AS rank,
 			'Sales Invoice' as doctype,
 			si.name,
@@ -1440,16 +1464,30 @@ def get_si_matching_query(exact_match):
 			si.docstatus = 1
 			AND (sip.clearance_date is null or sip.clearance_date='0000-00-00')
 			AND sip.account = %(bank_account)s
-			AND sip.amount {'= %(amount)s' if exact_match else '> 0.0'}
+			AND {amount_condition}
 	"""
 
 
-def get_pi_matching_query(exact_match):
+def get_pi_matching_query(exact_match, for_deposit=False):
 	# get matching purchase invoice query when they are also used as payment entries (is_paid)
+	# for_deposit=True matches refund purchase invoices (negative paid_amount) against deposit transactions
+	if for_deposit:
+		# Gate exact-match on negative sign too: ABS-only would let normal positive
+		# paid PIs with the same magnitude surface in the refund branch.
+		amount_condition = (
+			"paid_amount < 0.0 AND ABS(paid_amount) = ABS(%(amount)s)"
+			if exact_match
+			else "paid_amount < 0.0"
+		)
+		amount_rank_term = "CASE WHEN ABS(paid_amount) = ABS(%(amount)s) THEN 1 ELSE 0 END"
+	else:
+		amount_condition = "paid_amount = %(amount)s" if exact_match else "paid_amount > 0.0"
+		amount_rank_term = "CASE WHEN paid_amount = %(amount)s THEN 1 ELSE 0 END"
+
 	return f"""
 		SELECT
 			( CASE WHEN supplier = %(party)s THEN 1 ELSE 0 END
-			+ CASE WHEN paid_amount = %(amount)s THEN 1 ELSE 0 END
+			+ {amount_rank_term}
 			+ 1 ) AS rank,
 			'Purchase Invoice' as doctype,
 			name,
@@ -1468,7 +1506,7 @@ def get_pi_matching_query(exact_match):
 			AND is_paid = 1
 			AND ifnull(clearance_date, '') = ""
 			AND cash_bank_account = %(bank_account)s
-			AND paid_amount {'= %(amount)s' if exact_match else '> 0.0'}
+			AND {amount_condition}
 	"""
 
 
