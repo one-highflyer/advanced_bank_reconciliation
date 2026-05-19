@@ -1036,3 +1036,67 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 		rows = self._match_rows_for_doctype(matches, "Purchase Invoice", pi.name)
 		self.assertEqual(len(rows), 1, f"Expected normal paid PI to match, got {len(rows)}: {rows}")
 		self.assertAlmostEqual(flt(rows[0][3]), 150.0, places=2)
+
+	# -----------------------------------------------------------------------
+	# Test 18 — cash_bank_account filter: PI on different bank GL filtered out
+	# -----------------------------------------------------------------------
+
+	def test_paid_refund_pi_with_different_cash_bank_account_filtered_out(self):
+		"""A paid refund PI whose cash_bank_account is a DIFFERENT GL account
+		than the BT's bank account must NOT appear. The SQL filters on
+		`cash_bank_account = %(bank_account)s` which also enforces company
+		and currency isolation as a side effect (GL accounts are scoped to a
+		single company and have a fixed currency).
+		"""
+		# Find a different bank GL account in _Test Company. The standard
+		# ERPNext fixture creates "_Test Bank - _TC" alongside our test bank.
+		other_bank_gl = frappe.db.get_value(
+			"Account",
+			{
+				"company": TEST_COMPANY,
+				"account_type": "Bank",
+				"is_group": 0,
+				"name": ["!=", TEST_BANK_GL_ACCOUNT],
+			},
+			"name",
+		)
+		if not other_bank_gl:
+			# Create a second bank GL account scoped to _Test Company
+			parent = frappe.db.get_value(
+				"Account",
+				{"company": TEST_COMPANY, "account_type": "Bank", "is_group": 1},
+				"name",
+			)
+			other_acc = frappe.get_doc({
+				"doctype": "Account",
+				"account_name": "_ABR Test Other Bank Account",
+				"parent_account": parent,
+				"company": TEST_COMPANY,
+				"account_type": "Bank",
+				"is_group": 0,
+			})
+			other_acc.insert(ignore_permissions=True, ignore_if_duplicate=True)
+			other_bank_gl = other_acc.name
+
+		pi = create_test_purchase_invoice(
+			outstanding=31.27,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=other_bank_gl,
+			paid_amount=-31.27,
+		)
+		bt = create_test_bank_transaction(self.bank_account, deposit=31.27)
+
+		matches = get_linked_payments(
+			bank_transaction_name=bt.name,
+			document_types=["purchase_invoice"],
+			from_date=add_days(nowdate(), -30),
+			to_date=add_days(nowdate(), 1),
+		)
+
+		rows = self._match_rows_for_doctype(matches, "Purchase Invoice", pi.name)
+		self.assertEqual(
+			len(rows),
+			0,
+			f"PI on different bank GL must not match, got: {rows}",
+		)
