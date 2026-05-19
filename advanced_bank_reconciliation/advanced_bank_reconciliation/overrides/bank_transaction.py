@@ -202,3 +202,34 @@ class ExtendedBankTransaction(BankTransaction):
         # runs on_update_after_submit
         if added:
             self.save()
+
+    def update_allocated_amount(self):
+        """
+        Override of ERPNext upstream to handle signed allocations correctly.
+
+        ABR stores allocated_amount on Bank Transaction Payments rows with sign
+        preserved (negative for refunds, positive for normal payments). This is
+        intentional and lets users net refunds against batched deposits in a
+        single Bank Transaction. Upstream computes
+            unallocated_amount = abs(W - D) - sum(allocated_amount)
+        which breaks for standalone refund matches (e.g. a $31.22 deposit
+        matched against a single -$31.22 refund allocation) because the sum is
+        signed. We compute against abs(sum) so that:
+          - All-positive allocations behave as upstream
+          - Batched mixed allocations summing to BT magnitude still net to zero
+          - Standalone single-sign allocations (positive OR negative) work
+        self.allocated_amount stays signed (sum, not abs) so downstream consumers
+        see the net as users entered it.
+        """
+        signed_sum = (
+            sum(p.allocated_amount for p in self.payment_entries)
+            if self.payment_entries
+            else 0.0
+        )
+        bt_magnitude = abs(flt(self.withdrawal) - flt(self.deposit))
+        unallocated_amount = bt_magnitude - abs(signed_sum)
+
+        self.allocated_amount = flt(signed_sum, self.precision("allocated_amount"))
+        self.unallocated_amount = flt(
+            unallocated_amount, self.precision("unallocated_amount")
+        )

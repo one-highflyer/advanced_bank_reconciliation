@@ -200,6 +200,7 @@ def create_test_sales_invoice(
 	is_return=0,
 	do_not_submit=False,
 	posting_date=None,
+	payments=None,
 ):
 	"""Create and submit a Sales Invoice with the requested grand total.
 
@@ -207,6 +208,12 @@ def create_test_sales_invoice(
 	validation. If the caller wants a historical posting_date, we rewrite
 	it via db_set after submit so the field reflects the requested date
 	without going through validation again.
+
+	payments: optional list of dicts with keys 'account' and 'amount' (signed).
+	          Use this to add Sales Invoice Payment rows (e.g. for paid refund SIs
+	          where the SIP row carries a negative amount). When supplied, each dict
+	          must include 'account' (GL account name). 'mode_of_payment' defaults
+	          to 'Cash' if not provided.
 	"""
 	item_code = ensure_item()
 	customer = customer or ensure_customer()
@@ -214,30 +221,40 @@ def create_test_sales_invoice(
 	qty = -1 if is_return else 1
 	rate = abs(flt(outstanding))
 
-	doc = frappe.get_doc(
-		{
-			"doctype": "Sales Invoice",
-			"customer": customer,
-			"company": company,
-			"posting_date": nowdate(),
-			"due_date": add_days(nowdate(), 30),
-			"currency": currency or frappe.db.get_value("Company", company, "default_currency"),
-			"is_return": 1 if is_return else 0,
-			"update_stock": 0,
-			"payment_terms_template": payment_terms_template,
-			"items": [
-				{
-					"item_code": item_code,
-					"qty": qty,
-					"rate": rate,
-					"income_account": frappe.db.get_value("Company", company, "default_income_account")
-					or "Sales - _TC",
-					"cost_center": frappe.db.get_value("Company", company, "cost_center")
-					or "Main - _TC",
-				}
-			],
-		}
-	)
+	doc_data = {
+		"doctype": "Sales Invoice",
+		"customer": customer,
+		"company": company,
+		"posting_date": nowdate(),
+		"due_date": add_days(nowdate(), 30),
+		"currency": currency or frappe.db.get_value("Company", company, "default_currency"),
+		"is_return": 1 if is_return else 0,
+		"update_stock": 0,
+		"payment_terms_template": payment_terms_template,
+		"items": [
+			{
+				"item_code": item_code,
+				"qty": qty,
+				"rate": rate,
+				"income_account": frappe.db.get_value("Company", company, "default_income_account")
+				or "Sales - _TC",
+				"cost_center": frappe.db.get_value("Company", company, "cost_center")
+				or "Main - _TC",
+			}
+		],
+	}
+
+	if payments:
+		doc_data["payments"] = [
+			{
+				"mode_of_payment": p.get("mode_of_payment", "Cash"),
+				"account": p["account"],
+				"amount": flt(p["amount"]),
+			}
+			for p in payments
+		]
+
+	doc = frappe.get_doc(doc_data)
 	doc.insert(ignore_permissions=True)
 	if not do_not_submit:
 		doc.submit()
@@ -254,39 +271,72 @@ def create_test_purchase_invoice(
 	company=TEST_COMPANY,
 	do_not_submit=False,
 	posting_date=None,
+	is_paid=0,
+	is_return=0,
+	cash_bank_account=None,
+	mode_of_payment=None,
+	paid_amount=None,
 ):
 	"""Create and submit a Purchase Invoice with the requested grand total.
 
 	Insert always uses today's date; see create_test_sales_invoice for
 	the rationale around historical posting_date handling.
+
+	For is_paid=1 invoices:
+	  - cash_bank_account is required (GL Account name, not Bank Account doc name).
+	    Raises frappe.ValidationError if omitted.
+	  - mode_of_payment defaults to 'Cash' if not provided.
+	  - For is_return=1 invoices, ERPNext's calculate_paid_amount does not auto-set
+	    paid_amount for negative grand_totals. The caller should supply paid_amount
+	    explicitly (e.g. paid_amount=-31.27) so the GL entry to the bank account is
+	    created. If omitted for a return invoice, paid_amount remains 0 and no bank
+	    GL entry is posted.
 	"""
+	if is_paid and not cash_bank_account:
+		frappe.throw(
+			"cash_bank_account is required when creating a paid Purchase Invoice (is_paid=1). "
+			"Supply the GL Account name (e.g. TEST_BANK_GL_ACCOUNT).",
+			frappe.ValidationError,
+		)
+
 	item_code = ensure_item()
 	supplier = supplier or ensure_supplier()
 
-	doc = frappe.get_doc(
-		{
-			"doctype": "Purchase Invoice",
-			"supplier": supplier,
-			"company": company,
-			"posting_date": nowdate(),
-			"due_date": add_days(nowdate(), 30),
-			"currency": currency or frappe.db.get_value("Company", company, "default_currency"),
-			"update_stock": 0,
-			"items": [
-				{
-					"item_code": item_code,
-					"qty": 1,
-					"rate": flt(outstanding),
-					"expense_account": frappe.db.get_value(
-						"Company", company, "default_expense_account"
-					)
-					or "Cost of Goods Sold - _TC",
-					"cost_center": frappe.db.get_value("Company", company, "cost_center")
-					or "Main - _TC",
-				}
-			],
-		}
-	)
+	qty = -1 if is_return else 1
+	rate = abs(flt(outstanding))
+
+	doc_data = {
+		"doctype": "Purchase Invoice",
+		"supplier": supplier,
+		"company": company,
+		"posting_date": nowdate(),
+		"due_date": add_days(nowdate(), 30),
+		"currency": currency or frappe.db.get_value("Company", company, "default_currency"),
+		"update_stock": 0,
+		"is_paid": 1 if is_paid else 0,
+		"is_return": 1 if is_return else 0,
+		"items": [
+			{
+				"item_code": item_code,
+				"qty": qty,
+				"rate": rate,
+				"expense_account": frappe.db.get_value(
+					"Company", company, "default_expense_account"
+				)
+				or "Cost of Goods Sold - _TC",
+				"cost_center": frappe.db.get_value("Company", company, "cost_center")
+				or "Main - _TC",
+			}
+		],
+	}
+
+	if is_paid:
+		doc_data["cash_bank_account"] = cash_bank_account
+		doc_data["mode_of_payment"] = mode_of_payment or "Cash"
+		if paid_amount is not None:
+			doc_data["paid_amount"] = flt(paid_amount)
+
+	doc = frappe.get_doc(doc_data)
 	doc.insert(ignore_permissions=True)
 	if not do_not_submit:
 		doc.submit()

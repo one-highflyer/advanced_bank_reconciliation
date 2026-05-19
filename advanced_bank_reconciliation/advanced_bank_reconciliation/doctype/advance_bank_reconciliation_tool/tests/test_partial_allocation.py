@@ -16,9 +16,11 @@ from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_b
 	_signed_cap,
 	create_payment_entry_for_invoice,
 	reconcile_vouchers,
+	unreconcile_bank_transaction,
 )
 
 from .fixtures import (
+	TEST_BANK_GL_ACCOUNT,
 	TEST_COMPANY,
 	create_payment_terms_template,
 	create_test_bank_transaction,
@@ -489,3 +491,326 @@ class TestPartialAllocation(FrappeTestCase):
 		self.assertEqual(flt(pe.references[1].allocated_amount), -25.0)
 		self.assertEqual(flt(pe.paid_amount), 75.0)
 		self.assertEqual(flt(pe.received_amount), 75.0)
+
+
+class TestRefundMatchingAndAllocation(FrappeTestCase):
+	"""End-to-end and unit tests for paid/unpaid refund invoice matching and
+	the signed-allocation unallocated_amount fix.
+
+	Tests 1-4 use the full ABR reconcile flow (create PE or direct voucher).
+	Tests 5-11 directly set BT payment_entries rows and call bt.save() to
+	isolate the update_allocated_amount override behaviour.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls.bank_account = setup_abr_test_data(TEST_COMPANY)
+		frappe.db.commit()
+
+	# -----------------------------------------------------------------------
+	# Helper: directly invoke update_allocated_amount with synthetic rows
+	# -----------------------------------------------------------------------
+
+	def _bt_with_synthetic_rows(self, deposit=0, withdrawal=0, rows=None):
+		"""Create a submitted BT, inject synthetic payment_entry child rows
+		directly via frappe.db.sql to bypass Dynamic Link validation, and invoke
+		update_allocated_amount + set_status explicitly.
+
+		This isolates the update_allocated_amount formula from the PE creation
+		and link-validation layers. rows: list of floats (allocated_amount values).
+		"""
+		bt = create_test_bank_transaction(self.bank_account, deposit=deposit, withdrawal=withdrawal)
+
+		if rows:
+			import random
+			import string
+
+			for amount in rows:
+				# Use a synthetic but unique child row name
+				row_name = "ABR-TEST-" + "".join(random.choices(string.ascii_lowercase, k=8))
+				# Insert child row directly, bypassing link validation
+				frappe.db.sql(
+					"""
+					INSERT INTO `tabBank Transaction Payments`
+					    (name, parent, parenttype, parentfield,
+					     payment_document, payment_entry, allocated_amount)
+					VALUES (%s, %s, 'Bank Transaction', 'payment_entries',
+					        'Payment Entry', %s, %s)
+					""",
+					(row_name, bt.name, row_name, flt(amount)),
+				)
+
+			# Reload so the Python object has the rows
+			bt.reload()
+			# Now call update_allocated_amount and set_status directly
+			bt.update_allocated_amount()
+			bt.set_status()
+			# Persist the computed values
+			frappe.db.set_value(
+				"Bank Transaction",
+				bt.name,
+				{
+					"allocated_amount": bt.allocated_amount,
+					"unallocated_amount": bt.unallocated_amount,
+				},
+			)
+			bt.reload()
+
+		return bt
+
+	# -----------------------------------------------------------------------
+	# Test 1 — standalone unpaid refund SI on deposit (PE path)
+	# -----------------------------------------------------------------------
+
+	def test_standalone_unpaid_refund_si_on_deposit(self):
+		"""Unpaid SI return (outstanding=-31.22) reconciled against BT deposit=31.22.
+		After match, BT must be fully reconciled with signed allocated_amount.
+		"""
+		si = create_test_sales_invoice(outstanding=31.22, is_return=1)
+		self.assertLess(flt(si.outstanding_amount), 0)
+
+		bt = create_test_bank_transaction(self.bank_account, deposit=31.22)
+
+		pe = create_payment_entry_for_invoice(
+			invoice_doc=si,
+			bank_transaction=bt,
+			allocated_amount=-31.22,
+			payment_type="Pay",
+			party_type="Customer",
+			party=si.customer,
+		)
+
+		_reconcile(bt.name, pe.name, -31.22)
+		bt.reload()
+
+		self.assertAlmostEqual(flt(bt.allocated_amount), -31.22, places=2)
+		self.assertAlmostEqual(flt(bt.unallocated_amount), 0.0, places=2)
+		self.assertEqual(bt.status, "Reconciled")
+
+	# -----------------------------------------------------------------------
+	# Test 2 — standalone unpaid refund PI on deposit (PE path)
+	# -----------------------------------------------------------------------
+
+	def test_standalone_unpaid_refund_pi_on_deposit(self):
+		"""Unpaid PI return (outstanding=-31.22) reconciled against BT deposit=31.22.
+		After match, BT must be fully reconciled with signed allocated_amount.
+		"""
+		pi = create_test_purchase_invoice(outstanding=31.22, is_return=1)
+		self.assertLess(flt(pi.outstanding_amount), 0)
+
+		bt = create_test_bank_transaction(self.bank_account, deposit=31.22)
+
+		pe = create_payment_entry_for_invoice(
+			invoice_doc=pi,
+			bank_transaction=bt,
+			allocated_amount=-31.22,
+			payment_type="Receive",
+			party_type="Supplier",
+			party=pi.supplier,
+		)
+
+		_reconcile(bt.name, pe.name, -31.22)
+		bt.reload()
+		pi.reload()
+
+		self.assertAlmostEqual(flt(bt.allocated_amount), -31.22, places=2)
+		self.assertAlmostEqual(flt(bt.unallocated_amount), 0.0, places=2)
+		self.assertEqual(bt.status, "Reconciled")
+
+	# -----------------------------------------------------------------------
+	# Test 3 — standalone paid refund PI on deposit (new PR-1 path)
+	# -----------------------------------------------------------------------
+
+	def test_standalone_paid_refund_pi_on_deposit(self):
+		"""PI is_paid=1, is_return=1 matched directly as a regular voucher against
+		BT deposit=31.22. Tests the new for_deposit=True query branch.
+		paid_amount=-31.27 is supplied explicitly because ERPNext's
+		calculate_paid_amount does not auto-set negative paid_amount for returns.
+		"""
+		pi = create_test_purchase_invoice(
+			outstanding=31.27,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.27,
+		)
+		# Verify the paid_amount is negative as expected for a refund
+		self.assertLess(flt(pi.paid_amount), 0)
+
+		bt = create_test_bank_transaction(self.bank_account, deposit=31.22)
+
+		# Direct regular-voucher reconcile (no PE created)
+		reconcile_vouchers(bt.name, json.dumps([
+			{
+				"payment_doctype": "Purchase Invoice",
+				"payment_name": pi.name,
+				"amount": -31.22,
+			}
+		]))
+		bt.reload()
+		pi.reload()
+
+		self.assertAlmostEqual(flt(bt.allocated_amount), -31.22, places=2)
+		self.assertAlmostEqual(flt(bt.unallocated_amount), 0.0, places=2)
+		self.assertEqual(bt.status, "Reconciled")
+
+	# -----------------------------------------------------------------------
+	# Test 4 — standalone paid refund SI on withdrawal (new symmetric path)
+	# -----------------------------------------------------------------------
+
+	def test_standalone_paid_refund_si_on_withdrawal(self):
+		"""SI with SIP row account=bank_gl, amount=-50 matched directly as a
+		regular voucher against BT withdrawal=50.
+		Tests the new for_withdrawal=True query branch.
+		"""
+		# Create a return SI. We will patch the SIP row after creation to point
+		# at the test bank GL account, because set_account_for_mode_of_payment
+		# overrides the account from mode_of_payment during validate.
+		si = create_test_sales_invoice(outstanding=50, is_return=1)
+
+		# Patch the SIP row: set account to test bank GL and amount to -50.
+		# Use a direct SIP insert since submit clears unallocated SIP rows.
+		frappe.get_doc({
+			"doctype": "Sales Invoice Payment",
+			"parent": si.name,
+			"parenttype": "Sales Invoice",
+			"parentfield": "payments",
+			"mode_of_payment": "Cash",
+			"account": TEST_BANK_GL_ACCOUNT,
+			"amount": -50.0,
+			"base_amount": -50.0,
+		}).insert(ignore_permissions=True)
+
+		bt = create_test_bank_transaction(self.bank_account, withdrawal=50)
+
+		# Direct regular-voucher reconcile (no PE created)
+		reconcile_vouchers(bt.name, json.dumps([
+			{
+				"payment_doctype": "Sales Invoice",
+				"payment_name": si.name,
+				"amount": -50,
+			}
+		]))
+		bt.reload()
+
+		self.assertAlmostEqual(flt(bt.allocated_amount), -50.0, places=2)
+		self.assertAlmostEqual(flt(bt.unallocated_amount), 0.0, places=2)
+		self.assertEqual(bt.status, "Reconciled")
+
+	# -----------------------------------------------------------------------
+	# Test 5 — batched mixed deposit (Venerdi-style regression guard)
+	# -----------------------------------------------------------------------
+
+	def test_batched_mixed_deposit_regression(self):
+		"""BT deposit=1000, two rows: +1031.27 and -31.27 (net 1000).
+		BT must show allocated_amount=1000, unallocated_amount=0.
+		"""
+		bt = self._bt_with_synthetic_rows(deposit=1000.0, rows=[1031.27, -31.27])
+
+		self.assertAlmostEqual(flt(bt.allocated_amount), 1000.0, places=2)
+		self.assertAlmostEqual(flt(bt.unallocated_amount), 0.0, places=2)
+		self.assertEqual(bt.status, "Reconciled")
+
+	# -----------------------------------------------------------------------
+	# Test 6 — all-positive partial allocation (regression guard)
+	# -----------------------------------------------------------------------
+
+	def test_all_positive_partial_allocation_regression(self):
+		"""BT deposit=100, single row allocated=60. Must remain Unreconciled."""
+		bt = self._bt_with_synthetic_rows(deposit=100.0, rows=[60.0])
+
+		self.assertAlmostEqual(flt(bt.allocated_amount), 60.0, places=2)
+		self.assertAlmostEqual(flt(bt.unallocated_amount), 40.0, places=2)
+		self.assertEqual(bt.status, "Unreconciled")
+
+	# -----------------------------------------------------------------------
+	# Test 7 — all-negative partial refund (previously broken)
+	# -----------------------------------------------------------------------
+
+	def test_all_negative_partial_refund(self):
+		"""BT deposit=100, single refund row allocated=-60.
+		abs(100) - abs(-60) = 40 unallocated. Previously this gave 160.
+		"""
+		bt = self._bt_with_synthetic_rows(deposit=100.0, rows=[-60.0])
+
+		self.assertAlmostEqual(flt(bt.allocated_amount), -60.0, places=2)
+		self.assertAlmostEqual(flt(bt.unallocated_amount), 40.0, places=2)
+		self.assertEqual(bt.status, "Unreconciled")
+
+	# -----------------------------------------------------------------------
+	# Test 8 — mixed partial allocation
+	# -----------------------------------------------------------------------
+
+	def test_mixed_partial_allocation(self):
+		"""BT deposit=100, two rows: +50, -20 (signed sum=30).
+		unallocated = abs(100) - abs(30) = 70.
+		"""
+		bt = self._bt_with_synthetic_rows(deposit=100.0, rows=[50.0, -20.0])
+
+		self.assertAlmostEqual(flt(bt.allocated_amount), 30.0, places=2)
+		self.assertAlmostEqual(flt(bt.unallocated_amount), 70.0, places=2)
+		self.assertEqual(bt.status, "Unreconciled")
+
+	# -----------------------------------------------------------------------
+	# Test 9 — unreconcile after standalone refund match (round trip)
+	# -----------------------------------------------------------------------
+
+	def test_unreconcile_after_standalone_refund_match(self):
+		"""After reconciling a paid refund PI (test 3 scenario), unreconcile
+		must restore BT to its original unallocated state.
+		"""
+		pi = create_test_purchase_invoice(
+			outstanding=31.22,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.22,
+		)
+		bt = create_test_bank_transaction(self.bank_account, deposit=31.22)
+
+		reconcile_vouchers(bt.name, json.dumps([
+			{
+				"payment_doctype": "Purchase Invoice",
+				"payment_name": pi.name,
+				"amount": -31.22,
+			}
+		]))
+		bt.reload()
+		self.assertEqual(bt.status, "Reconciled")
+
+		# Unreconcile
+		unreconcile_bank_transaction(bt.name)
+		bt.reload()
+		pi.reload()
+
+		self.assertAlmostEqual(flt(bt.allocated_amount), 0.0, places=2)
+		self.assertAlmostEqual(flt(bt.unallocated_amount), 31.22, places=2)
+		self.assertEqual(bt.status, "Unreconciled")
+		self.assertFalse(pi.clearance_date)
+
+	# -----------------------------------------------------------------------
+	# Test 10 — exact match threshold boundary
+	# -----------------------------------------------------------------------
+
+	def test_exact_match_threshold_boundary(self):
+		"""BT deposit=100, allocate exactly 100. Must become Reconciled."""
+		bt = self._bt_with_synthetic_rows(deposit=100.0, rows=[100.0])
+
+		self.assertAlmostEqual(flt(bt.unallocated_amount), 0.0, places=2)
+		self.assertEqual(bt.status, "Reconciled")
+
+	# -----------------------------------------------------------------------
+	# Test 11 — overallocation rounding
+	# -----------------------------------------------------------------------
+
+	def test_overallocation_rounding(self):
+		"""BT deposit=100.00, signed sum=100.01 (overallocated by 0.01).
+		unallocated = 100 - 100.01 = -0.01; set_status treats <=0 as Reconciled.
+		"""
+		bt = self._bt_with_synthetic_rows(deposit=100.0, rows=[100.01])
+
+		# unallocated_amount will be slightly negative due to overallocation
+		self.assertAlmostEqual(flt(bt.unallocated_amount), -0.01, places=2)
+		# set_status uses unallocated_amount <= 0 → Reconciled
+		self.assertEqual(bt.status, "Reconciled")
