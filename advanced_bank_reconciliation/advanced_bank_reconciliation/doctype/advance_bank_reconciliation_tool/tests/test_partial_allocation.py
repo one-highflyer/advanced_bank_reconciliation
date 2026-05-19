@@ -912,3 +912,60 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 		self.assertGreaterEqual(int(row[0]), 1)
 		# paid_amount comes from sip.amount which is negative for refunds
 		self.assertAlmostEqual(flt(row[3]), -50.0, places=2)
+
+	# -----------------------------------------------------------------------
+	# Test 14 — exact match: BT amount matches |paid_amount|
+	# -----------------------------------------------------------------------
+
+	def test_pi_matching_exact_match_for_deposit_amount_match(self):
+		"""With 'exact_match' in document_types and BT.deposit=31.27, a paid
+		refund PI of paid_amount=-31.27 MUST appear (ABS(-31.27) == ABS(31.27)).
+		Guards the for_deposit=True ABS-equality branch in get_pi_matching_query.
+		"""
+		pi = create_test_purchase_invoice(
+			outstanding=31.27,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.27,
+		)
+		bt = create_test_bank_transaction(self.bank_account, deposit=31.27)
+
+		matches = get_linked_payments(
+			bank_transaction_name=bt.name,
+			document_types=["purchase_invoice", "exact_match"],
+			from_date=add_days(nowdate(), -30),
+			to_date=add_days(nowdate(), 1),
+		)
+
+		rows = self._match_rows_for_doctype(matches, "Purchase Invoice", pi.name)
+		self.assertEqual(len(rows), 1, f"Expected exact-match hit, got {len(rows)}: {rows}")
+		self.assertAlmostEqual(flt(rows[0][3]), -31.27, places=2)
+
+	# -----------------------------------------------------------------------
+	# Test 15 — exact match miss: BT amount does NOT match |paid_amount|
+	# -----------------------------------------------------------------------
+
+	def test_pi_matching_exact_match_for_deposit_amount_mismatch(self):
+		"""With 'exact_match' and BT.deposit=31.22 but PI paid_amount=-31.27,
+		the PI MUST NOT appear because ABS(-31.27) != ABS(31.22). Guards
+		against the exact-match SQL branch accidentally accepting near-misses.
+		"""
+		pi = create_test_purchase_invoice(
+			outstanding=31.27,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.27,
+		)
+		bt = create_test_bank_transaction(self.bank_account, deposit=31.22)
+
+		matches = get_linked_payments(
+			bank_transaction_name=bt.name,
+			document_types=["purchase_invoice", "exact_match"],
+			from_date=add_days(nowdate(), -30),
+			to_date=add_days(nowdate(), 1),
+		)
+
+		rows = self._match_rows_for_doctype(matches, "Purchase Invoice", pi.name)
+		self.assertEqual(len(rows), 0, f"Expected no exact-match for mismatched amount, got: {rows}")
