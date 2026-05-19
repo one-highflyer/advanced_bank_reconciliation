@@ -9,12 +9,13 @@ from types import SimpleNamespace
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import flt
+from frappe.utils import add_days, flt, nowdate
 
 from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool import (
 	_normalise_pe_to_target_invoice,
 	_signed_cap,
 	create_payment_entry_for_invoice,
+	get_linked_payments,
 	reconcile_vouchers,
 	unreconcile_bank_transaction,
 )
@@ -814,3 +815,100 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 		self.assertAlmostEqual(flt(bt.unallocated_amount), -0.01, places=2)
 		# set_status uses unallocated_amount <= 0 → Reconciled
 		self.assertEqual(bt.status, "Reconciled")
+
+	# -----------------------------------------------------------------------
+	# Helpers for matching-query coverage (tests 12+)
+	# -----------------------------------------------------------------------
+
+	@staticmethod
+	def _match_rows_for_doctype(matches, doctype, name):
+		"""Filter matching tuples to a specific (doctype, name) pair.
+
+		check_matching returns tuples shaped like
+		(rank, doctype, name, paid_amount, reference_no, reference_date,
+		 party, party_type, posting_date, currency, party_name).
+		"""
+		return [row for row in matches if row[1] == doctype and row[2] == name]
+
+	# -----------------------------------------------------------------------
+	# Test 12 — get_linked_payments returns paid refund PI for deposit BT
+	# -----------------------------------------------------------------------
+
+	def test_get_linked_payments_returns_paid_refund_pi_for_deposit(self):
+		"""A paid refund PI (is_paid=1, is_return=1, paid_amount<0) must appear
+		as a matching candidate for a deposit BT when document_types includes
+		'purchase_invoice'. Covers the new get_pi_matching_query(for_deposit=True)
+		branch end-to-end through the whitelisted get_linked_payments API.
+		"""
+		pi = create_test_purchase_invoice(
+			outstanding=31.27,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.27,
+		)
+		self.assertLess(flt(pi.paid_amount), 0)
+
+		# Non-exact-match deposit; amount does not have to equal paid_amount
+		bt = create_test_bank_transaction(self.bank_account, deposit=99.99)
+
+		matches = get_linked_payments(
+			bank_transaction_name=bt.name,
+			document_types=["purchase_invoice"],
+			from_date=add_days(nowdate(), -30),
+			to_date=add_days(nowdate(), 1),
+		)
+
+		rows = self._match_rows_for_doctype(matches, "Purchase Invoice", pi.name)
+		self.assertEqual(len(rows), 1, f"Expected 1 match for paid refund PI, got {len(rows)}: {rows}")
+
+		row = rows[0]
+		# rank >= 1 (the matching query always adds +1 to the rank)
+		self.assertGreaterEqual(int(row[0]), 1)
+		# paid_amount is returned signed (negative for refund PIs)
+		self.assertAlmostEqual(flt(row[3]), -31.27, places=2)
+
+	# -----------------------------------------------------------------------
+	# Test 13 — get_linked_payments returns paid refund SI for withdrawal BT
+	# -----------------------------------------------------------------------
+
+	def test_get_linked_payments_returns_paid_refund_si_for_withdrawal(self):
+		"""A paid refund SI (Sales Invoice Payment row with negative amount
+		against the bank GL) must appear as a matching candidate for a
+		withdrawal BT when document_types includes 'sales_invoice'. Covers the
+		new get_si_matching_query(for_withdrawal=True) branch end-to-end through
+		the whitelisted get_linked_payments API.
+		"""
+		si = create_test_sales_invoice(outstanding=50, is_return=1)
+
+		# Insert the SIP row pointing at the test bank GL with a negative amount.
+		# This is the same fixture pattern used by test 4 to bypass
+		# set_account_for_mode_of_payment which would overwrite the account
+		# from the Mode of Payment configuration during validate.
+		frappe.get_doc({
+			"doctype": "Sales Invoice Payment",
+			"parent": si.name,
+			"parenttype": "Sales Invoice",
+			"parentfield": "payments",
+			"mode_of_payment": "Cash",
+			"account": TEST_BANK_GL_ACCOUNT,
+			"amount": -50.0,
+			"base_amount": -50.0,
+		}).insert(ignore_permissions=True)
+
+		bt = create_test_bank_transaction(self.bank_account, withdrawal=99.99)
+
+		matches = get_linked_payments(
+			bank_transaction_name=bt.name,
+			document_types=["sales_invoice"],
+			from_date=add_days(nowdate(), -30),
+			to_date=add_days(nowdate(), 1),
+		)
+
+		rows = self._match_rows_for_doctype(matches, "Sales Invoice", si.name)
+		self.assertEqual(len(rows), 1, f"Expected 1 match for paid refund SI, got {len(rows)}: {rows}")
+
+		row = rows[0]
+		self.assertGreaterEqual(int(row[0]), 1)
+		# paid_amount comes from sip.amount which is negative for refunds
+		self.assertAlmostEqual(flt(row[3]), -50.0, places=2)
