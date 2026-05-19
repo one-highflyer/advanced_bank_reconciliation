@@ -1,3 +1,11 @@
+## [1.7.7](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.6...v1.7.7) (2026-05-19)
+
+
+### Bug Fixes
+
+* **abr:** gate refund matching exact-match on negative sign ([88fe93a](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/88fe93ad11876a18c7ac2ca060fd202861ba6679))
+* **abr:** show paid refund invoices in bank rec and fix unallocated amount ([221cdd5](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/221cdd502790e687d9fe7577fe1ecb56346196e9))
+
 ## [1.7.6](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.5...v1.7.6) (2026-04-28)
 
 
