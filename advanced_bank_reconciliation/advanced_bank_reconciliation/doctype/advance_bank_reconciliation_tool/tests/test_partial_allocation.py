@@ -1003,3 +1003,36 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 			0,
 			f"Refund PI must not appear for withdrawal BT, got: {rows}",
 		)
+
+	# -----------------------------------------------------------------------
+	# Test 17 — default-args regression: paid normal PI on withdrawal BT
+	# -----------------------------------------------------------------------
+
+	def test_default_args_pi_matching_query_returns_normal_paid_pi(self):
+		"""Pre-fix behaviour must be preserved: get_pi_matching_query with
+		default args (no for_deposit) must return paid normal PIs
+		(paid_amount > 0) for a withdrawal BT. This is the path that gets
+		triggered when transaction.withdrawal > 0.0 and 'purchase_invoice'
+		is requested.
+		"""
+		pi = create_test_purchase_invoice(
+			outstanding=150,
+			is_paid=1,
+			is_return=0,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+		)
+		# Sanity: ERPNext auto-fills paid_amount for normal paid PIs
+		self.assertGreater(flt(pi.paid_amount), 0)
+
+		bt = create_test_bank_transaction(self.bank_account, withdrawal=150)
+
+		matches = get_linked_payments(
+			bank_transaction_name=bt.name,
+			document_types=["purchase_invoice"],
+			from_date=add_days(nowdate(), -30),
+			to_date=add_days(nowdate(), 1),
+		)
+
+		rows = self._match_rows_for_doctype(matches, "Purchase Invoice", pi.name)
+		self.assertEqual(len(rows), 1, f"Expected normal paid PI to match, got {len(rows)}: {rows}")
+		self.assertAlmostEqual(flt(rows[0][3]), 150.0, places=2)
