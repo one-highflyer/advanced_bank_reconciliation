@@ -969,3 +969,37 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 
 		rows = self._match_rows_for_doctype(matches, "Purchase Invoice", pi.name)
 		self.assertEqual(len(rows), 0, f"Expected no exact-match for mismatched amount, got: {rows}")
+
+	# -----------------------------------------------------------------------
+	# Test 16 — symmetry guard: withdrawal BT must not trigger deposit branch
+	# -----------------------------------------------------------------------
+
+	def test_withdrawal_bt_does_not_return_deposit_branch_refund_pis(self):
+		"""A withdrawal BT must NOT return paid refund PIs (paid_amount<0) from
+		the new for_deposit=True branch. Withdrawals are wired to the default
+		get_pi_matching_query(exact_match) (paid_amount > 0 only). Guards the
+		conditional `if transaction.deposit > 0.0 and "purchase_invoice" in ...`
+		that gates the new branch.
+		"""
+		pi = create_test_purchase_invoice(
+			outstanding=31.27,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.27,
+		)
+		bt = create_test_bank_transaction(self.bank_account, withdrawal=31.27)
+
+		matches = get_linked_payments(
+			bank_transaction_name=bt.name,
+			document_types=["purchase_invoice"],
+			from_date=add_days(nowdate(), -30),
+			to_date=add_days(nowdate(), 1),
+		)
+
+		rows = self._match_rows_for_doctype(matches, "Purchase Invoice", pi.name)
+		self.assertEqual(
+			len(rows),
+			0,
+			f"Refund PI must not appear for withdrawal BT, got: {rows}",
+		)
