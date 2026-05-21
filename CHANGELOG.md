@@ -1,3 +1,11 @@
+## [1.7.8](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.7...v1.7.8) (2026-05-21)
+
+
+### Bug Fixes
+
+* **abr:** mirror magnitude comparison in bulk recon dialog (JS) ([cea1bee](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/cea1bee521fe5a28ee8f040c25f503a631477571))
+* **abr:** use magnitude comparison in bulk reconciliation preflight ([0d2fafe](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/0d2fafe9d127b1b0cfd27419ffa44232fc6add76))
+
 ## [1.7.7](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.6...v1.7.7) (2026-05-19)
 
 
