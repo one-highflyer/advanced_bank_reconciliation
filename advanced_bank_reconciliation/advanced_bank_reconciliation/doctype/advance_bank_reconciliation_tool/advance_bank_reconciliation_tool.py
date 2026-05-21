@@ -1790,7 +1790,7 @@ def create_payment_entries_bulk(bank_transaction_name, invoices, regular_voucher
 	# 3) Combined total must equal BT unallocated amount (within small tolerance)
 	# when the site has opted into strict validation.
 	combined_total = total_invoices_amount + total_regular_amount
-	if validate_selection_against_unallocated_amount and abs(combined_total - bt.unallocated_amount) > 0.01:
+	if validate_selection_against_unallocated_amount and _selection_exceeds_unallocated(combined_total, bt.unallocated_amount):
 		frappe.throw(_(
 			"Selected allocations total {0} but this Bank Transaction has {1} unallocated. "
 			"Please add or remove vouchers so the totals match, split the Bank Transaction, "
@@ -1971,7 +1971,7 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 			total_alloc = 0.0
 			for v in regular_vouchers:
 				total_alloc += v.get("amount", 0)
-			if abs(total_alloc - current_unalloc) > 0.01:
+			if _selection_exceeds_unallocated(total_alloc, current_unalloc):
 				raise Exception(
 					f"Selected vouchers total {total_alloc} exceed remaining unallocated amount {current_unalloc}"
 				)
@@ -2010,7 +2010,7 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 			total_alloc = 0.0
 			for v in all_vouchers:
 				total_alloc += v.get("amount", 0)
-			if validate_selection_against_unallocated_amount and abs(total_alloc - current_unalloc) > 0.01:
+			if validate_selection_against_unallocated_amount and _selection_exceeds_unallocated(total_alloc, current_unalloc):
 				raise Exception(
 					f"Combined allocations {total_alloc} exceed remaining unallocated amount {current_unalloc}"
 				)
@@ -2102,6 +2102,25 @@ def cleanup_failed_reconciliation(vouchers):
 		except Exception as e:
 			logger.error(f"Error cleaning up payment entry {voucher.get('payment_name')}: {str(e)}")
 			continue
+
+
+def _selection_exceeds_unallocated(
+	signed_alloc_total: float,
+	bt_unallocated: float,
+	tolerance: float = 0.01,
+) -> bool:
+	"""Return True iff the magnitude of the selected allocation total deviates
+	from the Bank Transaction's unallocated magnitude by more than `tolerance`.
+
+	ABR stores signed allocations in Bank Transaction Payments: positive for
+	deposits-against-positive-invoice, negative for refund (deposit-against-
+	paid-refund-PI, or withdrawal-against-paid-refund-SI). `bt.unallocated_amount`
+	is always a positive magnitude (since the 1.7.7 update_allocated_amount fix
+	uses abs(W-D) - abs(signed_sum)). This comparison must therefore use
+	magnitudes on both sides; comparing raw signed against positive magnitude
+	rejects every valid refund reconciliation.
+	"""
+	return abs(abs(flt(signed_alloc_total)) - abs(flt(bt_unallocated))) > tolerance
 
 
 def _signed_cap(allocated_amount, outstanding_amount):
