@@ -13,7 +13,9 @@ from frappe.utils import add_days, flt, nowdate
 
 from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool import (
 	_normalise_pe_to_target_invoice,
+	_selection_exceeds_unallocated,
 	_signed_cap,
+	create_payment_entries_bulk,
 	create_payment_entry_for_invoice,
 	get_linked_payments,
 	reconcile_vouchers,
@@ -1184,3 +1186,292 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 		self.assertAlmostEqual(flt(pi_rows[0][3]), -31.27, places=2)
 		self.assertEqual(len(pe_rows), 1, f"Expected customer PE to surface, got: {pe_rows}")
 		self.assertAlmostEqual(flt(pe_rows[0][3]), 200.0, places=2)
+
+
+class TestBulkReconciliationSignHandling(FrappeTestCase):
+	"""Tests for sign-aware comparison in bulk reconciliation preflight validators.
+
+	Covers the regression where `abs(signed_total - positive_unalloc)` rejected
+	every valid refund reconciliation (e.g. deposit BT + paid-refund PI with
+	amount=-31.22 gave abs(-31.22 - 31.22)=62.44 > 0.01).
+
+	The fix introduces _selection_exceeds_unallocated which compares magnitudes
+	on both sides so signed allocations are accepted when magnitudes match.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls.bank_account = setup_abr_test_data(TEST_COMPANY)
+		# Disable background queuing so create_payment_entries_bulk runs synchronously
+		# in tests (now=not reconcile_unpaid_invoices_in_background => now=True).
+		cls._orig_bg = frappe.db.get_single_value(
+			"Advance Bank Reconciliation Settings", "reconcile_unpaid_invoices_in_background"
+		)
+		frappe.db.set_single_value(
+			"Advance Bank Reconciliation Settings", "reconcile_unpaid_invoices_in_background", 0
+		)
+		frappe.db.commit()
+
+	@classmethod
+	def tearDownClass(cls):
+		frappe.db.set_single_value(
+			"Advance Bank Reconciliation Settings",
+			"reconcile_unpaid_invoices_in_background",
+			cls._orig_bg,
+		)
+		frappe.db.commit()
+		super().tearDownClass()
+
+	# -----------------------------------------------------------------------
+	# Unit tests for the helper (no DB required)
+	# -----------------------------------------------------------------------
+
+	def test_helper_accepts_positive_alloc_matching_unalloc(self):
+		"""Positive alloc == positive unalloc: should NOT exceed."""
+		self.assertFalse(_selection_exceeds_unallocated(31.22, 31.22))
+
+	def test_helper_accepts_negative_alloc_matching_unalloc(self):
+		"""Negative alloc with matching magnitude: must NOT exceed (the regression case).
+
+		Before the fix, abs(-31.22 - 31.22) = 62.44 > 0.01 caused a false rejection.
+		"""
+		self.assertFalse(_selection_exceeds_unallocated(-31.22, 31.22))
+
+	def test_helper_rejects_mismatched_magnitudes(self):
+		"""Positive alloc that undershoots: should exceed."""
+		self.assertTrue(_selection_exceeds_unallocated(20, 31.22))
+
+	def test_helper_rejects_mismatched_negative(self):
+		"""Negative alloc that undershoots in magnitude: should exceed."""
+		self.assertTrue(_selection_exceeds_unallocated(-20, 31.22))
+
+	def test_helper_within_tolerance(self):
+		"""Difference of 0.005 is within tolerance of 0.01: must NOT exceed."""
+		self.assertFalse(_selection_exceeds_unallocated(31.225, 31.22, tolerance=0.01))
+
+	# -----------------------------------------------------------------------
+	# Integration: paid refund PI on deposit BT, regular-voucher-only path
+	# (exercises line 1974, always-on check)
+	# -----------------------------------------------------------------------
+
+	def test_bulk_recon_paid_refund_pi_on_deposit_regular_voucher_path(self):
+		"""A paid refund PI (is_paid=1, is_return=1) reconciled as a regular
+		voucher against a deposit BT must succeed end-to-end through
+		create_payment_entries_bulk without raising a sign-comparison error.
+
+		This exercises the ungated safety check (line 1974) that previously
+		computed abs(-31.22 - 31.22) = 62.44 and incorrectly rejected the
+		reconciliation.
+		"""
+		pi = create_test_purchase_invoice(
+			outstanding=31.22,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.22,
+		)
+		bt = create_test_bank_transaction(self.bank_account, deposit=31.22)
+
+		create_payment_entries_bulk(
+			bank_transaction_name=bt.name,
+			invoices=[],
+			regular_vouchers=[
+				{
+					"payment_doctype": "Purchase Invoice",
+					"payment_name": pi.name,
+					"amount": -31.22,
+				}
+			],
+		)
+
+		bt.reload()
+		self.assertAlmostEqual(flt(bt.allocated_amount), -31.22, places=2)
+		self.assertAlmostEqual(flt(bt.unallocated_amount), 0.0, places=2)
+		self.assertEqual(bt.status, "Reconciled")
+
+	# -----------------------------------------------------------------------
+	# Integration: paid refund SI on withdrawal BT (symmetric)
+	# -----------------------------------------------------------------------
+
+	def test_bulk_recon_paid_refund_si_on_withdrawal_regular_voucher_path(self):
+		"""A paid refund SI with a negative SIP row reconciled as a regular
+		voucher against a withdrawal BT must succeed through
+		create_payment_entries_bulk.
+
+		Mirrors test_standalone_paid_refund_si_on_withdrawal but routes through
+		the bulk API to cover the ungated preflight check.
+		"""
+		si = create_test_sales_invoice(outstanding=50, is_return=1)
+
+		frappe.get_doc({
+			"doctype": "Sales Invoice Payment",
+			"parent": si.name,
+			"parenttype": "Sales Invoice",
+			"parentfield": "payments",
+			"mode_of_payment": "Cash",
+			"account": TEST_BANK_GL_ACCOUNT,
+			"amount": -50.0,
+			"base_amount": -50.0,
+		}).insert(ignore_permissions=True)
+
+		bt = create_test_bank_transaction(self.bank_account, withdrawal=50)
+
+		create_payment_entries_bulk(
+			bank_transaction_name=bt.name,
+			invoices=[],
+			regular_vouchers=[
+				{
+					"payment_doctype": "Sales Invoice",
+					"payment_name": si.name,
+					"amount": -50,
+				}
+			],
+		)
+
+		bt.reload()
+		self.assertAlmostEqual(flt(bt.allocated_amount), -50.0, places=2)
+		self.assertAlmostEqual(flt(bt.unallocated_amount), 0.0, places=2)
+		self.assertEqual(bt.status, "Reconciled")
+
+	# -----------------------------------------------------------------------
+	# Integration: gated pre-enqueue check with setting ON (line 1793)
+	# -----------------------------------------------------------------------
+
+	def test_gated_precheck_accepts_signed_refund_alloc_when_setting_enabled(self):
+		"""With validate_selection_against_unallocated_amount=1, a paid refund PI
+		reconciled as a regular voucher (amount=-31.22) against a deposit BT
+		(deposit=31.22) must succeed. The gated check at line 1793 must use
+		magnitude comparison and not reject the signed allocation.
+		"""
+		original = frappe.db.get_single_value(
+			"Advance Bank Reconciliation Settings",
+			"validate_selection_against_unallocated_amount",
+		)
+		frappe.db.set_single_value(
+			"Advance Bank Reconciliation Settings",
+			"validate_selection_against_unallocated_amount",
+			1,
+		)
+		self.addCleanup(
+			frappe.db.set_single_value,
+			"Advance Bank Reconciliation Settings",
+			"validate_selection_against_unallocated_amount",
+			original,
+		)
+
+		pi = create_test_purchase_invoice(
+			outstanding=31.22,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.22,
+		)
+		bt = create_test_bank_transaction(self.bank_account, deposit=31.22)
+
+		create_payment_entries_bulk(
+			bank_transaction_name=bt.name,
+			invoices=[],
+			regular_vouchers=[
+				{
+					"payment_doctype": "Purchase Invoice",
+					"payment_name": pi.name,
+					"amount": -31.22,
+				}
+			],
+		)
+
+		bt.reload()
+		self.assertAlmostEqual(flt(bt.unallocated_amount), 0.0, places=2)
+		self.assertEqual(bt.status, "Reconciled")
+
+	def test_gated_precheck_rejects_genuine_mismatch_when_setting_enabled(self):
+		"""With validate_selection_against_unallocated_amount=1, a mismatched
+		allocation (voucher amount=-31.22 against BT deposit=20) must still raise
+		frappe.ValidationError. Verifies the helper rejects genuine mismatches
+		even with signed inputs.
+		"""
+		original = frappe.db.get_single_value(
+			"Advance Bank Reconciliation Settings",
+			"validate_selection_against_unallocated_amount",
+		)
+		frappe.db.set_single_value(
+			"Advance Bank Reconciliation Settings",
+			"validate_selection_against_unallocated_amount",
+			1,
+		)
+		self.addCleanup(
+			frappe.db.set_single_value,
+			"Advance Bank Reconciliation Settings",
+			"validate_selection_against_unallocated_amount",
+			original,
+		)
+
+		pi = create_test_purchase_invoice(
+			outstanding=31.22,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.22,
+		)
+		bt = create_test_bank_transaction(self.bank_account, deposit=20)
+
+		with self.assertRaises(frappe.ValidationError):
+			create_payment_entries_bulk(
+				bank_transaction_name=bt.name,
+				invoices=[],
+				regular_vouchers=[
+					{
+						"payment_doctype": "Purchase Invoice",
+						"payment_name": pi.name,
+						"amount": -31.22,
+					}
+				],
+			)
+
+	# -----------------------------------------------------------------------
+	# Regression: normal positive voucher still validates correctly
+	# -----------------------------------------------------------------------
+
+	def test_positive_voucher_reconciles_successfully(self):
+		"""A normal positive Payment Entry reconciled as a regular voucher
+		against a deposit BT must succeed. Verifies the abs() change does not
+		accidentally relax or break the positive-allocation path.
+		"""
+		from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
+
+		si = create_test_sales_invoice(outstanding=75)
+		pe = get_payment_entry("Sales Invoice", si.name)
+		pe.paid_to = TEST_BANK_GL_ACCOUNT
+		pe.paid_amount = 75
+		pe.received_amount = 75
+		pe.reference_no = "_ABR-BULK-POS"
+		pe.reference_date = nowdate()
+		pe.posting_date = nowdate()
+		try:
+			pe.insert(ignore_permissions=True)
+			pe.submit()
+		except Exception as exc:
+			self.skipTest(
+				f"PE submit failed (likely InvalidAccountCurrency on local bench): {exc}. "
+				"CI runs on a fresh site without this issue."
+			)
+			return
+
+		bt = create_test_bank_transaction(self.bank_account, deposit=75)
+
+		create_payment_entries_bulk(
+			bank_transaction_name=bt.name,
+			invoices=[],
+			regular_vouchers=[
+				{
+					"payment_doctype": "Payment Entry",
+					"payment_name": pe.name,
+					"amount": 75,
+				}
+			],
+		)
+
+		bt.reload()
+		self.assertAlmostEqual(flt(bt.unallocated_amount), 0.0, places=2)
+		self.assertEqual(bt.status, "Reconciled")

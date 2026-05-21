@@ -257,6 +257,16 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		return { effective, total };
 	}
 
+	selection_exceeds_unallocated(signed_alloc_total, bt_unallocated, tolerance = 0.01) {
+		// Mirror of the backend _selection_exceeds_unallocated helper.
+		// ABR stores signed allocations (negative for refund deposit-against-
+		// paid-refund-PI and withdrawal-against-paid-refund-SI), but
+		// bt.unallocated_amount is always a positive magnitude since the
+		// 1.7.7 update_allocated_amount fix. Compare magnitudes so signed
+		// refund allocations are accepted when magnitudes match.
+		return Math.abs(Math.abs(flt(signed_alloc_total)) - Math.abs(flt(bt_unallocated))) > tolerance;
+	}
+
 	show_selected_transactions(transactions) {
 		if (!this.bank_transaction) return;
 
@@ -293,7 +303,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			: "";
 		const bt_unallocated = flt(this.bank_transaction.unallocated_amount);
 		const strict_warning = this.validate_selection
-			&& Math.abs(effective_total - bt_unallocated) > 0.01
+			&& this.selection_exceeds_unallocated(effective_total, bt_unallocated)
 			? `<div class="text-center pb-2 text-danger"><small>Strict matching is enabled: allocations must equal ${format_currency(bt_unallocated, currency)}. Add or remove vouchers to match.</small></div>`
 			: "";
 		transactions_wrapper.html(`
@@ -888,7 +898,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		// Strict match: mirror the backend pre-check so the user sees a
 		// clear in-dialog message instead of a server-side throw mid-submit.
 		const bt_unallocated = flt(this.bank_transaction.unallocated_amount);
-		if (this.validate_selection && Math.abs(effective_total - bt_unallocated) > 0.01) {
+		if (this.validate_selection && this.selection_exceeds_unallocated(effective_total, bt_unallocated)) {
 			frappe.msgprint({
 				title: __("Allocation does not match Bank Transaction"),
 				indicator: "red",
