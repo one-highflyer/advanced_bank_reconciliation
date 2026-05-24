@@ -277,6 +277,59 @@ def build_table(mapping, data_headers, data_body):
     currency = account.account_currency
     matching = True
 
+    # Validate that every selected column name is actually present in the uploaded file's
+    # headers before entering the per-row loop. Without this guard, data_headers.index()
+    # raises a bare ValueError that surfaces as an unhandled 500.
+    # Each tuple: (value, label, is_required)
+    fields_to_validate = [
+        (mapping.get("date_select"), _("Date"), True),
+        (mapping.get("description_select"), _("Description"), True),
+        (mapping.get("reference_number_select"), _("Reference Number"), True),
+    ]
+    if is_truthy(mapping.get("same_amount_field")):
+        fields_to_validate.append((mapping.get("amount_select"), _("Amount"), True))
+    else:
+        fields_to_validate.append((mapping.get("deposit_select"), _("Deposit"), True))
+        fields_to_validate.append((mapping.get("withdrawal_select"), _("Withdrawal"), True))
+    # Optional fields: only validate when the user actually picked a value.
+    for select_key, label in (
+        ("particulars_select", _("Particulars")),
+        ("code_select", _("Code")),
+        ("other_party_select", _("Other Party")),
+    ):
+        val = mapping.get(select_key)
+        if val:
+            fields_to_validate.append((val, label, False))
+
+    # Pass A: required fields that are blank/missing.
+    # Pass B: non-empty values that are not present in the file headers.
+    missing_required = []
+    missing = []
+    for value, label, is_required in fields_to_validate:
+        if not value:
+            if is_required:
+                missing_required.append(str(label))
+        elif value not in data_headers:
+            missing.append(f"'{value}' (selected for {label})")
+
+    if missing_required or missing:
+        parts = []
+        if missing_required:
+            parts.append(
+                _("Please select a column for: {0}.").format(", ".join(missing_required))
+            )
+        if missing:
+            parts.append(
+                _(
+                    "The following selected columns are not present in the uploaded file: {0}."
+                ).format(", ".join(missing))
+            )
+        parts.append(_("Re-pick the correct columns from the dropdowns above and click Map Fields again."))
+        frappe.throw(
+            " ".join(parts),
+            title=_("Column Mapping Error"),
+        )
+
     for data_row in data_body:
         # Skip empty rows
         if not data_row or all(cell is None or cell == "" for cell in data_row):

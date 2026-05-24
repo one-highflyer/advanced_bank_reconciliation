@@ -89,15 +89,50 @@ frappe.ui.form.on('Bank Statement Importer', {
 				// Apply bank mapping if available
 				const bank_mapping = data?.message?.bank_mapping || {};
 
-				// Extract file field names directly from bank mapping (now bank fields are keys)
-				const dateField = bank_mapping.date;
-				const depositField = bank_mapping.deposit;
-				const withdrawalField = bank_mapping.withdrawal;
-				const descriptionField = bank_mapping.description;
-				const referenceField = bank_mapping.reference_number;
-				const particularsField = bank_mapping.custom_particulars;
-				const codeField = bank_mapping.custom_code;
-				const otherPartyField = bank_mapping.bank_party_name;
+				// Filter saved mapping values against the columns actually present in the uploaded file.
+				// A saved mapping may reference a column name that no longer exists (e.g. the bank
+				// renamed "Reference" to "Reference Number"). Silently filling a Select with an invalid
+				// value causes a ValueError in build_table when .index() is called on the missing column.
+				const headers = data?.message?.header || [];
+				const validInHeaders = (val) => (val && headers.includes(val)) ? val : null;
+
+				// Extract file field names directly from bank mapping, validated against current headers.
+				const dateField = validInHeaders(bank_mapping.date);
+				const depositField = validInHeaders(bank_mapping.deposit);
+				const withdrawalField = validInHeaders(bank_mapping.withdrawal);
+				const descriptionField = validInHeaders(bank_mapping.description);
+				const referenceField = validInHeaders(bank_mapping.reference_number);
+				const particularsField = validInHeaders(bank_mapping.custom_particulars);
+				const codeField = validInHeaders(bank_mapping.custom_code);
+				const otherPartyField = validInHeaders(bank_mapping.bank_party_name);
+
+				// Identify any saved mapping entries that pointed at columns not in the current file.
+				const fieldLabels = {
+					date: __('Date'),
+					deposit: __('Deposit'),
+					withdrawal: __('Withdrawal'),
+					description: __('Description'),
+					reference_number: __('Reference Number'),
+					custom_particulars: __('Particulars'),
+					custom_code: __('Code'),
+					bank_party_name: __('Other Party'),
+				};
+				const staleMappings = [];
+				for (const k of Object.keys(fieldLabels)) {
+					const savedVal = bank_mapping[k];
+					if (savedVal && !headers.includes(savedVal)) {
+						staleMappings.push(`${fieldLabels[k]} (was "${frappe.utils.escape_html(savedVal)}")`);
+					}
+				}
+				if (staleMappings.length > 0) {
+					frappe.msgprint({
+						title: __('Saved field mapping out of date'),
+						indicator: 'yellow',
+						message: __('The saved column mapping for this bank refers to columns that are not in the uploaded file. The following fields were not auto-filled and need to be re-selected:') +
+						'<br><br>' + staleMappings.map(s => `<b>${s}</b>`).join('<br>') + '<br><br>' +
+						__('Pick the correct columns from the dropdowns below, then click Map Fields.')
+					});
+				}
 
 				// Set field options
 				frm.set_df_property("date_select", "options", options);
