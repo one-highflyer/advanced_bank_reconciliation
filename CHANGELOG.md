@@ -1,3 +1,10 @@
+## [1.7.9](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.8...v1.7.9) (2026-05-24)
+
+
+### Bug Fixes
+
+* **bank-statement-importer:** handle stale and missing column mappings ([e50a4c4](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/e50a4c4f2bea56c66ec0637b62013be93e068d27)), closes [#822](https://github.com/one-highflyer/advanced_bank_reconciliation/issues/822)
+
 ## [1.7.8](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.7...v1.7.8) (2026-05-21)
 
 
