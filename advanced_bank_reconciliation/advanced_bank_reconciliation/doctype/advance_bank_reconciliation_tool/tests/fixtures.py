@@ -77,13 +77,19 @@ def ensure_bank_and_bank_account(company=TEST_COMPANY):
 
 
 def ensure_fiscal_year_for_company(company):
-	"""Link the company to an existing fiscal year that covers today.
+	"""Ensure a fiscal year exists for today and is usable by the given company.
 
-	On ERPNext test sites the global fiscal years are created by the
-	erpnext before_tests hook, but the Fiscal Year Company links are only
-	written for the primary _Test Company. When tests create invoices for
-	a second company, ERPNext's get_fiscal_years() raises FiscalYearError
-	unless the company also appears in the fiscal year's companies list.
+	On a fresh CI site, ERPNext's before_tests hook seeds some fiscal years
+	but not necessarily one that covers today's date (the bench15 demo site
+	has dozens of pre-loaded _Test Fiscal Year XXXX records from earlier
+	test runs; CI does not). When today falls outside every active FY,
+	submitting any invoice fails with FiscalYearError.
+
+	This helper creates a current-year FY if none covers today, then makes
+	sure the company is allowed to use it. A Fiscal Year with no Fiscal
+	Year Company rows is global (any company can use it); once a row is
+	appended it becomes restrictive to the listed companies only, so we
+	leave globally-scoped FYs alone.
 	"""
 	from frappe.utils import getdate
 
@@ -98,12 +104,25 @@ def ensure_fiscal_year_for_company(company):
 		"name",
 	)
 	if not fy:
+		fy_name = f"_ABR Test FY {today.year}"
+		if not frappe.db.exists("Fiscal Year", fy_name):
+			frappe.get_doc(
+				{
+					"doctype": "Fiscal Year",
+					"year": fy_name,
+					"year_start_date": getdate(f"{today.year}-01-01"),
+					"year_end_date": getdate(f"{today.year}-12-31"),
+				}
+			).insert(ignore_permissions=True, ignore_if_duplicate=True)
+		fy = fy_name
+
+	linked_companies = frappe.get_all(
+		"Fiscal Year Company", filters={"parent": fy}, pluck="company"
+	)
+	if not linked_companies:
 		return
 
-	already_linked = frappe.db.exists(
-		"Fiscal Year Company", {"parent": fy, "company": company}
-	)
-	if already_linked:
+	if company in linked_companies:
 		return
 
 	fy_doc = frappe.get_doc("Fiscal Year", fy)
@@ -226,6 +245,7 @@ def ensure_erpnext_test_company():
 def setup_abr_test_data(company=TEST_COMPANY):
 	"""Idempotent top-level setup. Call from setUpClass and commit after."""
 	ensure_erpnext_test_company()
+	ensure_fiscal_year_for_company(company)
 	ensure_customer()
 	ensure_supplier()
 	ensure_item()
