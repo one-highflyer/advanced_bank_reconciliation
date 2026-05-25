@@ -262,6 +262,7 @@ class TestCreditCardAmountFlip(FrappeTestCase):
         # [header_row, data_row, ...]
         # data row: [date, deposit, withdrawal, description, reference_number,
         #            bank_account, currency, is_duplicated]
+        reference = f"_ABR-BSI-CC-{frappe.generate_hash(length=8)}"
         dataset = [
             ["Date", "Deposit", "Withdrawal", "Description", "Reference",
              "Bank Account", "Currency", "Is Duplicated"],
@@ -270,20 +271,21 @@ class TestCreditCardAmountFlip(FrappeTestCase):
                 120.0,         # deposit (will be flipped to withdrawal)
                 0.0,           # withdrawal
                 "_ABR BSI flip test",
-                "_ABR-BSI-CC-001",
+                reference,
                 self.cc_bank_account,
                 account_currency,
                 0,
             ],
         ]
 
-        publish_records(json.dumps(dataset), importer_data=None)
+        import_success = publish_records(json.dumps(dataset), importer_data=None)
+        self.assertTrue(import_success, "publish_records did not report success")
 
         bt = frappe.get_all(
             "Bank Transaction",
             filters={
                 "bank_account": self.cc_bank_account,
-                "reference_number": "_ABR-BSI-CC-001",
+                "reference_number": reference,
             },
             fields=["name", "deposit", "withdrawal"],
             limit=1,
