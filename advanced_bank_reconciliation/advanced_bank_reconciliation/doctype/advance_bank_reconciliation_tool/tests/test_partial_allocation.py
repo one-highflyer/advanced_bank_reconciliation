@@ -1613,6 +1613,35 @@ class TestClearanceDateTolerance(FrappeTestCase):
 		)
 		self.assertTrue(result, "Fully allocated positive paid PI should clear")
 
+	def test_should_clear_when_cumulative_over_allocates_beyond_tolerance(self):
+		"""Over-allocation past target by more than tolerance still counts as
+		covered (the contract is coverage, not exact equality).
+
+		Concrete scenario: a refund PI of -31.27 with two BTs allocating
+		-31.27 and -5.00. Cumulative is -36.27, over by 5.00 (well outside
+		the 0.01 tolerance). The PI is still "at least covered", so
+		should_clear_invoice returns True and the clearance is preserved.
+		Without this contract, normal over-allocations would silently fail
+		to set or wrongly clear clearance_date.
+		"""
+		pi = create_test_purchase_invoice(
+			outstanding=31.27,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.27,
+		)
+		bt1 = create_test_bank_transaction(self.bank_account, deposit=31.27)
+		_reconcile_invoice(bt1.name, "Purchase Invoice", pi.name, -31.27)
+		bt2 = create_test_bank_transaction(self.bank_account, deposit=5.00)
+		_reconcile_invoice(bt2.name, "Purchase Invoice", pi.name, -5.00)
+
+		result = should_clear_invoice(
+			"Purchase Invoice", pi.name, pi.paid_amount, TEST_BANK_GL_ACCOUNT
+		)
+		self.assertTrue(result,
+			"Cumulative -36.27 over -31.27 paid_amount is covered; should clear")
+
 	def test_cumulative_filters_by_bank_gl_account(self):
 		"""Allocations on a different bank GL account must not count toward the cumulative."""
 		other_bank_gl = frappe.db.get_value(
