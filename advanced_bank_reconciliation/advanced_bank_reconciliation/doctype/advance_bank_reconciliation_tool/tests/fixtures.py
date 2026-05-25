@@ -10,6 +10,7 @@ import frappe
 from frappe.utils import add_days, flt, nowdate
 
 TEST_COMPANY = "_Test Company"
+TEST_COMPANY_2 = "_Test Company 1"
 TEST_BANK = "_ABR Test Bank"
 TEST_BANK_ACCOUNT_NAME = "_ABR Test Bank Account"
 TEST_BANK_GL_ACCOUNT = "_ABR Test Bank Account - _TC"
@@ -65,6 +66,108 @@ def ensure_bank_and_bank_account(company=TEST_COMPANY):
 				"account_name": TEST_BANK_ACCOUNT_NAME,
 				"bank": TEST_BANK,
 				"account": TEST_BANK_GL_ACCOUNT,
+				"is_company_account": 1,
+				"company": company,
+			}
+		)
+		ba.insert(ignore_permissions=True, ignore_if_duplicate=True)
+		ba_name = ba.name
+
+	return ba_name
+
+
+def ensure_fiscal_year_for_company(company):
+	"""Ensure a fiscal year exists for today and is usable by the given company.
+
+	On a fresh CI site, ERPNext's before_tests hook seeds some fiscal years
+	but not necessarily one that covers today's date (the bench15 demo site
+	has dozens of pre-loaded _Test Fiscal Year XXXX records from earlier
+	test runs; CI does not). When today falls outside every active FY,
+	submitting any invoice fails with FiscalYearError.
+
+	This helper creates a current-year FY if none covers today, then makes
+	sure the company is allowed to use it. A Fiscal Year with no Fiscal
+	Year Company rows is global (any company can use it); once a row is
+	appended it becomes restrictive to the listed companies only, so we
+	leave globally-scoped FYs alone.
+	"""
+	from frappe.utils import getdate
+
+	today = getdate()
+	fy = frappe.db.get_value(
+		"Fiscal Year",
+		{
+			"year_start_date": ["<=", today],
+			"year_end_date": [">=", today],
+			"disabled": 0,
+		},
+		"name",
+	)
+	if not fy:
+		fy_name = f"_ABR Test FY {today.year}"
+		if not frappe.db.exists("Fiscal Year", fy_name):
+			frappe.get_doc(
+				{
+					"doctype": "Fiscal Year",
+					"year": fy_name,
+					"year_start_date": getdate(f"{today.year}-01-01"),
+					"year_end_date": getdate(f"{today.year}-12-31"),
+				}
+			).insert(ignore_permissions=True, ignore_if_duplicate=True)
+		fy = fy_name
+
+	linked_companies = frappe.get_all(
+		"Fiscal Year Company", filters={"parent": fy}, pluck="company"
+	)
+	if not linked_companies:
+		return
+
+	if company in linked_companies:
+		return
+
+	fy_doc = frappe.get_doc("Fiscal Year", fy)
+	fy_doc.append("companies", {"company": company})
+	fy_doc.save(ignore_permissions=True)
+
+
+def ensure_bank_account_for_company(company):
+	"""Create a bank GL account and Bank Account doc for the given company.
+
+	Uses the company's abbreviation to build unique names so each company
+	in a multi-company test site gets its own isolated bank account.
+	Returns the Bank Account document name.
+	"""
+	ensure_fiscal_year_for_company(company)
+	abbr = frappe.db.get_value("Company", company, "abbr")
+	acct_name = f"_ABR Test Bank Account {abbr}"
+	gl_account_name = f"{acct_name} - {abbr}"
+
+	if not frappe.db.exists("Bank", TEST_BANK):
+		frappe.get_doc({"doctype": "Bank", "bank_name": TEST_BANK}).insert(
+			ignore_permissions=True, ignore_if_duplicate=True
+		)
+
+	if not frappe.db.exists("Account", gl_account_name):
+		parent = _get_parent_bank_account(company)
+		frappe.get_doc(
+			{
+				"doctype": "Account",
+				"account_name": acct_name,
+				"parent_account": parent,
+				"company": company,
+				"account_type": "Bank",
+				"is_group": 0,
+			}
+		).insert(ignore_permissions=True, ignore_if_duplicate=True)
+
+	ba_name = f"{acct_name} - {TEST_BANK}"
+	if not frappe.db.exists("Bank Account", ba_name):
+		ba = frappe.get_doc(
+			{
+				"doctype": "Bank Account",
+				"account_name": acct_name,
+				"bank": TEST_BANK,
+				"account": gl_account_name,
 				"is_company_account": 1,
 				"company": company,
 			}
@@ -142,6 +245,7 @@ def ensure_erpnext_test_company():
 def setup_abr_test_data(company=TEST_COMPANY):
 	"""Idempotent top-level setup. Call from setUpClass and commit after."""
 	ensure_erpnext_test_company()
+	ensure_fiscal_year_for_company(company)
 	ensure_customer()
 	ensure_supplier()
 	ensure_item()
