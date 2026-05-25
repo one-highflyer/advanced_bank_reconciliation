@@ -1,3 +1,10 @@
+## [1.7.10](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.9...v1.7.10) (2026-05-25)
+
+
+### Bug Fixes
+
+* **abr:** filter unpaid invoice matching queries by bank account's company ([7db4045](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/7db40456793c6bc768525cb8b74247fe0b9b6223))
+
 ## [1.7.9](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.8...v1.7.9) (2026-05-24)
 
 
