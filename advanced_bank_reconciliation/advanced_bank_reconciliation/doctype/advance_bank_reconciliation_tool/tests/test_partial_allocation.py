@@ -12,10 +12,10 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, flt, nowdate
 
 from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool import (
-	_cumulative_allocated_for_invoice,
+	cumulative_allocated_for_invoice,
 	_normalise_pe_to_target_invoice,
 	_selection_exceeds_unallocated,
-	_should_clear_invoice,
+	should_clear_invoice,
 	_signed_cap,
 	create_payment_entries_bulk,
 	create_payment_entry_for_invoice,
@@ -587,7 +587,7 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 	# get_unpaid_pi_matching_query(for_deposit=True) path.
 
 	# -----------------------------------------------------------------------
-	# Test 3 — standalone paid refund PI on deposit (new PR-1 path)
+	# Test 3 - standalone paid refund PI on deposit (new PR-1 path)
 	# -----------------------------------------------------------------------
 
 	def test_standalone_paid_refund_pi_on_deposit(self):
@@ -624,7 +624,7 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 		self.assertEqual(bt.status, "Reconciled")
 
 	# -----------------------------------------------------------------------
-	# Test 4 — standalone paid refund SI on withdrawal (new symmetric path)
+	# Test 4 - standalone paid refund SI on withdrawal (new symmetric path)
 	# -----------------------------------------------------------------------
 
 	def test_standalone_paid_refund_si_on_withdrawal(self):
@@ -667,7 +667,7 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 		self.assertEqual(bt.status, "Reconciled")
 
 	# -----------------------------------------------------------------------
-	# Test 5 — batched mixed deposit (Venerdi-style regression guard)
+	# Test 5 - batched mixed deposit (Venerdi-style regression guard)
 	# -----------------------------------------------------------------------
 
 	def test_batched_mixed_deposit_regression(self):
@@ -681,7 +681,7 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 		self.assertEqual(bt.status, "Reconciled")
 
 	# -----------------------------------------------------------------------
-	# Test 6 — all-positive partial allocation (regression guard)
+	# Test 6 - all-positive partial allocation (regression guard)
 	# -----------------------------------------------------------------------
 
 	def test_all_positive_partial_allocation_regression(self):
@@ -693,7 +693,7 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 		self.assertEqual(bt.status, "Unreconciled")
 
 	# -----------------------------------------------------------------------
-	# Test 7 — all-negative partial refund (previously broken)
+	# Test 7 - all-negative partial refund (previously broken)
 	# -----------------------------------------------------------------------
 
 	def test_all_negative_partial_refund(self):
@@ -707,7 +707,7 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 		self.assertEqual(bt.status, "Unreconciled")
 
 	# -----------------------------------------------------------------------
-	# Test 8 — mixed partial allocation
+	# Test 8 - mixed partial allocation
 	# -----------------------------------------------------------------------
 
 	def test_mixed_partial_allocation(self):
@@ -721,7 +721,7 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 		self.assertEqual(bt.status, "Unreconciled")
 
 	# -----------------------------------------------------------------------
-	# Test 9 — unreconcile after standalone refund match (round trip)
+	# Test 9 - unreconcile after standalone refund match (round trip)
 	# -----------------------------------------------------------------------
 
 	def test_unreconcile_after_standalone_refund_match(self):
@@ -758,7 +758,7 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 		self.assertFalse(pi.clearance_date)
 
 	# -----------------------------------------------------------------------
-	# Test 10 — exact match threshold boundary
+	# Test 10 - exact match threshold boundary
 	# -----------------------------------------------------------------------
 
 	def test_exact_match_threshold_boundary(self):
@@ -769,7 +769,7 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 		self.assertEqual(bt.status, "Reconciled")
 
 	# -----------------------------------------------------------------------
-	# Test 11 — overallocation rounding
+	# Test 11 - overallocation rounding
 	# -----------------------------------------------------------------------
 
 	def test_overallocation_rounding(self):
@@ -798,7 +798,7 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 		return [row for row in matches if row[1] == doctype and row[2] == name]
 
 	# -----------------------------------------------------------------------
-	# Test 12 — get_linked_payments returns paid refund PI for deposit BT
+	# Test 12 - get_linked_payments returns paid refund PI for deposit BT
 	# -----------------------------------------------------------------------
 
 	def test_get_linked_payments_returns_paid_refund_pi_for_deposit(self):
@@ -836,7 +836,7 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 		self.assertAlmostEqual(flt(row[3]), -31.27, places=2)
 
 	# -----------------------------------------------------------------------
-	# Test 13 — get_linked_payments returns paid refund SI for withdrawal BT
+	# Test 13 - get_linked_payments returns paid refund SI for withdrawal BT
 	# -----------------------------------------------------------------------
 
 	def test_get_linked_payments_returns_paid_refund_si_for_withdrawal(self):
@@ -881,7 +881,7 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 		self.assertAlmostEqual(flt(row[3]), -50.0, places=2)
 
 	# -----------------------------------------------------------------------
-	# Test 14 — exact match: BT amount matches |paid_amount|
+	# Test 14 - exact match: BT amount matches |paid_amount|
 	# -----------------------------------------------------------------------
 
 	def test_pi_matching_exact_match_for_deposit_amount_match(self):
@@ -910,7 +910,7 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 		self.assertAlmostEqual(flt(rows[0][3]), -31.27, places=2)
 
 	# -----------------------------------------------------------------------
-	# Test 15 — exact match miss: BT amount does NOT match |paid_amount|
+	# Test 15 - exact match miss: BT amount does NOT match |paid_amount|
 	# -----------------------------------------------------------------------
 
 	def test_pi_matching_exact_match_for_deposit_amount_mismatch(self):
@@ -949,7 +949,7 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 		them to deposits they don't belong to.
 		"""
 		# Use a round amount (no decimals) so validate_cash's grand_total vs
-		# paid_amount comparison doesn't trip on currency-precision rounding —
+		# paid_amount comparison doesn't trip on currency-precision rounding -
 		# see the same pattern in test_default_args_pi_matching_query_*.
 		pi = create_test_purchase_invoice(
 			outstanding=50.0,
@@ -1004,7 +1004,7 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 		)
 
 	# -----------------------------------------------------------------------
-	# Test 16 — symmetry guard: withdrawal BT must not trigger deposit branch
+	# Test 16 - symmetry guard: withdrawal BT must not trigger deposit branch
 	# -----------------------------------------------------------------------
 
 	def test_withdrawal_bt_does_not_return_deposit_branch_refund_pis(self):
@@ -1038,7 +1038,7 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 		)
 
 	# -----------------------------------------------------------------------
-	# Test 17 — default-args regression: paid normal PI on withdrawal BT
+	# Test 17 - default-args regression: paid normal PI on withdrawal BT
 	# -----------------------------------------------------------------------
 
 	def test_default_args_pi_matching_query_returns_normal_paid_pi(self):
@@ -1071,7 +1071,7 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 		self.assertAlmostEqual(flt(rows[0][3]), 150.0, places=2)
 
 	# -----------------------------------------------------------------------
-	# Test 18 — cash_bank_account filter: PI on different bank GL filtered out
+	# Test 18 - cash_bank_account filter: PI on different bank GL filtered out
 	# -----------------------------------------------------------------------
 
 	def test_paid_refund_pi_with_different_cash_bank_account_filtered_out(self):
@@ -1135,7 +1135,7 @@ class TestRefundMatchingAndAllocation(FrappeTestCase):
 		)
 
 	# -----------------------------------------------------------------------
-	# Test 19 — multi-row matching: deposit BT picks up both PE and refund PI
+	# Test 19 - multi-row matching: deposit BT picks up both PE and refund PI
 	# -----------------------------------------------------------------------
 
 	def test_multi_row_matching_deposit_returns_pe_and_refund_pi(self):
@@ -1492,7 +1492,7 @@ class TestBulkReconciliationSignHandling(FrappeTestCase):
 
 
 class TestClearanceDateTolerance(FrappeTestCase):
-	"""Unit tests for _cumulative_allocated_for_invoice and _should_clear_invoice.
+	"""Unit tests for cumulative_allocated_for_invoice and should_clear_invoice.
 
 	These helpers gate clearance_date assignment so that partial allocations
 	(e.g. a refund PI spread across three deposit BTs) do not get prematurely
@@ -1506,7 +1506,7 @@ class TestClearanceDateTolerance(FrappeTestCase):
 		frappe.db.commit()
 
 	# -----------------------------------------------------------------------
-	# Unit tests for _should_clear_invoice (no real allocations needed)
+	# Unit tests for should_clear_invoice (no real allocations needed)
 	# -----------------------------------------------------------------------
 
 	def test_should_clear_when_cumulative_matches_exact(self):
@@ -1521,7 +1521,7 @@ class TestClearanceDateTolerance(FrappeTestCase):
 		bt = create_test_bank_transaction(self.bank_account, deposit=31.27)
 		_reconcile_invoice(bt.name, "Purchase Invoice", pi.name, -31.27)
 
-		result = _should_clear_invoice(
+		result = should_clear_invoice(
 			"Purchase Invoice", pi.name, pi.paid_amount, TEST_BANK_GL_ACCOUNT
 		)
 		self.assertTrue(result, "Should clear when cumulative matches paid_amount exactly")
@@ -1538,7 +1538,7 @@ class TestClearanceDateTolerance(FrappeTestCase):
 		bt = create_test_bank_transaction(self.bank_account, deposit=31.26)
 		_reconcile_invoice(bt.name, "Purchase Invoice", pi.name, -31.26)
 
-		result = _should_clear_invoice(
+		result = should_clear_invoice(
 			"Purchase Invoice", pi.name, pi.paid_amount, TEST_BANK_GL_ACCOUNT
 		)
 		self.assertTrue(result, "0.01 gap should be within tolerance")
@@ -1561,7 +1561,7 @@ class TestClearanceDateTolerance(FrappeTestCase):
 		bt = create_test_bank_transaction(self.bank_account, deposit=50.008)
 		_reconcile_invoice(bt.name, "Purchase Invoice", pi.name, -50.008)
 
-		result = _should_clear_invoice(
+		result = should_clear_invoice(
 			"Purchase Invoice", pi.name, pi.paid_amount, TEST_BANK_GL_ACCOUNT
 		)
 		self.assertTrue(result, "0.008 overage should be within 0.01 tolerance")
@@ -1578,7 +1578,7 @@ class TestClearanceDateTolerance(FrappeTestCase):
 		bt = create_test_bank_transaction(self.bank_account, deposit=31.22)
 		_reconcile_invoice(bt.name, "Purchase Invoice", pi.name, -31.22)
 
-		result = _should_clear_invoice(
+		result = should_clear_invoice(
 			"Purchase Invoice", pi.name, pi.paid_amount, TEST_BANK_GL_ACCOUNT
 		)
 		self.assertFalse(result, "0.05 gap should be outside 0.01 tolerance")
@@ -1593,7 +1593,7 @@ class TestClearanceDateTolerance(FrappeTestCase):
 			paid_amount=-31.27,
 		)
 
-		result = _should_clear_invoice(
+		result = should_clear_invoice(
 			"Purchase Invoice", pi.name, pi.paid_amount, TEST_BANK_GL_ACCOUNT
 		)
 		self.assertFalse(result, "No allocations yet: should not clear")
@@ -1608,7 +1608,7 @@ class TestClearanceDateTolerance(FrappeTestCase):
 		bt = create_test_bank_transaction(self.bank_account, withdrawal=150.0)
 		_reconcile_invoice(bt.name, "Purchase Invoice", pi.name, 150.0)
 
-		result = _should_clear_invoice(
+		result = should_clear_invoice(
 			"Purchase Invoice", pi.name, pi.paid_amount, TEST_BANK_GL_ACCOUNT
 		)
 		self.assertTrue(result, "Fully allocated positive paid PI should clear")
@@ -1652,7 +1652,7 @@ class TestClearanceDateTolerance(FrappeTestCase):
 		_reconcile_invoice(bt.name, "Purchase Invoice", pi.name, -31.22)
 
 		# Query cumulative scoped to a DIFFERENT GL account - must be 0
-		cumulative = _cumulative_allocated_for_invoice(
+		cumulative = cumulative_allocated_for_invoice(
 			"Purchase Invoice", pi.name, other_bank_gl
 		)
 		self.assertAlmostEqual(cumulative, 0.0, places=2,
@@ -1690,7 +1690,7 @@ class TestClearanceDateTolerance(FrappeTestCase):
 			(row_name, bt.name, pi.name, -31.22),
 		)
 
-		cumulative = _cumulative_allocated_for_invoice(
+		cumulative = cumulative_allocated_for_invoice(
 			"Purchase Invoice", pi.name, TEST_BANK_GL_ACCOUNT
 		)
 		self.assertAlmostEqual(cumulative, 0.0, places=2,
@@ -2016,3 +2016,117 @@ class TestClearanceDateDeferral(FrappeTestCase):
 		pi.reload()
 		self.assertTrue(pi.clearance_date,
 			"After BT($31.22): cumulative=-31.27 covers paid_amount, clearance_date must be set")
+
+
+class TestClearanceDateOnCancel(FrappeTestCase):
+	"""BT cancellation must re-evaluate PI/SI clearance.
+
+	The save-path delink_payment_entry override no-ops for PI/SI so that
+	process_removed_payment_entries can decide based on cumulative
+	allocations. on_cancel never fires process_removed_payment_entries, so
+	the on_cancel override has to run the same evaluation. Without it, a
+	cancelled BT leaves stale clearance_date on its paid-PI/SI references.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls.bank_account = setup_abr_test_data(TEST_COMPANY)
+		frappe.db.commit()
+
+	def test_cancel_bt_clears_pi_clearance_date(self):
+		"""A BT that solely backs a paid PI's clearance_date must, on cancel,
+		null the clearance_date (cumulative drops to 0).
+		"""
+		pi = create_test_purchase_invoice(
+			outstanding=31.27,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.27,
+		)
+		bt = create_test_bank_transaction(self.bank_account, deposit=31.27)
+		_reconcile_invoice(bt.name, "Purchase Invoice", pi.name, -31.27)
+		validate_single_bank_transaction(bt.name)
+		pi.reload()
+		self.assertTrue(pi.clearance_date,
+			"Pre-condition: clearance_date should be set after full match")
+
+		bt.reload()
+		bt.cancel()
+		pi.reload()
+		self.assertFalse(pi.clearance_date,
+			"After BT cancel, clearance_date must be nulled (cumulative dropped to 0)")
+
+	def test_cancel_bt_clears_si_clearance_date(self):
+		"""Same contract for Sales Invoice: cancelling the BT clears the
+		matching Sales Invoice Payment row's clearance_date.
+		"""
+		si = create_test_sales_invoice(outstanding=50, is_return=1)
+		frappe.get_doc({
+			"doctype": "Sales Invoice Payment",
+			"parent": si.name,
+			"parenttype": "Sales Invoice",
+			"parentfield": "payments",
+			"mode_of_payment": "Cash",
+			"account": TEST_BANK_GL_ACCOUNT,
+			"amount": -50.0,
+			"base_amount": -50.0,
+		}).insert(ignore_permissions=True)
+
+		bt = create_test_bank_transaction(self.bank_account, withdrawal=50.0)
+		_reconcile_invoice(bt.name, "Sales Invoice", si.name, -50.0)
+		validate_single_bank_transaction(bt.name)
+
+		sip_clearance_before = frappe.db.get_value(
+			"Sales Invoice Payment",
+			{"parent": si.name, "account": TEST_BANK_GL_ACCOUNT},
+			"clearance_date",
+		)
+		self.assertTrue(sip_clearance_before,
+			"Pre-condition: SI Payment clearance_date should be set after full match")
+
+		bt.reload()
+		bt.cancel()
+		sip_clearance_after = frappe.db.get_value(
+			"Sales Invoice Payment",
+			{"parent": si.name, "account": TEST_BANK_GL_ACCOUNT},
+			"clearance_date",
+		)
+		self.assertFalse(sip_clearance_after,
+			"After BT cancel, SI Payment clearance_date must be nulled")
+
+	def test_cancel_bt_preserves_pi_clearance_when_other_bt_still_covers(self):
+		"""When two BTs over-allocate against a PI and one is cancelled, the
+		remaining BT can still cover paid_amount within tolerance -> clearance
+		must be preserved.
+		"""
+		pi = create_test_purchase_invoice(
+			outstanding=31.27,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.27,
+		)
+		bt1 = create_test_bank_transaction(self.bank_account, deposit=31.27)
+		_reconcile_invoice(bt1.name, "Purchase Invoice", pi.name, -31.27)
+		validate_single_bank_transaction(bt1.name)
+		pi.reload()
+		self.assertTrue(pi.clearance_date,
+			"Pre-condition: clearance_date set after BT1 covers paid_amount")
+
+		# BT2 is a redundant over-allocation of -0.10 (within tolerance band).
+		bt2 = create_test_bank_transaction(self.bank_account, deposit=0.10)
+		_reconcile_invoice(bt2.name, "Purchase Invoice", pi.name, -0.10)
+		validate_single_bank_transaction(bt2.name)
+		pi.reload()
+		self.assertTrue(pi.clearance_date,
+			"Pre-condition: clearance_date still set after BT2 over-allocates")
+
+		# Cancel BT2 only. Cumulative drops to -31.27 (BT1 alone), which still
+		# covers paid_amount within tolerance.
+		bt2.reload()
+		bt2.cancel()
+		pi.reload()
+		self.assertTrue(pi.clearance_date,
+			"After cancelling BT2, BT1 (-31.27) still covers paid_amount; clearance_date must be PRESERVED")

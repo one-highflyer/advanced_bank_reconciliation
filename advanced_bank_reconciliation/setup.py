@@ -60,9 +60,11 @@ def get_custom_fields():
                 "default": "0",
                 "insert_after": "is_company_account",
                 "description": (
-                    "If enabled, deposit and withdrawal amounts on inserted Bank "
-                    "Transactions are swapped, so credit-card charges land in "
-                    "withdrawal and payments land in deposit."
+                    "If enabled, deposit and withdrawal amounts on Bank "
+                    "Transactions created via the Bank Statement Importer are "
+                    "swapped, so credit-card charges land in withdrawal and "
+                    "payments land in deposit. Manually created Bank "
+                    "Transactions are not flipped."
                 ),
             },
         ],

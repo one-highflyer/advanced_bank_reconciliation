@@ -2138,7 +2138,7 @@ def _signed_cap(allocated_amount, outstanding_amount):
 	return min(allocated_amount, flt(outstanding_amount))
 
 
-def _cumulative_allocated_for_invoice(invoice_doctype, invoice_name, bank_gl_account):
+def cumulative_allocated_for_invoice(invoice_doctype, invoice_name, bank_gl_account):
 	"""Sum signed allocated_amount across submitted Bank Transactions that
 	allocate against this (doctype, name) on the given bank GL account.
 
@@ -2162,13 +2162,14 @@ def _cumulative_allocated_for_invoice(invoice_doctype, invoice_name, bank_gl_acc
 	return flt(result[0][0]) if result else 0.0
 
 
-def _should_clear_invoice(invoice_doctype, invoice_name, target_paid_amount,
+def should_clear_invoice(invoice_doctype, invoice_name, target_paid_amount,
 						   bank_gl_account, tolerance=0.01):
 	"""Return True iff cumulative signed allocations match target_paid_amount
-	within tolerance (magnitude comparison, since allocations are signed and
-	target_paid_amount carries the invoice's intrinsic sign).
+	within tolerance. Comparison is by magnitude (abs), so the sign of either
+	side does not matter - refund PIs (negative paid_amount) and normal PIs
+	(positive) are treated symmetrically.
 	"""
-	cumulative = _cumulative_allocated_for_invoice(
+	cumulative = cumulative_allocated_for_invoice(
 		invoice_doctype, invoice_name, bank_gl_account
 	)
 	return abs(abs(cumulative) - abs(flt(target_paid_amount))) <= tolerance
@@ -2725,7 +2726,7 @@ def validate_single_bank_transaction(bank_transaction_name):
 					# Handle Sales Invoice - set clearance date on Sales Invoice Payment child table
 					for sales_payment in payment_doc.payments:
 						if sales_payment.account == bank_gl_account:
-							if _should_clear_invoice(
+							if should_clear_invoice(
 								"Sales Invoice",
 								payment_doc.name,
 								sales_payment.amount,
@@ -2744,7 +2745,7 @@ def validate_single_bank_transaction(bank_transaction_name):
 				elif payment_entry.payment_document == "Purchase Invoice":
 					# Handle Purchase Invoice - set clearance date directly on the document
 					if hasattr(payment_doc, 'clearance_date'):
-						if _should_clear_invoice(
+						if should_clear_invoice(
 							"Purchase Invoice",
 							payment_doc.name,
 							payment_doc.paid_amount,

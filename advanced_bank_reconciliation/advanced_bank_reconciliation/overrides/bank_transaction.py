@@ -24,6 +24,28 @@ class ExtendedBankTransaction(BankTransaction):
         if self.payment_entries and len(self.payment_entries) > 0:
             self.trigger_background_validation()
 
+    def on_cancel(self):
+        super().on_cancel()
+        # delink_payment_entry is overridden to no-op for PI/SI so that the
+        # save-path's process_removed_payment_entries can decide whether
+        # cumulative allocations still cover paid_amount before clearing.
+        # on_cancel never fires process_removed_payment_entries, so we have
+        # to re-evaluate PI/SI clearance here directly. By this point
+        # super().on_cancel() has marked the BT cancelled, so the cumulative
+        # SQL (docstatus=1 filter) correctly excludes this BT's allocations.
+        logger = get_logger()
+        try:
+            for pe in self.payment_entries or []:
+                if pe.payment_document in ("Purchase Invoice", "Sales Invoice"):
+                    self.clear_document_clearance_date(
+                        pe.payment_document, pe.payment_entry
+                    )
+        except Exception as e:
+            logger.error(
+                "Error re-evaluating PI/SI clearance on cancel of BT %s: %s",
+                self.name, str(e), exc_info=True,
+            )
+
     def process_removed_payment_entries(self):
         """Process any payment entries that were removed from the bank transaction"""
         logger = get_logger()
@@ -66,17 +88,21 @@ class ExtendedBankTransaction(BankTransaction):
             )
 
     def clear_document_clearance_date(self, document_type, document_name):
-        """
-        Clear clearance date for different document types
-        For Sales Invoice, it handles the Sales Invoice Payment child table
-        For Purchase Invoice, it handles the direct clearance_date field
+        """Reset clearance_date on a removed allocation target.
+
+        Sales Invoice clears the matching Sales Invoice Payment child row;
+        Purchase Invoice clears the direct field; Payment Entry / Journal
+        Entry clear their own clearance_date field. For PI/SI the clear is
+        conditional on cumulative submitted allocations no longer matching
+        paid_amount (within tolerance) - when other BTs still cover the
+        invoice the clearance is preserved.
         """
         logger = get_logger()
         try:
             # Handle Sales Invoice - clearance date goes on Sales Invoice Payment child table
             if document_type == "Sales Invoice":
                 from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool import (
-                    _should_clear_invoice,
+                    should_clear_invoice,
                 )
                 sales_invoice = frappe.get_doc("Sales Invoice", document_name)
                 bank_account_gl = frappe.db.get_value(
@@ -85,7 +111,7 @@ class ExtendedBankTransaction(BankTransaction):
 
                 for payment in sales_invoice.payments:
                     if payment.account == bank_account_gl and payment.clearance_date:
-                        if not _should_clear_invoice(
+                        if not should_clear_invoice(
                             "Sales Invoice", document_name, payment.amount, bank_account_gl
                         ):
                             frappe.db.set_value(
@@ -107,7 +133,7 @@ class ExtendedBankTransaction(BankTransaction):
             # Handle Purchase Invoice - conditional on cumulative allocation
             elif document_type == "Purchase Invoice":
                 from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool import (
-                    _should_clear_invoice,
+                    should_clear_invoice,
                 )
                 if frappe.db.exists(document_type, document_name):
                     meta = frappe.get_meta(document_type)
@@ -118,7 +144,7 @@ class ExtendedBankTransaction(BankTransaction):
                         target_paid_amount = frappe.db.get_value(
                             document_type, document_name, "paid_amount"
                         ) or 0
-                        if not _should_clear_invoice(
+                        if not should_clear_invoice(
                             document_type, document_name, target_paid_amount, bank_account_gl
                         ):
                             frappe.db.set_value(
@@ -217,7 +243,7 @@ class ExtendedBankTransaction(BankTransaction):
         paid_amount inside clear_linked_payment_entry's get_clearance_details).
         For PI/SI, skip the upstream clear here; ABR's
         process_removed_payment_entries -> clear_document_clearance_date
-        (which uses the tolerance-aware _should_clear_invoice helper)
+        (which uses the tolerance-aware should_clear_invoice helper)
         becomes the sole clearance-clearing path for those types.
         """
         if payment_entry.payment_document == "Bank Transaction":
