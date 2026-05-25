@@ -6,7 +6,7 @@ A JS client computing "remaining" via subtraction (e.g. 760 - 649.71) can
 send an allocated amount like 110.28999999999996 to reconcile_vouchers.
 The payment_entries child row's allocated_amount must be rounded to the
 field's precision on append; otherwise the second save() inside
-reconcile_vouchers trips UpdateAfterSubmitError — the in-memory value is
+reconcile_vouchers trips UpdateAfterSubmitError - the in-memory value is
 the unrounded float while the DB value is already rounded.
 """
 import json
@@ -43,7 +43,7 @@ class TestBulkReconcilePrecision(FrappeTestCase):
 		Invoices are created with round outstanding amounts large enough to
 		cover the partial allocations. The float quirk is in the allocation
 		amounts passed to reconcile_vouchers (what the UI sends), not in
-		the invoice totals — which can differ slightly on CI vs local if
+		the invoice totals - which can differ slightly on CI vs local if
 		tax/rounding defaults change grand_total.
 		"""
 		si1 = create_test_sales_invoice(outstanding=1000)

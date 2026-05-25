@@ -18,6 +18,45 @@ from frappe.utils.xlsxutils import (
 logger = frappe.logger("bank_rec", allow_site=True)
 logger.setLevel(logging.INFO)
 
+
+def flip_amount_for_credit_card(doc):
+    """Swap deposit and withdrawal on a Bank Transaction document when the
+    target Bank Account is flagged as a credit card.
+
+    Credit-card statements typically put charges and payments under one
+    "Amount" column; importers route positive amounts to deposit, but for
+    credit-card accounts treated as Bank/Asset the sign is inverted (charges
+    should be withdrawals, payments should be deposits).
+
+    This helper is called explicitly from statement-import flows only. Manual
+    Bank Transaction creation and direct API insertions are not flipped; the
+    caller is expected to provide values in the correct orientation.
+    """
+    if not doc.bank_account:
+        return
+
+    if not frappe.db.has_column("Bank Account", "is_credit_card"):
+        return
+
+    is_credit_card = frappe.db.get_value(
+        "Bank Account", doc.bank_account, "is_credit_card"
+    )
+    if not is_credit_card:
+        return
+
+    original_deposit = flt(doc.deposit)
+    original_withdrawal = flt(doc.withdrawal)
+    if original_deposit == 0 and original_withdrawal == 0:
+        return
+
+    doc.deposit = original_withdrawal
+    doc.withdrawal = original_deposit
+    logger.info(
+        "Credit-card flip applied on statement import (%s): deposit %s -> %s, withdrawal %s -> %s",
+        doc.bank_account, original_deposit, doc.deposit,
+        original_withdrawal, doc.withdrawal,
+    )
+
 BANK_MAPPING_FIELD_ORDER = [
     "date",
     "deposit",
@@ -548,6 +587,7 @@ def publish_records(data_import, importer_data=None):
 
             bank_transaction = frappe.new_doc("Bank Transaction")
             bank_transaction.update(bank_transaction_dict)
+            flip_amount_for_credit_card(bank_transaction)
             bank_transaction.insert()
             bank_transaction.submit()
         logger.info("Bank transactions submitted successfully")

@@ -119,18 +119,6 @@ override_doctype_class = {
     "Bank Transaction": "advanced_bank_reconciliation.advanced_bank_reconciliation.overrides.bank_transaction.ExtendedBankTransaction",
 }
 
-# Document Events
-# ---------------
-# Hook on document methods and events
-
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
-
 # Scheduled Tasks
 # ---------------
 
