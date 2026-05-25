@@ -1,3 +1,12 @@
+## [1.7.11](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.10...v1.7.11) (2026-05-25)
+
+
+### Bug Fixes
+
+* **abr:** defer invoice clearance until cumulative match, plus credit-card account flip ([9d8c6b9](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/9d8c6b9b0d8742f45237c09b08df25b9edbb03fc))
+* **abr:** re-evaluate PI/SI clearance on Bank Transaction cancel ([0342f82](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/0342f8271b1b47ae2066ca15856218bf24cb073d))
+* **abr:** treat should_clear_invoice as coverage check, not equality ([eaee48f](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/eaee48f961e58310044db67d651ec23058633a04))
+
 ## [1.7.10](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.9...v1.7.10) (2026-05-25)
 
 
