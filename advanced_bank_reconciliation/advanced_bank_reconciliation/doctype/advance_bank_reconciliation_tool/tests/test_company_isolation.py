@@ -13,7 +13,6 @@ owning the bank account being reconciled. These tests verify:
 """
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import nowdate
 
 from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool import (
 	check_matching,
