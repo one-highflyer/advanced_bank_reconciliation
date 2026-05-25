@@ -951,6 +951,7 @@ def check_matching(
 		"party_type": transaction.party_type,
 		"party": transaction.party,
 		"bank_account": bank_account,
+		"company": company,
 		"currency": transaction.currency,
 		"from_date": from_date,
 		"to_date": to_date,
@@ -1063,12 +1064,12 @@ def get_matching_queries(
 	# For deposits, show ALL unpaid sales invoices (both normal and returns)
 	# This allows matching both customer payments (positive) and refunds (negative)
 	if transaction.deposit > 0.0 and "unpaid_sales_invoice" in document_types:
-		query = get_unpaid_si_matching_query(exact_match, for_withdrawal=False, from_date=from_date, to_date=to_date)
+		query = get_unpaid_si_matching_query(exact_match, company, for_withdrawal=False, from_date=from_date, to_date=to_date)
 		queries.append(query)
 
 	# Also check for negative unpaid purchase invoices (returns) for deposits
 	if transaction.deposit > 0.0 and "unpaid_purchase_invoice" in document_types:
-		query = get_unpaid_pi_matching_query(exact_match, for_deposit=True, from_date=from_date, to_date=to_date)
+		query = get_unpaid_pi_matching_query(exact_match, company, for_deposit=True, from_date=from_date, to_date=to_date)
 		queries.append(query)
 
 	# Match paid refund purchase invoices (is_paid=1, paid_amount<0) against deposit transactions
@@ -1082,13 +1083,13 @@ def get_matching_queries(
 			queries.append(query)
 
 		if "unpaid_purchase_invoice" in document_types:
-			query = get_unpaid_pi_matching_query(exact_match, for_deposit=False, from_date=from_date, to_date=to_date)
+			query = get_unpaid_pi_matching_query(exact_match, company, for_deposit=False, from_date=from_date, to_date=to_date)
 			queries.append(query)
 
 		# For withdrawals, show ALL unpaid sales invoices (both normal and returns)
 		# This allows matching both customer refunds (negative) and returned payments (positive)
 		if "unpaid_sales_invoice" in document_types:
-			query = get_unpaid_si_matching_query(exact_match, for_withdrawal=False, from_date=from_date, to_date=to_date)
+			query = get_unpaid_si_matching_query(exact_match, company, for_withdrawal=False, from_date=from_date, to_date=to_date)
 			queries.append(query)
 
 		# Match paid refund sales invoices (is_paid=1, sip.amount<0) against withdrawal transactions
@@ -1510,7 +1511,7 @@ def get_pi_matching_query(exact_match, for_deposit=False):
 	"""
 
 
-def get_unpaid_si_matching_query(exact_match, for_withdrawal=False, from_date=None, to_date=None):
+def get_unpaid_si_matching_query(exact_match, company=None, for_withdrawal=False, from_date=None, to_date=None):
 	# get matching unpaid sales invoice query
 	# Show both normal invoices (positive outstanding) and returns (negative outstanding)
 	# This allows matching both customer payments and refunds in the same view
@@ -1564,6 +1565,7 @@ def get_unpaid_si_matching_query(exact_match, for_withdrawal=False, from_date=No
 			`tabSales Invoice`
 		WHERE
 			docstatus = 1
+			{'AND company = %(company)s' if company else ''}
 			AND status NOT IN ('Paid', 'Cancelled', 'Credit Note Issued')
 			AND {amount_condition}
 			{date_filter}
@@ -1573,7 +1575,7 @@ def get_unpaid_si_matching_query(exact_match, for_withdrawal=False, from_date=No
 	"""
 
 
-def get_unpaid_pi_matching_query(exact_match, for_deposit=False, from_date=None, to_date=None):
+def get_unpaid_pi_matching_query(exact_match, company=None, for_deposit=False, from_date=None, to_date=None):
 	# get matching unpaid purchase invoice query
 	# for_deposit=True is used to match negative invoices (returns) with deposit transactions
 	if for_deposit:
@@ -1626,6 +1628,7 @@ def get_unpaid_pi_matching_query(exact_match, for_deposit=False, from_date=None,
 			`tabPurchase Invoice`
 		WHERE
 			docstatus = 1
+			{'AND company = %(company)s' if company else ''}
 			AND status NOT IN ('Paid', 'Cancelled', 'Debit Note Issued')
 			AND {amount_condition}
 			{date_filter}

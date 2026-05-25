@@ -10,6 +10,7 @@ import frappe
 from frappe.utils import add_days, flt, nowdate
 
 TEST_COMPANY = "_Test Company"
+TEST_COMPANY_2 = "_Test Company 1"
 TEST_BANK = "_ABR Test Bank"
 TEST_BANK_ACCOUNT_NAME = "_ABR Test Bank Account"
 TEST_BANK_GL_ACCOUNT = "_ABR Test Bank Account - _TC"
@@ -65,6 +66,89 @@ def ensure_bank_and_bank_account(company=TEST_COMPANY):
 				"account_name": TEST_BANK_ACCOUNT_NAME,
 				"bank": TEST_BANK,
 				"account": TEST_BANK_GL_ACCOUNT,
+				"is_company_account": 1,
+				"company": company,
+			}
+		)
+		ba.insert(ignore_permissions=True, ignore_if_duplicate=True)
+		ba_name = ba.name
+
+	return ba_name
+
+
+def ensure_fiscal_year_for_company(company):
+	"""Link the company to an existing fiscal year that covers today.
+
+	On ERPNext test sites the global fiscal years are created by the
+	erpnext before_tests hook, but the Fiscal Year Company links are only
+	written for the primary _Test Company. When tests create invoices for
+	a second company, ERPNext's get_fiscal_years() raises FiscalYearError
+	unless the company also appears in the fiscal year's companies list.
+	"""
+	from frappe.utils import getdate
+
+	today = getdate()
+	fy = frappe.db.get_value(
+		"Fiscal Year",
+		{
+			"year_start_date": ["<=", today],
+			"year_end_date": [">=", today],
+			"disabled": 0,
+		},
+		"name",
+	)
+	if not fy:
+		return
+
+	already_linked = frappe.db.exists(
+		"Fiscal Year Company", {"parent": fy, "company": company}
+	)
+	if already_linked:
+		return
+
+	fy_doc = frappe.get_doc("Fiscal Year", fy)
+	fy_doc.append("companies", {"company": company})
+	fy_doc.save(ignore_permissions=True)
+
+
+def ensure_bank_account_for_company(company):
+	"""Create a bank GL account and Bank Account doc for the given company.
+
+	Uses the company's abbreviation to build unique names so each company
+	in a multi-company test site gets its own isolated bank account.
+	Returns the Bank Account document name.
+	"""
+	ensure_fiscal_year_for_company(company)
+	abbr = frappe.db.get_value("Company", company, "abbr")
+	acct_name = f"_ABR Test Bank Account {abbr}"
+	gl_account_name = f"{acct_name} - {abbr}"
+
+	if not frappe.db.exists("Bank", TEST_BANK):
+		frappe.get_doc({"doctype": "Bank", "bank_name": TEST_BANK}).insert(
+			ignore_permissions=True, ignore_if_duplicate=True
+		)
+
+	if not frappe.db.exists("Account", gl_account_name):
+		parent = _get_parent_bank_account(company)
+		frappe.get_doc(
+			{
+				"doctype": "Account",
+				"account_name": acct_name,
+				"parent_account": parent,
+				"company": company,
+				"account_type": "Bank",
+				"is_group": 0,
+			}
+		).insert(ignore_permissions=True, ignore_if_duplicate=True)
+
+	ba_name = f"{acct_name} - {TEST_BANK}"
+	if not frappe.db.exists("Bank Account", ba_name):
+		ba = frappe.get_doc(
+			{
+				"doctype": "Bank Account",
+				"account_name": acct_name,
+				"bank": TEST_BANK,
+				"account": gl_account_name,
 				"is_company_account": 1,
 				"company": company,
 			}
