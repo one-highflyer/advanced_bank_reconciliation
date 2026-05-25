@@ -75,31 +75,75 @@ class ExtendedBankTransaction(BankTransaction):
         try:
             # Handle Sales Invoice - clearance date goes on Sales Invoice Payment child table
             if document_type == "Sales Invoice":
-                # Load the Sales Invoice document
+                from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool import (
+                    _should_clear_invoice,
+                )
                 sales_invoice = frappe.get_doc("Sales Invoice", document_name)
-                bank_account = frappe.db.get_value(
+                bank_account_gl = frappe.db.get_value(
                     "Bank Account", self.bank_account, "account"
                 )
 
-                # Iterate through payments child table and clear clearance dates
                 for payment in sales_invoice.payments:
-                    if payment.account == bank_account and payment.clearance_date:
-                        frappe.db.set_value(
-                            "Sales Invoice Payment",
-                            payment.name,
-                            "clearance_date",
-                            None,
+                    if payment.account == bank_account_gl and payment.clearance_date:
+                        if not _should_clear_invoice(
+                            "Sales Invoice", document_name, payment.amount, bank_account_gl
+                        ):
+                            frappe.db.set_value(
+                                "Sales Invoice Payment",
+                                payment.name,
+                                "clearance_date",
+                                None,
+                            )
+                            logger.info(
+                                "Cleared clearance_date for Sales Invoice Payment %s (cumulative dropped below)",
+                                payment.name,
+                            )
+                        else:
+                            logger.info(
+                                "Keeping clearance_date for Sales Invoice Payment %s: cumulative still matches amount",
+                                payment.name,
+                            )
+
+            # Handle Purchase Invoice - conditional on cumulative allocation
+            elif document_type == "Purchase Invoice":
+                from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool import (
+                    _should_clear_invoice,
+                )
+                if frappe.db.exists(document_type, document_name):
+                    meta = frappe.get_meta(document_type)
+                    if meta.has_field("clearance_date"):
+                        bank_account_gl = frappe.db.get_value(
+                            "Bank Account", self.bank_account, "account"
                         )
-                        logger.info(
-                            "Cleared clearance_date for Sales Invoice Payment %s",
-                            payment.name,
+                        target_paid_amount = frappe.db.get_value(
+                            document_type, document_name, "paid_amount"
+                        ) or 0
+                        if not _should_clear_invoice(
+                            document_type, document_name, target_paid_amount, bank_account_gl
+                        ):
+                            frappe.db.set_value(
+                                document_type, document_name, "clearance_date", None
+                            )
+                            logger.info(
+                                "Cleared clearance_date for %s %s (cumulative dropped below paid_amount)",
+                                document_type,
+                                document_name,
+                            )
+                        else:
+                            logger.info(
+                                "Keeping clearance_date for %s %s: cumulative still matches paid_amount",
+                                document_type,
+                                document_name,
+                            )
+                    else:
+                        logger.debug(
+                            "%s does not have clearance_date field", document_type
                         )
 
-            # Handle other document types with direct clearance_date field
+            # Handle Payment Entry and Journal Entry with direct clearance_date field
             elif document_type in [
                 "Payment Entry",
                 "Journal Entry",
-                "Purchase Invoice",
             ]:
                 # Check if the document exists and has clearance_date field
                 if frappe.db.exists(document_type, document_name):
@@ -156,6 +200,34 @@ class ExtendedBankTransaction(BankTransaction):
                 str(e),
                 exc_info=True,
             )
+
+    def delink_payment_entry(self, payment_entry):
+        """Override upstream to skip clear_linked_payment_entry for paid SI/PI.
+
+        Upstream's delink_payment_entry unconditionally clears the PI/SI
+        clearance_date before ABR's process_removed_payment_entries runs.
+        That breaks the deferred-clearance "preserve" semantic: a PI whose
+        cumulative allocation still covers paid_amount (e.g. when one of
+        several over-allocating BTs is unreconciled) loses its clearance_date
+        even though the remaining allocations still settle it.
+
+        For Bank Transaction parent doc references, keep upstream behavior
+        (chained-BT support). For PE/JE keep upstream behavior (their
+        clearance semantics already correctly track allocated_amount vs
+        paid_amount inside clear_linked_payment_entry's get_clearance_details).
+        For PI/SI, skip the upstream clear here; ABR's
+        process_removed_payment_entries -> clear_document_clearance_date
+        (which uses the tolerance-aware _should_clear_invoice helper)
+        becomes the sole clearance-clearing path for those types.
+        """
+        if payment_entry.payment_document == "Bank Transaction":
+            self.update_linked_bank_transaction(
+                payment_entry.payment_entry, allocated_amount=None
+            )
+        elif payment_entry.payment_document in ("Purchase Invoice", "Sales Invoice"):
+            return
+        else:
+            self.clear_linked_payment_entry(payment_entry, clearance_date=None)
 
     def add_payment_entries(self, vouchers):
         "Add the vouchers with zero allocation. Save() will perform the allocations and clearance"
@@ -233,3 +305,41 @@ class ExtendedBankTransaction(BankTransaction):
         self.unallocated_amount = flt(
             unallocated_amount, self.precision("unallocated_amount")
         )
+
+
+def flip_amount_for_credit_card(doc, method=None):
+    """Swap deposit and withdrawal at insert time when the target Bank Account
+    is flagged as a credit card. Credit-card statements typically put charges
+    and payments under one Amount column; importers route positive amounts to
+    deposit, but for credit-card accounts treated as Bank/Asset the sign is
+    inverted (charges should be withdrawals, payments should be deposits).
+    """
+    logger = get_logger()
+
+    if not doc.bank_account:
+        return
+
+    # Pre-migrate guard: the is_credit_card column may not exist yet on
+    # sites that have the new code but haven't run `bench migrate`.
+    # Avoid bricking all BT inserts in that window.
+    if not frappe.db.has_column("Bank Account", "is_credit_card"):
+        return
+
+    is_credit_card = frappe.db.get_value(
+        "Bank Account", doc.bank_account, "is_credit_card"
+    )
+    if not is_credit_card:
+        return
+
+    original_deposit = flt(doc.deposit)
+    original_withdrawal = flt(doc.withdrawal)
+    if original_deposit == 0 and original_withdrawal == 0:
+        return
+
+    doc.deposit = original_withdrawal
+    doc.withdrawal = original_deposit
+    logger.info(
+        "Credit-card flip on Bank Transaction insert (%s): deposit %s -> %s, withdrawal %s -> %s",
+        doc.bank_account, original_deposit, doc.deposit,
+        original_withdrawal, doc.withdrawal,
+    )

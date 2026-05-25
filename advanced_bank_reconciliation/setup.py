@@ -52,6 +52,20 @@ def get_custom_fields():
                 "insert_after": "reference_no",
             }
         ],
+        "Bank Account": [
+            {
+                "fieldname": "is_credit_card",
+                "fieldtype": "Check",
+                "label": "Credit Card",
+                "default": "0",
+                "insert_after": "is_company_account",
+                "description": (
+                    "If enabled, deposit and withdrawal amounts on inserted Bank "
+                    "Transactions are swapped, so credit-card charges land in "
+                    "withdrawal and payments land in deposit."
+                ),
+            },
+        ],
     }
 
 

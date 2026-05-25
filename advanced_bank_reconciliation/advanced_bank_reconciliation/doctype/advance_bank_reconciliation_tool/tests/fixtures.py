@@ -125,9 +125,20 @@ def ensure_fiscal_year_for_company(company):
 	if company in linked_companies:
 		return
 
-	fy_doc = frappe.get_doc("Fiscal Year", fy)
-	fy_doc.append("companies", {"company": company})
-	fy_doc.save(ignore_permissions=True)
+	# Insert the child row directly to avoid triggering ERPNext's
+	# validate_overlap on sites that have pre-existing fiscal years
+	# (e.g. _Test Fiscal Year 2026-2027 on a demo bench). The fy_doc.save()
+	# path raises NameError: "overlapping" even when the FY is the same
+	# record being appended to.
+	frappe.get_doc(
+		{
+			"doctype": "Fiscal Year Company",
+			"parent": fy,
+			"parenttype": "Fiscal Year",
+			"parentfield": "companies",
+			"company": company,
+		}
+	).insert(ignore_permissions=True, ignore_if_duplicate=True)
 
 
 def ensure_bank_account_for_company(company):

@@ -2138,6 +2138,42 @@ def _signed_cap(allocated_amount, outstanding_amount):
 	return min(allocated_amount, flt(outstanding_amount))
 
 
+def _cumulative_allocated_for_invoice(invoice_doctype, invoice_name, bank_gl_account):
+	"""Sum signed allocated_amount across submitted Bank Transactions that
+	allocate against this (doctype, name) on the given bank GL account.
+
+	For a refund PI with three deposits allocated to -31.22, -0.01, -0.04
+	the result is -31.27. The bank_gl_account filter scopes the sum to BTs
+	in the relevant bank account.
+	"""
+	result = frappe.db.sql(
+		"""
+		SELECT COALESCE(SUM(btp.allocated_amount), 0) AS total
+		FROM `tabBank Transaction Payments` btp
+		INNER JOIN `tabBank Transaction` bt ON bt.name = btp.parent
+		INNER JOIN `tabBank Account` ba ON ba.name = bt.bank_account
+		WHERE btp.payment_document = %(dt)s
+		  AND btp.payment_entry = %(dn)s
+		  AND bt.docstatus = 1
+		  AND ba.account = %(gl)s
+		""",
+		{"dt": invoice_doctype, "dn": invoice_name, "gl": bank_gl_account},
+	)
+	return flt(result[0][0]) if result else 0.0
+
+
+def _should_clear_invoice(invoice_doctype, invoice_name, target_paid_amount,
+						   bank_gl_account, tolerance=0.01):
+	"""Return True iff cumulative signed allocations match target_paid_amount
+	within tolerance (magnitude comparison, since allocations are signed and
+	target_paid_amount carries the invoice's intrinsic sign).
+	"""
+	cumulative = _cumulative_allocated_for_invoice(
+		invoice_doctype, invoice_name, bank_gl_account
+	)
+	return abs(abs(cumulative) - abs(flt(target_paid_amount))) <= tolerance
+
+
 def _normalise_pe_to_target_invoice(pe, invoice_doc, allocated_amount):
 	"""Restrict PE references to the target invoice, cascade the
 	allocation across payment term rows if present, clear any
@@ -2689,18 +2725,40 @@ def validate_single_bank_transaction(bank_transaction_name):
 					# Handle Sales Invoice - set clearance date on Sales Invoice Payment child table
 					for sales_payment in payment_doc.payments:
 						if sales_payment.account == bank_gl_account:
-							if not sales_payment.clearance_date or getdate(sales_payment.clearance_date) != getdate(bank_transaction.date):
-								frappe.db.set_value("Sales Invoice Payment", sales_payment.name, "clearance_date", bank_transaction.date)
-								logger.info("Set clearance date for Sales Invoice Payment %s to %s", sales_payment.name, bank_transaction.date)
-								clearance_date_set = True
-				
+							if _should_clear_invoice(
+								"Sales Invoice",
+								payment_doc.name,
+								sales_payment.amount,
+								bank_gl_account,
+							):
+								if not sales_payment.clearance_date or getdate(sales_payment.clearance_date) != getdate(bank_transaction.date):
+									frappe.db.set_value("Sales Invoice Payment", sales_payment.name, "clearance_date", bank_transaction.date)
+									logger.info("Set clearance date for Sales Invoice Payment %s to %s", sales_payment.name, bank_transaction.date)
+									clearance_date_set = True
+							else:
+								logger.info(
+									"Deferring clearance_date for Sales Invoice Payment %s: cumulative allocation has not reached amount %s",
+									sales_payment.name, sales_payment.amount,
+								)
+
 				elif payment_entry.payment_document == "Purchase Invoice":
 					# Handle Purchase Invoice - set clearance date directly on the document
 					if hasattr(payment_doc, 'clearance_date'):
-						if not payment_doc.clearance_date or getdate(payment_doc.clearance_date) != getdate(bank_transaction.date):
-							payment_doc.db_set("clearance_date", bank_transaction.date)
-							logger.info("Set clearance date for Purchase Invoice %s to %s", payment_doc.name, bank_transaction.date)
-							clearance_date_set = True
+						if _should_clear_invoice(
+							"Purchase Invoice",
+							payment_doc.name,
+							payment_doc.paid_amount,
+							bank_gl_account,
+						):
+							if not payment_doc.clearance_date or getdate(payment_doc.clearance_date) != getdate(bank_transaction.date):
+								payment_doc.db_set("clearance_date", bank_transaction.date)
+								logger.info("Set clearance date for Purchase Invoice %s to %s", payment_doc.name, bank_transaction.date)
+								clearance_date_set = True
+						else:
+							logger.info(
+								"Deferring clearance_date for Purchase Invoice %s: cumulative allocation has not reached paid_amount %s",
+								payment_doc.name, payment_doc.paid_amount,
+							)
 			
 			except Exception as e:
 				logger.error("Error processing %s %s: %s", payment_entry.payment_document, payment_entry.payment_entry, str(e), exc_info=True)

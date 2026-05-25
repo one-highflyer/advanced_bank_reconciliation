@@ -12,14 +12,17 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, flt, nowdate
 
 from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool import (
+	_cumulative_allocated_for_invoice,
 	_normalise_pe_to_target_invoice,
 	_selection_exceeds_unallocated,
+	_should_clear_invoice,
 	_signed_cap,
 	create_payment_entries_bulk,
 	create_payment_entry_for_invoice,
 	get_linked_payments,
 	reconcile_vouchers,
 	unreconcile_bank_transaction,
+	validate_single_bank_transaction,
 )
 
 from .fixtures import (
@@ -31,6 +34,17 @@ from .fixtures import (
 	create_test_sales_invoice,
 	setup_abr_test_data,
 )
+
+# Helper: direct Invoice voucher reconcile (no PE)
+def _reconcile_invoice(bank_transaction_name, payment_doctype, payment_name, amount):
+	vouchers = [
+		{
+			"payment_doctype": payment_doctype,
+			"payment_name": payment_name,
+			"amount": flt(amount),
+		}
+	]
+	return reconcile_vouchers(bank_transaction_name, json.dumps(vouchers))
 
 
 def _reconcile(bank_transaction_name, payment_entry_name, amount):
@@ -1475,3 +1489,530 @@ class TestBulkReconciliationSignHandling(FrappeTestCase):
 		bt.reload()
 		self.assertAlmostEqual(flt(bt.unallocated_amount), 0.0, places=2)
 		self.assertEqual(bt.status, "Reconciled")
+
+
+class TestClearanceDateTolerance(FrappeTestCase):
+	"""Unit tests for _cumulative_allocated_for_invoice and _should_clear_invoice.
+
+	These helpers gate clearance_date assignment so that partial allocations
+	(e.g. a refund PI spread across three deposit BTs) do not get prematurely
+	cleared. The 8 unit tests below cover edge cases in the magnitude comparison.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls.bank_account = setup_abr_test_data(TEST_COMPANY)
+		frappe.db.commit()
+
+	# -----------------------------------------------------------------------
+	# Unit tests for _should_clear_invoice (no real allocations needed)
+	# -----------------------------------------------------------------------
+
+	def test_should_clear_when_cumulative_matches_exact(self):
+		"""Cumulative exactly equals paid_amount: helper returns True."""
+		pi = create_test_purchase_invoice(
+			outstanding=31.27,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.27,
+		)
+		bt = create_test_bank_transaction(self.bank_account, deposit=31.27)
+		_reconcile_invoice(bt.name, "Purchase Invoice", pi.name, -31.27)
+
+		result = _should_clear_invoice(
+			"Purchase Invoice", pi.name, pi.paid_amount, TEST_BANK_GL_ACCOUNT
+		)
+		self.assertTrue(result, "Should clear when cumulative matches paid_amount exactly")
+
+	def test_should_clear_when_cumulative_within_tolerance_low(self):
+		"""Cumulative is 0.01 below paid_amount magnitude: within tolerance, returns True."""
+		pi = create_test_purchase_invoice(
+			outstanding=31.27,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.27,
+		)
+		bt = create_test_bank_transaction(self.bank_account, deposit=31.26)
+		_reconcile_invoice(bt.name, "Purchase Invoice", pi.name, -31.26)
+
+		result = _should_clear_invoice(
+			"Purchase Invoice", pi.name, pi.paid_amount, TEST_BANK_GL_ACCOUNT
+		)
+		self.assertTrue(result, "0.01 gap should be within tolerance")
+
+	def test_should_clear_when_cumulative_within_tolerance_high(self):
+		"""Cumulative is 0.008 above paid_amount magnitude: within 0.01 tolerance, returns True.
+
+		We use a gap of 0.008 (not exactly 0.01) to stay clear of float-precision
+		instability at the exact tolerance boundary.
+		"""
+		# PI for 50 (round number avoids cash/validate rounding issues)
+		pi = create_test_purchase_invoice(
+			outstanding=50.0,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-50.0,
+		)
+		# Allocate 50.008 against a 50.0 PI (0.008 overage, within 0.01 tolerance)
+		bt = create_test_bank_transaction(self.bank_account, deposit=50.008)
+		_reconcile_invoice(bt.name, "Purchase Invoice", pi.name, -50.008)
+
+		result = _should_clear_invoice(
+			"Purchase Invoice", pi.name, pi.paid_amount, TEST_BANK_GL_ACCOUNT
+		)
+		self.assertTrue(result, "0.008 overage should be within 0.01 tolerance")
+
+	def test_should_not_clear_when_cumulative_below_threshold(self):
+		"""Cumulative is 0.05 below paid_amount magnitude: outside tolerance, returns False."""
+		pi = create_test_purchase_invoice(
+			outstanding=31.27,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.27,
+		)
+		bt = create_test_bank_transaction(self.bank_account, deposit=31.22)
+		_reconcile_invoice(bt.name, "Purchase Invoice", pi.name, -31.22)
+
+		result = _should_clear_invoice(
+			"Purchase Invoice", pi.name, pi.paid_amount, TEST_BANK_GL_ACCOUNT
+		)
+		self.assertFalse(result, "0.05 gap should be outside 0.01 tolerance")
+
+	def test_should_not_clear_when_no_allocations_yet(self):
+		"""No BT allocations at all: cumulative is 0, returns False for non-zero paid_amount."""
+		pi = create_test_purchase_invoice(
+			outstanding=31.27,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.27,
+		)
+
+		result = _should_clear_invoice(
+			"Purchase Invoice", pi.name, pi.paid_amount, TEST_BANK_GL_ACCOUNT
+		)
+		self.assertFalse(result, "No allocations yet: should not clear")
+
+	def test_should_clear_handles_positive_paid_amount(self):
+		"""Normal (non-refund) paid PI with positive paid_amount: clears when fully allocated."""
+		pi = create_test_purchase_invoice(
+			outstanding=150.0,
+			is_paid=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+		)
+		bt = create_test_bank_transaction(self.bank_account, withdrawal=150.0)
+		_reconcile_invoice(bt.name, "Purchase Invoice", pi.name, 150.0)
+
+		result = _should_clear_invoice(
+			"Purchase Invoice", pi.name, pi.paid_amount, TEST_BANK_GL_ACCOUNT
+		)
+		self.assertTrue(result, "Fully allocated positive paid PI should clear")
+
+	def test_cumulative_filters_by_bank_gl_account(self):
+		"""Allocations on a different bank GL account must not count toward the cumulative."""
+		other_bank_gl = frappe.db.get_value(
+			"Account",
+			{
+				"company": TEST_COMPANY,
+				"account_type": "Bank",
+				"is_group": 0,
+				"name": ["!=", TEST_BANK_GL_ACCOUNT],
+			},
+			"name",
+		)
+		if not other_bank_gl:
+			from .fixtures import _get_parent_bank_account
+			parent = _get_parent_bank_account(TEST_COMPANY)
+			other_acc = frappe.get_doc({
+				"doctype": "Account",
+				"account_name": "_ABR Test Filter Bank Account",
+				"parent_account": parent,
+				"company": TEST_COMPANY,
+				"account_type": "Bank",
+				"is_group": 0,
+			})
+			other_acc.insert(ignore_permissions=True, ignore_if_duplicate=True)
+			other_bank_gl = other_acc.name
+
+		pi = create_test_purchase_invoice(
+			outstanding=31.27,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.27,
+		)
+
+		# Allocate against the PI on the TEST bank account
+		bt = create_test_bank_transaction(self.bank_account, deposit=31.22)
+		_reconcile_invoice(bt.name, "Purchase Invoice", pi.name, -31.22)
+
+		# Query cumulative scoped to a DIFFERENT GL account - must be 0
+		cumulative = _cumulative_allocated_for_invoice(
+			"Purchase Invoice", pi.name, other_bank_gl
+		)
+		self.assertAlmostEqual(cumulative, 0.0, places=2,
+			msg="Allocations on a different GL account must not be included")
+
+	def test_cumulative_excludes_unsubmitted_bts(self):
+		"""BT rows with docstatus=0 (draft) must not contribute to the cumulative sum."""
+		import random
+		import string
+
+		pi = create_test_purchase_invoice(
+			outstanding=31.27,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.27,
+		)
+
+		# Create a draft BT (do not submit)
+		bt = create_test_bank_transaction(
+			self.bank_account,
+			deposit=31.22,
+			do_not_submit=True,
+		)
+		# Insert a Bank Transaction Payments row pointing at the PI
+		row_name = "ABR-DRAFT-" + "".join(random.choices(string.ascii_lowercase, k=8))
+		frappe.db.sql(
+			"""
+			INSERT INTO `tabBank Transaction Payments`
+			    (name, parent, parenttype, parentfield,
+			     payment_document, payment_entry, allocated_amount)
+			VALUES (%s, %s, 'Bank Transaction', 'payment_entries',
+			        'Purchase Invoice', %s, %s)
+			""",
+			(row_name, bt.name, pi.name, -31.22),
+		)
+
+		cumulative = _cumulative_allocated_for_invoice(
+			"Purchase Invoice", pi.name, TEST_BANK_GL_ACCOUNT
+		)
+		self.assertAlmostEqual(cumulative, 0.0, places=2,
+			msg="Draft BT allocations must not count toward cumulative")
+
+
+class TestClearanceDateDeferral(FrappeTestCase):
+	"""Integration tests for clearance_date deferral logic.
+
+	Verifies that clearance_date is only set when cumulative signed allocations
+	cover the invoice's paid_amount within tolerance, and is correctly reverted
+	on unreconcile when the cumulative drops below the threshold.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls.bank_account = setup_abr_test_data(TEST_COMPANY)
+		frappe.db.commit()
+
+	def test_partial_refund_pi_keeps_clearance_date_unset(self):
+		"""A single partial BT allocation (-31.22) against a refund PI with
+		paid_amount=-31.27 must not set clearance_date (gap > tolerance).
+		"""
+		pi = create_test_purchase_invoice(
+			outstanding=31.27,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.27,
+		)
+		bt = create_test_bank_transaction(self.bank_account, deposit=31.22)
+		_reconcile_invoice(bt.name, "Purchase Invoice", pi.name, -31.22)
+		validate_single_bank_transaction(bt.name)
+
+		pi.reload()
+		self.assertFalse(pi.clearance_date, "Partial allocation must not set clearance_date")
+
+	def test_partial_refund_pi_still_in_matching_candidates(self):
+		"""After a partial allocation and synchronous validation, the refund PI
+		must still appear in get_linked_payments results (not prematurely hidden).
+
+		Calls validate_single_bank_transaction synchronously so the deferral logic
+		runs in-process; the test is not vacuously true due to async skipping.
+		"""
+		pi = create_test_purchase_invoice(
+			outstanding=31.27,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.27,
+		)
+		bt = create_test_bank_transaction(self.bank_account, deposit=31.22)
+		_reconcile_invoice(bt.name, "Purchase Invoice", pi.name, -31.22)
+		# Run clearance-date deferral synchronously (not via background queue).
+		validate_single_bank_transaction(bt.name)
+
+		# Partial allocation (gap=0.05 > tolerance) must leave clearance_date unset.
+		pi.reload()
+		self.assertFalse(pi.clearance_date,
+			"Partial allocation must not set clearance_date (pre-condition for matching check)")
+
+		bt2 = create_test_bank_transaction(self.bank_account, deposit=99.99)
+		matches = get_linked_payments(
+			bank_transaction_name=bt2.name,
+			document_types=["purchase_invoice"],
+			from_date=add_days(nowdate(), -30),
+			to_date=add_days(nowdate(), 1),
+		)
+		rows = [r for r in matches if r[1] == "Purchase Invoice" and r[2] == pi.name]
+		self.assertGreater(len(rows), 0,
+			"Partially allocated refund PI must still appear as a matching candidate")
+
+	def test_three_partial_bts_cumulatively_clear_refund_pi(self):
+		"""The production scenario: paid_amount=-31.27, three BTs of
+		31.22 + 0.01 + 0.04. After all three are reconciled the cumulative
+		is -31.27 and clearance_date must be set.
+		"""
+		pi = create_test_purchase_invoice(
+			outstanding=31.27,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.27,
+		)
+
+		bt1 = create_test_bank_transaction(self.bank_account, deposit=31.22)
+		_reconcile_invoice(bt1.name, "Purchase Invoice", pi.name, -31.22)
+		validate_single_bank_transaction(bt1.name)
+		pi.reload()
+		self.assertFalse(pi.clearance_date, "After BT1 (partial), clearance_date must be unset")
+
+		bt2 = create_test_bank_transaction(self.bank_account, deposit=0.01)
+		_reconcile_invoice(bt2.name, "Purchase Invoice", pi.name, -0.01)
+		validate_single_bank_transaction(bt2.name)
+		pi.reload()
+		self.assertFalse(pi.clearance_date, "After BT2 (still partial), clearance_date must be unset")
+
+		bt3 = create_test_bank_transaction(self.bank_account, deposit=0.04)
+		_reconcile_invoice(bt3.name, "Purchase Invoice", pi.name, -0.04)
+		validate_single_bank_transaction(bt3.name)
+		pi.reload()
+		self.assertTrue(pi.clearance_date,
+			"After BT3 (cumulative=-31.27 covers paid_amount), clearance_date must be set")
+
+	def test_full_match_single_shot_still_sets_clearance(self):
+		"""Happy-path regression guard: a single BT that exactly matches
+		paid_amount must still set clearance_date immediately.
+		"""
+		pi = create_test_purchase_invoice(
+			outstanding=31.27,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.27,
+		)
+		bt = create_test_bank_transaction(self.bank_account, deposit=31.27)
+		_reconcile_invoice(bt.name, "Purchase Invoice", pi.name, -31.27)
+		validate_single_bank_transaction(bt.name)
+
+		pi.reload()
+		self.assertTrue(pi.clearance_date,
+			"Exact-match single BT must set clearance_date immediately")
+
+	def test_normal_paid_pi_partial_keeps_clearance_unset(self):
+		"""Normal (non-refund) paid PI partially allocated: clearance_date must stay unset."""
+		pi = create_test_purchase_invoice(
+			outstanding=150.0,
+			is_paid=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+		)
+		bt = create_test_bank_transaction(self.bank_account, withdrawal=75.0)
+		_reconcile_invoice(bt.name, "Purchase Invoice", pi.name, 75.0)
+		validate_single_bank_transaction(bt.name)
+
+		pi.reload()
+		self.assertFalse(pi.clearance_date,
+			"Partial allocation (75 of 150) must not set clearance_date")
+
+	def test_normal_paid_pi_full_sets_clearance(self):
+		"""Normal paid PI fully allocated: clearance_date must be set."""
+		pi = create_test_purchase_invoice(
+			outstanding=150.0,
+			is_paid=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+		)
+		bt = create_test_bank_transaction(self.bank_account, withdrawal=150.0)
+		_reconcile_invoice(bt.name, "Purchase Invoice", pi.name, 150.0)
+		validate_single_bank_transaction(bt.name)
+
+		pi.reload()
+		self.assertTrue(pi.clearance_date,
+			"Full allocation must set clearance_date on normal paid PI")
+
+	def test_paid_refund_si_partial_keeps_clearance_unset(self):
+		"""Paid refund SI with SIP row amount=-50: a partial allocation (-30)
+		must not set clearance_date on the SIP row.
+		"""
+		si = create_test_sales_invoice(outstanding=50, is_return=1)
+		frappe.get_doc({
+			"doctype": "Sales Invoice Payment",
+			"parent": si.name,
+			"parenttype": "Sales Invoice",
+			"parentfield": "payments",
+			"mode_of_payment": "Cash",
+			"account": TEST_BANK_GL_ACCOUNT,
+			"amount": -50.0,
+			"base_amount": -50.0,
+		}).insert(ignore_permissions=True)
+
+		bt = create_test_bank_transaction(self.bank_account, withdrawal=30.0)
+		_reconcile_invoice(bt.name, "Sales Invoice", si.name, -30.0)
+		validate_single_bank_transaction(bt.name)
+
+		sip_clearance = frappe.db.get_value(
+			"Sales Invoice Payment",
+			{"parent": si.name, "account": TEST_BANK_GL_ACCOUNT},
+			"clearance_date",
+		)
+		self.assertFalse(sip_clearance,
+			"Partial SIP allocation must not set clearance_date")
+
+	def test_paid_refund_si_full_sets_clearance(self):
+		"""Paid refund SI with SIP row amount=-50: a full allocation (-50)
+		must set clearance_date on the SIP row.
+		"""
+		si = create_test_sales_invoice(outstanding=50, is_return=1)
+		frappe.get_doc({
+			"doctype": "Sales Invoice Payment",
+			"parent": si.name,
+			"parenttype": "Sales Invoice",
+			"parentfield": "payments",
+			"mode_of_payment": "Cash",
+			"account": TEST_BANK_GL_ACCOUNT,
+			"amount": -50.0,
+			"base_amount": -50.0,
+		}).insert(ignore_permissions=True)
+
+		bt = create_test_bank_transaction(self.bank_account, withdrawal=50.0)
+		_reconcile_invoice(bt.name, "Sales Invoice", si.name, -50.0)
+		validate_single_bank_transaction(bt.name)
+
+		sip_clearance = frappe.db.get_value(
+			"Sales Invoice Payment",
+			{"parent": si.name, "account": TEST_BANK_GL_ACCOUNT},
+			"clearance_date",
+		)
+		self.assertTrue(sip_clearance,
+			"Full SIP allocation must set clearance_date")
+
+	def test_unreconcile_clears_clearance_when_cumulative_drops(self):
+		"""After a full reconcile sets clearance_date, unreconciling a BT
+		must clear it again when the cumulative drops below paid_amount.
+		"""
+		pi = create_test_purchase_invoice(
+			outstanding=31.27,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.27,
+		)
+		bt = create_test_bank_transaction(self.bank_account, deposit=31.27)
+		_reconcile_invoice(bt.name, "Purchase Invoice", pi.name, -31.27)
+		validate_single_bank_transaction(bt.name)
+
+		pi.reload()
+		self.assertTrue(pi.clearance_date, "Pre-condition: clearance_date should be set")
+
+		unreconcile_bank_transaction(bt.name)
+		pi.reload()
+		self.assertFalse(pi.clearance_date,
+			"After unreconcile, clearance_date must be cleared")
+
+	def test_unreconcile_preserves_clearance_when_still_matched(self):
+		"""When over-allocating BTs are reduced but cumulative still covers
+		paid_amount, clearance_date must be preserved.
+
+		Setup: a paid refund PI of -31.27. Reconcile BT1 (-15.00), BT2 (-16.27)
+		-- together they exactly cover. validate_single_bank_transaction after BT2
+		sets clearance_date. Then reconcile a redundant BT3 (-0.10), putting total
+		allocation at -31.37 (over by 0.10, within tolerance). Validate; clearance_date
+		must remain set.
+
+		Unreconcile BT3 only. Cumulative drops to -31.27 (BT1 + BT2), which still
+		matches paid_amount within tolerance. clearance_date must REMAIN set (not
+		nulled by upstream's clear_linked_payment_entry).
+		"""
+		pi = create_test_purchase_invoice(
+			outstanding=31.27,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.27,
+		)
+
+		# BT1 covers half, BT2 covers the rest exactly.
+		bt1 = create_test_bank_transaction(self.bank_account, deposit=15.00)
+		_reconcile_invoice(bt1.name, "Purchase Invoice", pi.name, -15.00)
+		validate_single_bank_transaction(bt1.name)
+		pi.reload()
+		self.assertFalse(pi.clearance_date,
+			"Pre-condition: after BT1 alone (partial), clearance_date must be unset")
+
+		bt2 = create_test_bank_transaction(self.bank_account, deposit=16.27)
+		_reconcile_invoice(bt2.name, "Purchase Invoice", pi.name, -16.27)
+		validate_single_bank_transaction(bt2.name)
+		pi.reload()
+		self.assertTrue(pi.clearance_date,
+			"Pre-condition: after BT1+BT2 cumulative=-31.27 covers paid_amount, clearance_date must be set")
+
+		# BT3 is a redundant over-allocation of -0.10 (total becomes -31.37).
+		bt3 = create_test_bank_transaction(self.bank_account, deposit=0.10)
+		_reconcile_invoice(bt3.name, "Purchase Invoice", pi.name, -0.10)
+		validate_single_bank_transaction(bt3.name)
+		pi.reload()
+		self.assertTrue(pi.clearance_date,
+			"Pre-condition: after BT3, clearance_date must still be set")
+
+		# Unreconcile BT3. Cumulative drops back to -31.27 (BT1 + BT2),
+		# which still covers paid_amount within tolerance.
+		unreconcile_bank_transaction(bt3.name)
+		pi.reload()
+		self.assertTrue(pi.clearance_date,
+			"After removing BT3, cumulative -31.27 still covers paid_amount: clearance_date must be PRESERVED")
+
+	def test_out_of_order_partial_reconciles_clear_at_threshold_crossing(self):
+		"""Cumulative-clearance must not depend on reconcile ORDER. Reconciling
+		BTs in increasing-amount order vs decreasing-amount order both cross
+		the threshold at the last BT.
+
+		Setup: refund PI paid_amount=-31.27. Three BTs: $0.04, $0.01, $31.22.
+		Reconcile in order $0.04 -> $0.01 -> $31.22 (smallest-first).
+
+		After BT($0.04): validate, assert clearance_date is None.
+		After BT($0.01): validate, assert clearance_date is None.
+		After BT($31.22): validate, assert clearance_date is set (threshold crossed).
+		"""
+		pi = create_test_purchase_invoice(
+			outstanding=31.27,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.27,
+		)
+
+		bt_small1 = create_test_bank_transaction(self.bank_account, deposit=0.04)
+		_reconcile_invoice(bt_small1.name, "Purchase Invoice", pi.name, -0.04)
+		validate_single_bank_transaction(bt_small1.name)
+		pi.reload()
+		self.assertFalse(pi.clearance_date,
+			"After BT($0.04): cumulative=-0.04, far below threshold, clearance_date must be None")
+
+		bt_small2 = create_test_bank_transaction(self.bank_account, deposit=0.01)
+		_reconcile_invoice(bt_small2.name, "Purchase Invoice", pi.name, -0.01)
+		validate_single_bank_transaction(bt_small2.name)
+		pi.reload()
+		self.assertFalse(pi.clearance_date,
+			"After BT($0.01): cumulative=-0.05, still below threshold, clearance_date must be None")
+
+		bt_large = create_test_bank_transaction(self.bank_account, deposit=31.22)
+		_reconcile_invoice(bt_large.name, "Purchase Invoice", pi.name, -31.22)
+		validate_single_bank_transaction(bt_large.name)
+		pi.reload()
+		self.assertTrue(pi.clearance_date,
+			"After BT($31.22): cumulative=-31.27 covers paid_amount, clearance_date must be set")
