@@ -123,11 +123,7 @@ override_doctype_class = {
 # ---------------
 # Hook on document methods and events
 
-doc_events = {
-    "Bank Transaction": {
-        "before_insert": "advanced_bank_reconciliation.advanced_bank_reconciliation.overrides.bank_transaction.flip_amount_for_credit_card",
-    }
-}
+# doc_events = {}
 
 # Scheduled Tasks
 # ---------------

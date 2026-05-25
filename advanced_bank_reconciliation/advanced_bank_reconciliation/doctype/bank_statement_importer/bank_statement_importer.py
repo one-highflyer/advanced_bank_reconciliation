@@ -15,6 +15,10 @@ from frappe.utils.xlsxutils import (
     read_xlsx_file_from_attached_file,
 )
 
+from advanced_bank_reconciliation.advanced_bank_reconciliation.overrides.bank_transaction import (
+    flip_amount_for_credit_card,
+)
+
 logger = frappe.logger("bank_rec", allow_site=True)
 logger.setLevel(logging.INFO)
 
@@ -548,6 +552,7 @@ def publish_records(data_import, importer_data=None):
 
             bank_transaction = frappe.new_doc("Bank Transaction")
             bank_transaction.update(bank_transaction_dict)
+            flip_amount_for_credit_card(bank_transaction)
             bank_transaction.insert()
             bank_transaction.submit()
         logger.info("Bank transactions submitted successfully")

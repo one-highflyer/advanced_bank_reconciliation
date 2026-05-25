@@ -307,21 +307,24 @@ class ExtendedBankTransaction(BankTransaction):
         )
 
 
-def flip_amount_for_credit_card(doc, method=None):
-    """Swap deposit and withdrawal at insert time when the target Bank Account
-    is flagged as a credit card. Credit-card statements typically put charges
-    and payments under one Amount column; importers route positive amounts to
-    deposit, but for credit-card accounts treated as Bank/Asset the sign is
-    inverted (charges should be withdrawals, payments should be deposits).
+def flip_amount_for_credit_card(doc):
+    """Swap deposit and withdrawal on a Bank Transaction document when the
+    target Bank Account is flagged as a credit card.
+
+    Credit-card statements typically put charges and payments under one
+    "Amount" column; importers route positive amounts to deposit, but for
+    credit-card accounts treated as Bank/Asset the sign is inverted (charges
+    should be withdrawals, payments should be deposits).
+
+    This helper is called explicitly from statement-import flows only. Manual
+    Bank Transaction creation and direct API insertions are not flipped; the
+    caller is expected to provide values in the correct orientation.
     """
     logger = get_logger()
 
     if not doc.bank_account:
         return
 
-    # Pre-migrate guard: the is_credit_card column may not exist yet on
-    # sites that have the new code but haven't run `bench migrate`.
-    # Avoid bricking all BT inserts in that window.
     if not frappe.db.has_column("Bank Account", "is_credit_card"):
         return
 
@@ -339,7 +342,7 @@ def flip_amount_for_credit_card(doc, method=None):
     doc.deposit = original_withdrawal
     doc.withdrawal = original_deposit
     logger.info(
-        "Credit-card flip on Bank Transaction insert (%s): deposit %s -> %s, withdrawal %s -> %s",
+        "Credit-card flip applied on statement import (%s): deposit %s -> %s, withdrawal %s -> %s",
         doc.bank_account, original_deposit, doc.deposit,
         original_withdrawal, doc.withdrawal,
     )
