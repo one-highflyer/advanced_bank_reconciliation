@@ -2163,21 +2163,27 @@ def cumulative_allocated_for_invoice(invoice_doctype, invoice_name, bank_gl_acco
 
 
 def should_clear_invoice(invoice_doctype, invoice_name, target_paid_amount,
-						   bank_gl_account, tolerance=0.01):
+						   bank_gl_account, precision=2):
 	"""Return True iff cumulative signed allocations cover target_paid_amount
-	(by magnitude, within tolerance).
+	(by magnitude, rounded to currency precision).
 
 	This is a coverage check, not an equality check: an invoice is considered
 	cleared once cumulative |allocation| meets or exceeds |paid_amount|.
 	Over-allocation past the target still counts as covered (some users net
 	multiple deposits against a single refund PI and may end up slightly over;
-	the bank-side clearance event is still valid). Tolerance smooths cent-
-	rounding artefacts on the under-allocation boundary.
+	the bank-side clearance event is still valid).
+
+	Both sides are rounded to currency precision (default 2 decimals) before
+	comparison. This absorbs floating-point artefacts (e.g. a sum of 31.22 +
+	0.04 = 31.259999999... rounds to 31.26) without swallowing legitimate
+	one-cent remainders. A user with three BTs of 31.22, 0.04, and 0.01
+	against a -31.27 refund PI will not have the invoice cleared after only
+	the first two matches, so the third BT remains available to match.
 	"""
 	cumulative = cumulative_allocated_for_invoice(
 		invoice_doctype, invoice_name, bank_gl_account
 	)
-	return abs(flt(cumulative)) + tolerance >= abs(flt(target_paid_amount))
+	return flt(abs(flt(cumulative)), precision) >= flt(abs(flt(target_paid_amount)), precision)
 
 
 def _normalise_pe_to_target_invoice(pe, invoice_doc, allocated_amount):
