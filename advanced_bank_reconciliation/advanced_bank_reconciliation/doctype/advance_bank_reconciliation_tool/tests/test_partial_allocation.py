@@ -1526,8 +1526,17 @@ class TestClearanceDateTolerance(FrappeTestCase):
 		)
 		self.assertTrue(result, "Should clear when cumulative matches paid_amount exactly")
 
-	def test_should_clear_when_cumulative_within_tolerance_low(self):
-		"""Cumulative is 0.01 below paid_amount magnitude: within tolerance, returns True."""
+	def test_should_not_clear_when_cumulative_one_cent_short(self):
+		"""Cumulative is exactly 0.01 below paid_amount magnitude: a real
+		one-cent remainder exists, so the PI must NOT be cleared.
+
+		Real-world trigger: a refund PI with paid_amount near 31.27 matched
+		across three BTs whose magnitudes sum exactly to paid_amount but
+		where two of them are tiny cent-level lines. After two of three are
+		reconciled the cumulative is one cent short. The old additive
+		tolerance treated that as "covered" and hid the invoice from the
+		matching screen, blocking the third BT from being matched.
+		"""
 		pi = create_test_purchase_invoice(
 			outstanding=31.27,
 			is_paid=1,
@@ -1541,15 +1550,16 @@ class TestClearanceDateTolerance(FrappeTestCase):
 		result = should_clear_invoice(
 			"Purchase Invoice", pi.name, pi.paid_amount, TEST_BANK_GL_ACCOUNT
 		)
-		self.assertTrue(result, "0.01 gap should be within tolerance")
+		self.assertFalse(result,
+			"One-cent remainder must not be treated as covered; the user still has a BT to match")
 
-	def test_should_clear_when_cumulative_within_tolerance_high(self):
-		"""Cumulative is 0.008 above paid_amount magnitude: within 0.01 tolerance, returns True.
+	def test_should_clear_when_cumulative_rounds_up_to_target(self):
+		"""Cumulative just over paid_amount magnitude (e.g. 0.008 overage on a
+		50.0 target): rounded to currency precision both sides become 50.01
+		and 50.00 respectively, so the coverage check passes.
 
-		We use a gap of 0.008 (not exactly 0.01) to stay clear of float-precision
-		instability at the exact tolerance boundary.
+		This locks in the "over-allocation still counts as covered" semantic.
 		"""
-		# PI for 50 (round number avoids cash/validate rounding issues)
 		pi = create_test_purchase_invoice(
 			outstanding=50.0,
 			is_paid=1,
@@ -1557,17 +1567,17 @@ class TestClearanceDateTolerance(FrappeTestCase):
 			cash_bank_account=TEST_BANK_GL_ACCOUNT,
 			paid_amount=-50.0,
 		)
-		# Allocate 50.008 against a 50.0 PI (0.008 overage, within 0.01 tolerance)
 		bt = create_test_bank_transaction(self.bank_account, deposit=50.008)
 		_reconcile_invoice(bt.name, "Purchase Invoice", pi.name, -50.008)
 
 		result = should_clear_invoice(
 			"Purchase Invoice", pi.name, pi.paid_amount, TEST_BANK_GL_ACCOUNT
 		)
-		self.assertTrue(result, "0.008 overage should be within 0.01 tolerance")
+		self.assertTrue(result,
+			"Cumulative 50.008 over 50.0 target: rounded magnitudes are 50.01 vs 50.00, covered")
 
 	def test_should_not_clear_when_cumulative_below_threshold(self):
-		"""Cumulative is 0.05 below paid_amount magnitude: outside tolerance, returns False."""
+		"""Cumulative is 0.05 below paid_amount magnitude: under-allocation, returns False."""
 		pi = create_test_purchase_invoice(
 			outstanding=31.27,
 			is_paid=1,
@@ -1581,7 +1591,7 @@ class TestClearanceDateTolerance(FrappeTestCase):
 		result = should_clear_invoice(
 			"Purchase Invoice", pi.name, pi.paid_amount, TEST_BANK_GL_ACCOUNT
 		)
-		self.assertFalse(result, "0.05 gap should be outside 0.01 tolerance")
+		self.assertFalse(result, "5 cents short of paid_amount: must not clear")
 
 	def test_should_not_clear_when_no_allocations_yet(self):
 		"""No BT allocations at all: cumulative is 0, returns False for non-zero paid_amount."""
@@ -2045,6 +2055,50 @@ class TestClearanceDateDeferral(FrappeTestCase):
 		pi.reload()
 		self.assertTrue(pi.clearance_date,
 			"After BT($31.22): cumulative=-31.27 covers paid_amount, clearance_date must be set")
+
+	def test_three_partial_bts_large_first_clears_only_at_final_match(self):
+		"""Regression: large BT followed by two small remainders must not
+		clear the PI until the final match lands.
+
+		Refund PI -31.27 with three BTs: 31.22, then 0.04, then 0.01.
+		After BT1+BT2 cumulative is -31.26 (one cent short). The PI must NOT
+		be cleared at this point, because the user still has the third BT
+		($0.01) to match. Only after BT3 does cumulative reach -31.27 and
+		clearance fire.
+
+		Before the precision-rounding fix, the additive 0.01 tolerance
+		swallowed the one-cent gap after BT2 and hid the PI from the matching
+		screen, blocking the third match.
+		"""
+		pi = create_test_purchase_invoice(
+			outstanding=31.27,
+			is_paid=1,
+			is_return=1,
+			cash_bank_account=TEST_BANK_GL_ACCOUNT,
+			paid_amount=-31.27,
+		)
+
+		bt_large = create_test_bank_transaction(self.bank_account, deposit=31.22)
+		_reconcile_invoice(bt_large.name, "Purchase Invoice", pi.name, -31.22)
+		validate_single_bank_transaction(bt_large.name)
+		pi.reload()
+		self.assertFalse(pi.clearance_date,
+			"After BT($31.22): cumulative=-31.22, well below paid_amount, must NOT clear")
+
+		bt_small1 = create_test_bank_transaction(self.bank_account, deposit=0.04)
+		_reconcile_invoice(bt_small1.name, "Purchase Invoice", pi.name, -0.04)
+		validate_single_bank_transaction(bt_small1.name)
+		pi.reload()
+		self.assertFalse(pi.clearance_date,
+			"After BT($0.04): cumulative=-31.26, one cent short; clearance must remain unset "
+			"so the user can match the remaining $0.01")
+
+		bt_small2 = create_test_bank_transaction(self.bank_account, deposit=0.01)
+		_reconcile_invoice(bt_small2.name, "Purchase Invoice", pi.name, -0.01)
+		validate_single_bank_transaction(bt_small2.name)
+		pi.reload()
+		self.assertTrue(pi.clearance_date,
+			"After BT($0.01): cumulative=-31.27 exactly, clearance must be set")
 
 
 class TestClearanceDateOnCancel(FrappeTestCase):
