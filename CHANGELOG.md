@@ -1,3 +1,10 @@
+## [1.7.12](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.11...v1.7.12) (2026-05-26)
+
+
+### Bug Fixes
+
+* **abr:** use currency-precision coverage check for clearance gating ([30c02e9](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/30c02e9f34c4ee4ab778e5aff5e4ccd44148d0f7))
+
 ## [1.7.11](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.10...v1.7.11) (2026-05-25)
 
 
