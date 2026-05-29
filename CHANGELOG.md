@@ -1,3 +1,11 @@
+## [1.7.13](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.12...v1.7.13) (2026-05-29)
+
+
+### Bug Fixes
+
+* allow party references in journal entry picker ([65d2927](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/65d29270c46390855006ef1c3a04eb2cd8e6ebe1))
+* guard journal entry reference query patch ([a9bc18f](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/a9bc18f028b6145b3c0dd4533b5b28a24063bb68))
+
 ## [1.7.12](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.11...v1.7.12) (2026-05-26)
 
 
