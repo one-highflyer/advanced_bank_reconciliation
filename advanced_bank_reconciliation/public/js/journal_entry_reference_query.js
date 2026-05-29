@@ -1,4 +1,5 @@
 (() => {
+	// Party doctypes are not submitted, so ERPNext's default docstatus filter hides them.
 	const party_reference_types = ["Customer", "Supplier", "Employee"];
 	const control_link = frappe.ui.form.ControlLink;
 
