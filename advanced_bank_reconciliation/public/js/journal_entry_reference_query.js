@@ -7,8 +7,12 @@
 	}
 
 	const standard_set_custom_query = control_link.prototype.set_custom_query;
+	if (typeof standard_set_custom_query !== "function") {
+		return;
+	}
 
 	control_link.prototype.set_custom_query = function (args) {
+		args = args || {};
 		standard_set_custom_query.call(this, args);
 
 		const is_journal_entry_reference =
