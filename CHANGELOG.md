@@ -1,3 +1,10 @@
+## [1.7.14](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.13...v1.7.14) (2026-06-09)
+
+
+### Bug Fixes
+
+* handle stale optional bank statement mappings ([5b2aeb6](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/5b2aeb6063c3981ba289721ed91dbea255fa15c9))
+
 ## [1.7.13](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.12...v1.7.13) (2026-05-29)
 
 
