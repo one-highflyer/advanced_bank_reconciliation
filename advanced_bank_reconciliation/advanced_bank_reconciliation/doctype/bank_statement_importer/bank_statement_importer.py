@@ -294,6 +294,72 @@ def save_bank_mapping_for_future_use(importer_data):
     bank.save(ignore_permissions=True)
 
 
+def normalize_mapping_for_headers(mapping, data_headers):
+    mapping = dict(mapping)
+
+    fields_to_validate = [
+        ("date_select", _("Date"), True),
+        ("description_select", _("Description"), True),
+        ("reference_number_select", _("Reference Number"), True),
+    ]
+    if is_truthy(mapping.get("same_amount_field")):
+        fields_to_validate.append(("amount_select", _("Amount"), True))
+    else:
+        fields_to_validate.append(("deposit_select", _("Deposit"), True))
+        fields_to_validate.append(("withdrawal_select", _("Withdrawal"), True))
+
+    for select_key, label in (
+        ("particulars_select", _("Particulars")),
+        ("code_select", _("Code")),
+        ("other_party_select", _("Other Party")),
+    ):
+        fields_to_validate.append((select_key, label, False))
+
+    missing_required = []
+    missing = []
+    skipped_optional = []
+    for select_key, label, is_required in fields_to_validate:
+        value = mapping.get(select_key)
+        if not value:
+            if is_required:
+                missing_required.append(str(label))
+        elif value not in data_headers:
+            if is_required:
+                missing.append(f"'{value}' (selected for {label})")
+            else:
+                skipped_optional.append(str(label))
+                mapping[select_key] = ""
+
+    if missing_required or missing:
+        parts = []
+        if missing_required:
+            parts.append(
+                _("Please select a column for: {0}.").format(", ".join(missing_required))
+            )
+        if missing:
+            parts.append(
+                _(
+                    "The following selected columns are not present in the uploaded file: {0}."
+                ).format(", ".join(missing))
+            )
+        parts.append(_("Re-pick the correct columns from the dropdowns above and click Map Fields again."))
+        frappe.throw(
+            " ".join(parts),
+            title=_("Column Mapping Error"),
+        )
+
+    if skipped_optional:
+        frappe.msgprint(
+            _("Optional saved column mappings were skipped because they are not in this file: {0}.").format(
+                ", ".join(skipped_optional)
+            ),
+            title=_("Saved Field Mapping"),
+            indicator="orange",
+        )
+
+    return mapping
+
+
 def build_table(mapping, data_headers, data_body):
     tbl = []
     tbl_header = [
@@ -316,58 +382,7 @@ def build_table(mapping, data_headers, data_body):
     currency = account.account_currency
     matching = True
 
-    # Validate that every selected column name is actually present in the uploaded file's
-    # headers before entering the per-row loop. Without this guard, data_headers.index()
-    # raises a bare ValueError that surfaces as an unhandled 500.
-    # Each tuple: (value, label, is_required)
-    fields_to_validate = [
-        (mapping.get("date_select"), _("Date"), True),
-        (mapping.get("description_select"), _("Description"), True),
-        (mapping.get("reference_number_select"), _("Reference Number"), True),
-    ]
-    if is_truthy(mapping.get("same_amount_field")):
-        fields_to_validate.append((mapping.get("amount_select"), _("Amount"), True))
-    else:
-        fields_to_validate.append((mapping.get("deposit_select"), _("Deposit"), True))
-        fields_to_validate.append((mapping.get("withdrawal_select"), _("Withdrawal"), True))
-    # Optional fields: only validate when the user actually picked a value.
-    for select_key, label in (
-        ("particulars_select", _("Particulars")),
-        ("code_select", _("Code")),
-        ("other_party_select", _("Other Party")),
-    ):
-        val = mapping.get(select_key)
-        if val:
-            fields_to_validate.append((val, label, False))
-
-    # Pass A: required fields that are blank/missing.
-    # Pass B: non-empty values that are not present in the file headers.
-    missing_required = []
-    missing = []
-    for value, label, is_required in fields_to_validate:
-        if not value:
-            if is_required:
-                missing_required.append(str(label))
-        elif value not in data_headers:
-            missing.append(f"'{value}' (selected for {label})")
-
-    if missing_required or missing:
-        parts = []
-        if missing_required:
-            parts.append(
-                _("Please select a column for: {0}.").format(", ".join(missing_required))
-            )
-        if missing:
-            parts.append(
-                _(
-                    "The following selected columns are not present in the uploaded file: {0}."
-                ).format(", ".join(missing))
-            )
-        parts.append(_("Re-pick the correct columns from the dropdowns above and click Map Fields again."))
-        frappe.throw(
-            " ".join(parts),
-            title=_("Column Mapping Error"),
-        )
+    mapping = normalize_mapping_for_headers(mapping, data_headers)
 
     for data_row in data_body:
         # Skip empty rows
@@ -380,7 +395,7 @@ def build_table(mapping, data_headers, data_body):
         date = parse_date(date, mapping["date_format"])
         tbl_row.append(date)
         # Deposit/Withdrawal
-        if mapping["same_amount_field"] == True:
+        if is_truthy(mapping.get("same_amount_field")):
             val = parse_amount(data_row[data_headers.index(mapping["amount_select"])])
             if val >= 0:
                 tbl_row.append(

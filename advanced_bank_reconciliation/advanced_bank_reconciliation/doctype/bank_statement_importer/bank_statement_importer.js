@@ -134,6 +134,23 @@ frappe.ui.form.on('Bank Statement Importer', {
 					});
 				}
 
+				const resetMappingSelections = [
+					"date_select",
+					"deposit_select",
+					"withdrawal_select",
+					"amount_select",
+					"description_select",
+					"reference_number_select",
+					"particulars_select",
+					"code_select",
+					"other_party_select",
+				];
+				for (const fieldname of resetMappingSelections) {
+					frm.doc[fieldname] = "";
+				}
+				frm.doc.same_amount_field = 0;
+				frm.doc.positive_field = "";
+
 				// Set field options
 				frm.set_df_property("date_select", "options", options);
 				frm.set_df_property("deposit_select", "options", options);

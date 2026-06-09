@@ -3,11 +3,13 @@
 
 from datetime import date
 
+import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.bank_statement_importer.bank_statement_importer import (
     get_selected_bank_mapping,
     is_truthy,
+    normalize_mapping_for_headers,
     parse_date,
     parse_json_if_required,
 )
@@ -72,6 +74,39 @@ class TestBankStatementImporter(FrappeTestCase):
         self.assertTrue(is_truthy("1"))
         self.assertTrue(is_truthy("true"))
         self.assertFalse(is_truthy("false"))
+
+    def test_normalize_mapping_for_headers_skips_stale_optional_selections(self):
+        mapping = {
+            "date_select": "Date",
+            "same_amount_field": 1,
+            "amount_select": "Amount",
+            "description_select": "Description",
+            "reference_number_select": "Reference Number",
+            "particulars_select": "Old Particulars",
+            "code_select": "Old Code",
+            "other_party_select": "Old Other Party",
+        }
+        normalized = normalize_mapping_for_headers(
+            mapping,
+            ["Date", "Amount", "Description", "Reference Number"],
+        )
+        self.assertEqual(normalized["particulars_select"], "")
+        self.assertEqual(normalized["code_select"], "")
+        self.assertEqual(normalized["other_party_select"], "")
+
+    def test_normalize_mapping_for_headers_requires_core_columns(self):
+        mapping = {
+            "date_select": "Old Date",
+            "same_amount_field": 1,
+            "amount_select": "Amount",
+            "description_select": "Description",
+            "reference_number_select": "Reference Number",
+        }
+        with self.assertRaises(frappe.ValidationError):
+            normalize_mapping_for_headers(
+                mapping,
+                ["Date", "Amount", "Description", "Reference Number"],
+            )
 
     def convert_date(self, date_str, date_format):
         return parse_date(date_str, date_format)
