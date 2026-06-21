@@ -18,7 +18,7 @@ export const router = createRouter({
     },
     {
       path: "/cash-coding",
-      name: "CashCoding",
+      name: "Cash Coding",
       component: CashCodingPage,
     },
     {

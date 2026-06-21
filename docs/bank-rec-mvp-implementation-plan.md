@@ -51,7 +51,7 @@ Status values:
 | Phase 2: Match flow | Complete | Match candidates, Update tab, submit match, duplicate-submit guard |
 | Phase 3: Create voucher flow | Complete | Create tab, Journal Entry submit, Payment Entry draft handoff, full-page edit |
 | Phase 4: Cash Coding | Complete | Grid, bulk apply, row-level Journal Entry submit, discard guards |
-| Phase 5: Matched review and hardening | Blocked | Code complete with tests, build, and incremental commits. Authenticated Chrome smoke is blocked by the local Chrome plugin bridge. |
+| Phase 5: Matched review and hardening | Complete | Tests, build, route probes, Chrome smoke, incremental commits, and PR are complete |
 
 ## Resolved Scope Decisions From Final Review
 
@@ -269,7 +269,7 @@ Progress notes:
 - Added loading, empty, and error states for boot, bank accounts, transactions, transaction context, summary, and rules.
 - Configured Vite to generate public assets under `advanced_bank_reconciliation/public/bank_rec/`.
 - Added ignore rules for generated public build output, generated route HTML, and Vite plugin generated type helper files. This matches the Repeat Raven dashboard pattern where source is tracked and app public build output is ignored.
-- Authenticated browser visual verification is deferred to Phase 5 hardening. The local route probe as Guest returned `403 FORBIDDEN`, which is expected because `get_context` calls the permission-checked boot method.
+- Authenticated browser visual verification is covered in Phase 5 Chrome smoke. The local route probe as Guest returned `403 FORBIDDEN`, which is expected because `get_context` calls the permission-checked boot method.
 - First incremental commit is pending user confirmation of semantic release type. Recommendation: `minor`, using `feat`.
 
 Commands run:
@@ -536,7 +536,7 @@ Commands run:
 
 ## Phase 5: MVP Matched Review And Hardening
 
-Status: Blocked
+Status: Complete
 
 Goal: provide matched transaction review, unreconcile actions, and full MVP QA.
 
@@ -603,8 +603,11 @@ Progress notes:
 - Chrome plugin verification was attempted after the user requested `@chrome`, but the local Chrome bridge failed before a browser session could be created. Tool discovery did not expose another Chrome control tool, and the install list did not include a Chrome plugin candidate. Authenticated Chrome smoke remains blocked until the local Chrome plugin bridge is available.
 - Chrome plugin setup was retried on June 21, 2026. The local bridge still failed before session setup, so authenticated Chrome smoke remains blocked.
 - Chrome plugin setup was retried again on June 21, 2026. The local bridge still failed before session setup with the same bridge metadata error.
+- Chrome plugin setup was later retried with the updated plugin version and succeeded.
+- Chrome smoke opened `http://demo.localhost:8000/bank-rec`, confirmed redirect to `/bank-rec/reconcile`, verified Reconcile, Cash Coding, Matched, and Rules pages load in the authenticated browser session, and found no console errors.
+- Chrome smoke surfaced a small page-title issue where Cash Coding rendered as `CashCoding`; fixed in `bank_rec/src/router/index.ts` and rechecked in Chrome.
 - No site credential changes were made.
-- Release type was confirmed as `feat`, and three local incremental commits were created on branch `feat/bank-rec-route-app`.
+- Release type was confirmed as `feat`, and local incremental commits were created on branch `feat/bank-rec-route-app`.
 - Generated Bank Rec build output is intentionally ignored and not part of the final branch diff.
 - Re-ran the API test suite, frontend build, whitespace check, sensitive-string scan of changed paths, route probe, asset probes, and old Desk tool route probe on June 21, 2026.
 
@@ -620,14 +623,11 @@ Commands run:
 - Attempted Chrome plugin setup through `@chrome`; the local browser bridge failed before session setup.
 - Repeated Chrome plugin setup retry through `@chrome`; the local browser bridge still failed before session setup.
 - Repeated Chrome plugin setup retry through `@chrome`; the local browser bridge still failed before session setup with the same bridge metadata error.
+- Retried Chrome plugin setup with updated plugin version and successfully opened the authenticated Bank Rec route app.
 - `git -C apps/advanced_bank_reconciliation diff --check`
 - Ran a sensitive-string scan against changed paths.
 
 ## Final MVP Completion Checklist
-
-Open blockers before final PR:
-
-- Authenticated Chrome smoke test cannot run until the local Chrome plugin bridge is available.
 
 - `/bank-rec` route works.
 - `Bank Rec` app screen entry works.
@@ -653,7 +653,7 @@ Open blockers before final PR:
 - Python tests pass.
 - Frontend build passes.
 - Automated local route and asset probes pass.
-- Authenticated Chrome smoke test is blocked by the local Chrome plugin bridge.
+- Authenticated Chrome smoke test passes.
 
 ## Later Backlog Reference
 
