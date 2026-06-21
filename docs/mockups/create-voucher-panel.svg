@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="920" viewBox="0 0 1440 920">
+  <rect width="1440" height="920" fill="#f7f8fa"/>
+  <rect x="0" y="0" width="1440" height="64" fill="#ffffff"/>
+  <text x="32" y="40" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="700" fill="#1f2937">Bank Rec</text>
+  <rect x="184" y="18" width="96" height="32" rx="6" fill="#edf2ff"/>
+  <text x="208" y="39" font-family="Inter, Arial, sans-serif" font-size="13" fill="#1f4ed8">Reconcile</text>
+  <rect x="32" y="88" width="526" height="780" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="56" y="124" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700" fill="#111827">Bank Transactions</text>
+  <rect x="56" y="150" width="478" height="78" rx="8" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="76" y="178" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="700" fill="#111827">20 Jun 2026</text>
+  <text x="76" y="202" font-family="Inter, Arial, sans-serif" font-size="12" fill="#374151">Monthly service fee</text>
+  <text x="420" y="188" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="700" text-anchor="end" fill="#b91c1c">$75.00</text>
+  <text x="420" y="210" font-family="Inter, Arial, sans-serif" font-size="11" text-anchor="end" fill="#6b7280">Money Out</text>
+  <rect x="582" y="88" width="826" height="780" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="612" y="124" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700" fill="#111827">Monthly service fee</text>
+  <text x="612" y="150" font-family="Inter, Arial, sans-serif" font-size="12" fill="#6b7280">20 Jun 2026  |  Main Operating Account  |  Withdrawal $75.00</text>
+  <rect x="612" y="176" width="96" height="32" rx="6" fill="#f3f4f6"/>
+  <text x="642" y="197" font-family="Inter, Arial, sans-serif" font-size="13" fill="#374151">Match</text>
+  <rect x="718" y="176" width="96" height="32" rx="6" fill="#2563eb"/>
+  <text x="748" y="197" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="600" fill="#ffffff">Create</text>
+  <rect x="824" y="176" width="96" height="32" rx="6" fill="#f3f4f6"/>
+  <text x="854" y="197" font-family="Inter, Arial, sans-serif" font-size="13" fill="#374151">Update</text>
+  <text x="612" y="250" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700" fill="#111827">Create spend entry</text>
+  <text x="612" y="282" font-family="Inter, Arial, sans-serif" font-size="12" fill="#6b7280">Contact</text>
+  <rect x="612" y="292" width="260" height="36" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="628" y="315" font-family="Inter, Arial, sans-serif" font-size="13" fill="#9ca3af">Optional supplier</text>
+  <text x="900" y="282" font-family="Inter, Arial, sans-serif" font-size="12" fill="#6b7280">Account</text>
+  <rect x="900" y="292" width="260" height="36" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="916" y="315" font-family="Inter, Arial, sans-serif" font-size="13" fill="#111827">Bank Charges</text>
+  <text x="612" y="366" font-family="Inter, Arial, sans-serif" font-size="12" fill="#6b7280">Posting Date</text>
+  <rect x="612" y="376" width="260" height="36" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="628" y="399" font-family="Inter, Arial, sans-serif" font-size="13" fill="#111827">20 Jun 2026</text>
+  <text x="900" y="366" font-family="Inter, Arial, sans-serif" font-size="12" fill="#6b7280">Reference</text>
+  <rect x="900" y="376" width="260" height="36" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="916" y="399" font-family="Inter, Arial, sans-serif" font-size="13" fill="#111827">Monthly service fee</text>
+  <text x="612" y="450" font-family="Inter, Arial, sans-serif" font-size="12" fill="#6b7280">Notes</text>
+  <rect x="612" y="460" width="548" height="36" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="628" y="483" font-family="Inter, Arial, sans-serif" font-size="13" fill="#9ca3af">Optional</text>
+  <text x="612" y="534" font-family="Inter, Arial, sans-serif" font-size="12" fill="#6b7280">Cost Center</text>
+  <rect x="612" y="544" width="260" height="36" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="628" y="567" font-family="Inter, Arial, sans-serif" font-size="13" fill="#111827">Main</text>
+  <text x="900" y="534" font-family="Inter, Arial, sans-serif" font-size="12" fill="#6b7280">Project</text>
+  <rect x="900" y="544" width="260" height="36" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="916" y="567" font-family="Inter, Arial, sans-serif" font-size="13" fill="#9ca3af">Optional</text>
+  <rect x="612" y="626" width="18" height="18" rx="4" fill="#ffffff" stroke="#9ca3af"/>
+  <text x="642" y="640" font-family="Inter, Arial, sans-serif" font-size="13" fill="#111827">Save as bank rule after creating voucher</text>
+  <rect x="612" y="706" width="748" height="64" rx="8" fill="#f9fafb" stroke="#d1d5db"/>
+  <text x="636" y="742" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700" fill="#111827">Withdrawal: $75.00</text>
+  <rect x="1060" y="720" width="132" height="36" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="1084" y="743" font-family="Inter, Arial, sans-serif" font-size="13" fill="#374151">Full Page</text>
+  <rect x="1208" y="720" width="128" height="36" rx="6" fill="#2563eb"/>
+  <text x="1228" y="743" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="600" fill="#ffffff">Create</text>
+</svg>
