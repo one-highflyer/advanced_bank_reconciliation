@@ -40,7 +40,7 @@ const activeTitle = computed(() => route.name?.toString() || "Reconcile");
       class="sticky top-0 z-20 border-b border-bank-line bg-white/95 backdrop-blur"
     >
       <div
-        class="mx-auto flex min-h-[64px] max-w-[1600px] flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between md:px-6"
+        class="mx-auto flex min-h-[64px] w-full max-w-[1920px] flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between md:px-6 2xl:px-8"
       >
         <div class="min-w-0">
           <div class="text-xl font-semibold leading-7 text-bank-ink">
@@ -69,7 +69,7 @@ const activeTitle = computed(() => route.name?.toString() || "Reconcile");
       </div>
     </header>
 
-    <main class="mx-auto flex w-full max-w-[1600px] flex-1 px-4 py-4 md:px-6">
+    <main class="mx-auto flex min-h-0 w-full max-w-[1920px] flex-1 px-3 py-4 sm:px-4 md:px-6 2xl:px-8">
       <RouterView />
     </main>
   </div>

@@ -5,11 +5,13 @@ import type {
   MatchCandidate,
   MatchVoucherSelection,
 } from "@/types/bankRec";
+import { deskRoute } from "@/utils/desk";
 import { formatDate, formatMoney } from "@/utils/format";
 import EmptyState from "@/components/EmptyState.vue";
 import ErrorState from "@/components/ErrorState.vue";
 import LoadingState from "@/components/LoadingState.vue";
 import CheckCircle2 from "~icons/lucide/check-circle-2";
+import ExternalLink from "~icons/lucide/external-link";
 import RefreshCcw from "~icons/lucide/refresh-cw";
 
 const props = defineProps<{
@@ -62,6 +64,10 @@ function toggleCandidate(candidate: MatchCandidate, checked: boolean) {
   if (!checked) {
     selectedKeys.value = selectedKeys.value.filter((key) => key !== candidate.key);
   }
+}
+
+function voucherUrl(candidate: MatchCandidate) {
+  return deskRoute(candidate.voucher_type, candidate.voucher_name);
 }
 
 function submit() {
@@ -149,9 +155,17 @@ watch(
                 />
               </td>
               <td class="max-w-[260px] px-4 py-3 align-top">
-                <div class="truncate font-medium text-bank-ink">
+                <a
+                  class="inline-flex max-w-full items-center gap-2 truncate font-medium text-bank-accent"
+                  :href="voucherUrl(candidate)"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <span class="truncate">
                   {{ candidate.voucher_name }}
-                </div>
+                  </span>
+                  <ExternalLink class="h-3.5 w-3.5 shrink-0" />
+                </a>
                 <div class="mt-1 flex flex-wrap gap-1">
                   <Badge :theme="confidenceTheme(candidate.confidence)">
                     {{ candidate.confidence }}

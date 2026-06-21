@@ -42,6 +42,13 @@ const saveAsRule = ref(false);
 const ruleTitle = ref("");
 const validationError = ref("");
 
+const partyTypeOptions = [
+  { label: "Not set", value: "" },
+  { label: "Customer", value: "Customer" },
+  { label: "Supplier", value: "Supplier" },
+  { label: "Employee", value: "Employee" },
+];
+
 const accountOption = computed(() =>
   props.defaults?.options.accounts.find((row) => row.name === account.value)
 );
@@ -152,15 +159,13 @@ watch(
 
     <form v-else class="bank-rec-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto" @submit.prevent="create">
       <div class="grid gap-4 p-4 md:grid-cols-2">
-        <label class="block md:col-span-2">
-          <span class="mb-1 block text-xs font-medium uppercase tracking-wide text-bank-muted">
-            {{ accountLabel }}
-          </span>
-          <input
+        <div class="md:col-span-2">
+          <FormControl
             v-model="account"
-            class="h-10 w-full rounded-md border border-bank-line px-3 text-sm outline-none transition focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+            :label="accountLabel"
+            variant="outline"
+            size="md"
             list="bank-rec-create-accounts"
-            type="text"
           />
           <datalist id="bank-rec-create-accounts">
             <option
@@ -171,43 +176,31 @@ watch(
               {{ row.account_name || row.name }}
             </option>
           </datalist>
-        </label>
+        </div>
 
-        <label class="block">
-          <span class="mb-1 block text-xs font-medium uppercase tracking-wide text-bank-muted">
-            Contact type
-          </span>
-          <select
-            v-model="partyType"
-            class="h-10 w-full rounded-md border border-bank-line bg-white px-3 text-sm outline-none transition focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
-          >
-            <option value="">Not set</option>
-            <option value="Customer">Customer</option>
-            <option value="Supplier">Supplier</option>
-            <option value="Employee">Employee</option>
-          </select>
-        </label>
+        <FormControl
+          v-model="partyType"
+          type="select"
+          label="Contact type"
+          variant="outline"
+          size="md"
+          :options="partyTypeOptions"
+        />
 
-        <label class="block">
-          <span class="mb-1 block text-xs font-medium uppercase tracking-wide text-bank-muted">
-            {{ contactLabel }}
-          </span>
-          <input
-            v-model="party"
-            class="h-10 w-full rounded-md border border-bank-line px-3 text-sm outline-none transition focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
-            type="text"
-          />
-        </label>
+        <FormControl
+          v-model="party"
+          :label="contactLabel"
+          variant="outline"
+          size="md"
+        />
 
-        <label class="block">
-          <span class="mb-1 block text-xs font-medium uppercase tracking-wide text-bank-muted">
-            Mode of payment
-          </span>
-          <input
+        <div>
+          <FormControl
             v-model="modeOfPayment"
-            class="h-10 w-full rounded-md border border-bank-line px-3 text-sm outline-none transition focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+            label="Mode of payment"
+            variant="outline"
+            size="md"
             list="bank-rec-create-modes"
-            type="text"
           />
           <datalist id="bank-rec-create-modes">
             <option
@@ -216,50 +209,38 @@ watch(
               :value="row.name"
             />
           </datalist>
-        </label>
+        </div>
 
-        <label class="block">
-          <span class="mb-1 block text-xs font-medium uppercase tracking-wide text-bank-muted">
-            Posting date
-          </span>
-          <input
-            v-model="postingDate"
-            class="h-10 w-full rounded-md border border-bank-line px-3 text-sm outline-none transition focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
-            type="date"
-          />
-        </label>
+        <FormControl
+          v-model="postingDate"
+          type="date"
+          label="Posting date"
+          variant="outline"
+          size="md"
+        />
 
-        <label class="block">
-          <span class="mb-1 block text-xs font-medium uppercase tracking-wide text-bank-muted">
-            Reference date
-          </span>
-          <input
-            v-model="referenceDate"
-            class="h-10 w-full rounded-md border border-bank-line px-3 text-sm outline-none transition focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
-            type="date"
-          />
-        </label>
+        <FormControl
+          v-model="referenceDate"
+          type="date"
+          label="Reference date"
+          variant="outline"
+          size="md"
+        />
 
-        <label class="block">
-          <span class="mb-1 block text-xs font-medium uppercase tracking-wide text-bank-muted">
-            Reference
-          </span>
-          <input
-            v-model="referenceNumber"
-            class="h-10 w-full rounded-md border border-bank-line px-3 text-sm outline-none transition focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
-            type="text"
-          />
-        </label>
+        <FormControl
+          v-model="referenceNumber"
+          label="Reference"
+          variant="outline"
+          size="md"
+        />
 
-        <label class="block">
-          <span class="mb-1 block text-xs font-medium uppercase tracking-wide text-bank-muted">
-            Cost center
-          </span>
-          <input
+        <div>
+          <FormControl
             v-model="costCenter"
-            class="h-10 w-full rounded-md border border-bank-line px-3 text-sm outline-none transition focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+            label="Cost center"
+            variant="outline"
+            size="md"
             list="bank-rec-create-cost-centers"
-            type="text"
           />
           <datalist id="bank-rec-create-cost-centers">
             <option
@@ -270,17 +251,15 @@ watch(
               {{ row.cost_center_name || row.name }}
             </option>
           </datalist>
-        </label>
+        </div>
 
-        <label class="block">
-          <span class="mb-1 block text-xs font-medium uppercase tracking-wide text-bank-muted">
-            Project
-          </span>
-          <input
+        <div>
+          <FormControl
             v-model="project"
-            class="h-10 w-full rounded-md border border-bank-line px-3 text-sm outline-none transition focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+            label="Project"
+            variant="outline"
+            size="md"
             list="bank-rec-create-projects"
-            type="text"
           />
           <datalist id="bank-rec-create-projects">
             <option
@@ -291,27 +270,23 @@ watch(
               {{ row.project_name || row.name }}
             </option>
           </datalist>
-        </label>
+        </div>
 
-        <label class="flex items-center gap-2 md:col-span-2">
-          <input
-            v-model="saveAsRule"
-            class="h-4 w-4 rounded border-bank-line text-bank-accent"
-            type="checkbox"
-          />
-          <span class="text-sm font-medium text-bank-ink">Save as rule</span>
-        </label>
+        <FormControl
+          v-model="saveAsRule"
+          class="md:col-span-2"
+          type="checkbox"
+          label="Save as rule"
+        />
 
-        <label v-if="saveAsRule" class="block md:col-span-2">
-          <span class="mb-1 block text-xs font-medium uppercase tracking-wide text-bank-muted">
-            Rule title
-          </span>
-          <input
-            v-model="ruleTitle"
-            class="h-10 w-full rounded-md border border-bank-line px-3 text-sm outline-none transition focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
-            type="text"
-          />
-        </label>
+        <FormControl
+          v-if="saveAsRule"
+          v-model="ruleTitle"
+          class="md:col-span-2"
+          label="Rule title"
+          variant="outline"
+          size="md"
+        />
       </div>
 
       <div class="mt-auto border-t border-bank-line bg-gray-50 px-4 py-3">

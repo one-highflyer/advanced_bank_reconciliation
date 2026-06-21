@@ -5,10 +5,12 @@ import type {
   LinkedPayment,
   TransactionContext,
 } from "@/types/bankRec";
+import { deskRoute } from "@/utils/desk";
 import { formatDate, formatMoney, signedAmountClass } from "@/utils/format";
 import EmptyState from "@/components/EmptyState.vue";
 import ErrorState from "@/components/ErrorState.vue";
 import LoadingState from "@/components/LoadingState.vue";
+import ExternalLink from "~icons/lucide/external-link";
 
 const props = defineProps<{
   transaction?: BankTransaction;
@@ -35,6 +37,14 @@ function paymentLabel(payment: LinkedPayment) {
   const type = payment.payment_document || "Voucher";
   const name = payment.payment_entry || "Draft";
   return `${type} ${name}`;
+}
+
+function bankTransactionUrl(transaction?: BankTransaction) {
+  return deskRoute("Bank Transaction", transaction?.name);
+}
+
+function paymentUrl(payment: LinkedPayment) {
+  return deskRoute(payment.payment_document, payment.payment_entry);
 }
 </script>
 
@@ -75,6 +85,15 @@ function paymentLabel(payment: LinkedPayment) {
         >
           {{ formatMoney(transaction.amount, transaction.currency || currency) }}
         </div>
+        <a
+          class="mt-3 inline-flex items-center gap-2 text-sm font-medium text-bank-accent"
+          :href="bankTransactionUrl(transaction)"
+          target="_blank"
+          rel="noreferrer"
+        >
+          <ExternalLink class="h-4 w-4" />
+          Open bank transaction
+        </a>
       </div>
 
       <dl class="mt-4 grid gap-3 sm:grid-cols-2">
@@ -142,7 +161,16 @@ function paymentLabel(payment: LinkedPayment) {
             :key="`${payment.payment_document}-${payment.payment_entry}`"
             class="flex items-center justify-between gap-3 px-3 py-2 text-sm"
           >
-            <div class="min-w-0 truncate text-bank-ink">
+            <a
+              v-if="paymentUrl(payment)"
+              class="min-w-0 truncate font-medium text-bank-accent"
+              :href="paymentUrl(payment)"
+              target="_blank"
+              rel="noreferrer"
+            >
+              {{ paymentLabel(payment) }}
+            </a>
+            <div v-else class="min-w-0 truncate text-bank-ink">
               {{ paymentLabel(payment) }}
             </div>
             <div class="shrink-0 font-medium text-bank-ink">

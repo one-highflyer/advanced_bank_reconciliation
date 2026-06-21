@@ -34,6 +34,13 @@ const viewFilter = ref<ViewFilter>("all");
 const bulkAccount = ref("");
 const bulkCostCenter = ref("");
 const bulkProject = ref("");
+const viewFilterButtons = [
+  { label: "All", value: "all" },
+  { label: "Uncoded", value: "uncoded" },
+  { label: "Rule suggested", value: "rule_suggested" },
+  { label: "Errors", value: "errors" },
+  { label: "Selected", value: "selected" },
+];
 
 const visibleRows = computed(() => {
   if (viewFilter.value === "selected") {
@@ -252,7 +259,7 @@ onBeforeRouteLeave(() => guardDiscard());
 </script>
 
 <template>
-  <div class="flex min-h-0 w-full flex-col gap-4">
+  <div class="flex min-h-0 w-full flex-1 flex-col gap-4 lg:h-[calc(100vh-103px)] lg:overflow-hidden">
     <BankAccountFilters
       :bank-accounts="store.bankAccounts"
       :selected-bank-account="store.selectedBankAccount"
@@ -274,23 +281,26 @@ onBeforeRouteLeave(() => guardDiscard());
       :message="pageError"
     />
 
-    <section class="rounded-lg border border-bank-line bg-white shadow-sm">
+    <section class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-bank-line bg-white shadow-sm">
       <div class="grid gap-3 border-b border-bank-line p-4 lg:grid-cols-[1fr_1fr_1fr_auto]">
-        <input
+        <FormControl
           v-model="bulkAccount"
-          class="h-10 rounded-md border border-bank-line px-3 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+          variant="outline"
+          size="md"
           list="cash-coding-accounts"
           placeholder="Account"
         />
-        <input
+        <FormControl
           v-model="bulkCostCenter"
-          class="h-10 rounded-md border border-bank-line px-3 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+          variant="outline"
+          size="md"
           list="cash-coding-cost-centers"
           placeholder="Cost center"
         />
-        <input
+        <FormControl
           v-model="bulkProject"
-          class="h-10 rounded-md border border-bank-line px-3 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+          variant="outline"
+          size="md"
           list="cash-coding-projects"
           placeholder="Project"
         />
@@ -298,17 +308,10 @@ onBeforeRouteLeave(() => guardDiscard());
       </div>
 
       <div class="flex flex-col gap-3 border-b border-bank-line px-4 py-3 md:flex-row md:items-center md:justify-between">
-        <div class="flex flex-wrap gap-1">
-          <button
-            v-for="filter in ['all', 'uncoded', 'rule_suggested', 'errors', 'selected']"
-            :key="filter"
-            class="h-8 rounded-md px-3 text-sm font-medium capitalize transition"
-            :class="viewFilter === filter ? 'bg-gray-900 text-white' : 'bg-gray-100 text-bank-muted hover:text-bank-ink'"
-            @click="viewFilter = filter as ViewFilter"
-          >
-            {{ filter.replace('_', ' ') }}
-          </button>
-        </div>
+        <TabButtons
+          v-model="viewFilter"
+          :buttons="viewFilterButtons"
+        />
         <div class="flex gap-2">
           <Button variant="subtle" :loading="loading" @click="loadRows">
             <template #prefix>
@@ -331,19 +334,19 @@ onBeforeRouteLeave(() => guardDiscard());
         title="No cash coding rows"
         detail="Change filters or date range."
       />
-      <div v-else class="bank-rec-scrollbar max-h-[720px] overflow-auto">
-        <table class="min-w-[1180px] divide-y divide-bank-line text-sm">
+      <div v-else class="bank-rec-scrollbar min-h-[360px] flex-1 overflow-auto lg:min-h-0">
+        <table class="w-full min-w-[1120px] table-fixed divide-y divide-bank-line text-sm">
           <thead class="sticky top-0 bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-bank-muted">
             <tr>
-              <th class="w-10 px-4 py-3"></th>
-              <th class="px-4 py-3">Date</th>
-              <th class="px-4 py-3">Transaction</th>
-              <th class="px-4 py-3 text-right">Amount</th>
-              <th class="px-4 py-3">Account</th>
-              <th class="px-4 py-3">Contact</th>
-              <th class="px-4 py-3">Cost center</th>
-              <th class="px-4 py-3">Project</th>
-              <th class="px-4 py-3">Reference</th>
+              <th class="w-9 px-3 py-3"></th>
+              <th class="w-24 px-3 py-3">Date</th>
+              <th class="w-[18%] px-3 py-3">Transaction</th>
+              <th class="w-28 px-3 py-3 text-right">Amount</th>
+              <th class="w-[16%] px-3 py-3">Account</th>
+              <th class="w-[18%] px-3 py-3">Contact</th>
+              <th class="w-[13%] px-3 py-3">Cost center</th>
+              <th class="w-[13%] px-3 py-3">Project</th>
+              <th class="w-[10%] px-3 py-3">Reference</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-bank-line bg-white">
@@ -352,7 +355,7 @@ onBeforeRouteLeave(() => guardDiscard());
               :key="row.transaction.name"
               :class="rowErrors[row.transaction.name] ? 'bg-red-50/50' : ''"
             >
-              <td class="px-4 py-3 align-top">
+              <td class="px-3 py-3 align-top">
                 <input
                   class="h-4 w-4 rounded border-bank-line text-bank-accent"
                   type="checkbox"
@@ -360,10 +363,10 @@ onBeforeRouteLeave(() => guardDiscard());
                   @change="toggleSelected(row.transaction.name, ($event.target as HTMLInputElement).checked)"
                 />
               </td>
-              <td class="px-4 py-3 align-top text-bank-muted">
+              <td class="px-3 py-3 align-top text-bank-muted">
                 {{ formatDate(row.transaction.date) }}
               </td>
-              <td class="max-w-[260px] px-4 py-3 align-top">
+              <td class="min-w-0 px-3 py-3 align-top">
                 <div class="truncate font-medium text-bank-ink">
                   {{ row.transaction.description || row.transaction.name }}
                 </div>
@@ -371,22 +374,22 @@ onBeforeRouteLeave(() => guardDiscard());
                   {{ rowErrors[row.transaction.name] || row.transaction.bank_party_name || "No party" }}
                 </div>
               </td>
-              <td class="px-4 py-3 text-right align-top font-medium text-bank-ink">
+              <td class="px-3 py-3 text-right align-top font-medium text-bank-ink">
                 {{ formatMoney(row.transaction.amount, row.transaction.currency || store.activeCurrency) }}
               </td>
-              <td class="px-4 py-3 align-top">
+              <td class="px-3 py-3 align-top">
                 <input
                   v-model="row.account"
-                  class="h-9 w-52 rounded-md border border-bank-line px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+                  class="h-9 w-full min-w-0 rounded-md border border-bank-line px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
                   list="cash-coding-accounts"
                   @input="markDirty(row.transaction.name)"
                 />
               </td>
-              <td class="px-4 py-3 align-top">
-                <div class="flex gap-2">
+              <td class="px-3 py-3 align-top">
+                <div class="flex min-w-0 gap-2">
                   <select
                     v-model="row.party_type"
-                    class="h-9 w-28 rounded-md border border-bank-line bg-white px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+                    class="h-9 w-[6.75rem] shrink-0 rounded-md border border-bank-line bg-white px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
                     @change="markDirty(row.transaction.name)"
                   >
                     <option value="">None</option>
@@ -396,31 +399,31 @@ onBeforeRouteLeave(() => guardDiscard());
                   </select>
                   <input
                     v-model="row.party"
-                    class="h-9 w-40 rounded-md border border-bank-line px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+                    class="h-9 min-w-0 flex-1 rounded-md border border-bank-line px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
                     @input="markDirty(row.transaction.name)"
                   />
                 </div>
               </td>
-              <td class="px-4 py-3 align-top">
+              <td class="px-3 py-3 align-top">
                 <input
                   v-model="row.cost_center"
-                  class="h-9 w-44 rounded-md border border-bank-line px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+                  class="h-9 w-full min-w-0 rounded-md border border-bank-line px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
                   list="cash-coding-cost-centers"
                   @input="markDirty(row.transaction.name)"
                 />
               </td>
-              <td class="px-4 py-3 align-top">
+              <td class="px-3 py-3 align-top">
                 <input
                   v-model="row.project"
-                  class="h-9 w-44 rounded-md border border-bank-line px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+                  class="h-9 w-full min-w-0 rounded-md border border-bank-line px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
                   list="cash-coding-projects"
                   @input="markDirty(row.transaction.name)"
                 />
               </td>
-              <td class="px-4 py-3 align-top">
+              <td class="px-3 py-3 align-top">
                 <input
                   v-model="row.reference_number"
-                  class="h-9 w-40 rounded-md border border-bank-line px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+                  class="h-9 w-full min-w-0 rounded-md border border-bank-line px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
                   @input="markDirty(row.transaction.name)"
                 />
               </td>

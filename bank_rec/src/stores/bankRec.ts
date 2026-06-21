@@ -91,6 +91,7 @@ export const useBankRecStore = defineStore("bankRec", {
     selectedBankAccount: "",
     fromDate: monthStartIso(),
     toDate: todayIso(),
+    statementBalance: "",
     transactionStatus: "unreconciled" as TransactionStatusFilter,
     transactions: [] as BankTransaction[],
     selectedTransactionName: "",
@@ -151,9 +152,6 @@ export const useBankRecStore = defineStore("bankRec", {
     activeCurrency(): string | undefined {
       return this.selectedBankAccountDoc?.currency;
     },
-    selectedAmount(): number | null {
-      return this.selectedTransaction?.amount ?? null;
-    },
   },
 
   actions: {
@@ -164,6 +162,10 @@ export const useBankRecStore = defineStore("bankRec", {
       );
       this.fromDate = stringQuery(query.from_date, this.fromDate);
       this.toDate = stringQuery(query.to_date, this.toDate);
+      this.statementBalance = stringQuery(
+        query.statement_balance,
+        this.statementBalance
+      );
       this.selectedTransactionName = stringQuery(
         query.bank_transaction,
         this.selectedTransactionName
@@ -179,6 +181,7 @@ export const useBankRecStore = defineStore("bankRec", {
         bank_account: this.selectedBankAccount || undefined,
         from_date: this.fromDate || undefined,
         to_date: this.toDate || undefined,
+        statement_balance: this.statementBalance || undefined,
         bank_transaction: this.selectedTransactionName || undefined,
         status:
           this.transactionStatus === "unreconciled"

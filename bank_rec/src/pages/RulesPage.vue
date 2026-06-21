@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import BankAccountFilters from "@/components/BankAccountFilters.vue";
 import EmptyState from "@/components/EmptyState.vue";
 import ErrorState from "@/components/ErrorState.vue";
@@ -9,6 +10,8 @@ import ExternalLink from "~icons/lucide/external-link";
 import Search from "~icons/lucide/search";
 
 const store = useBankRecStore();
+const route = useRoute();
+const router = useRouter();
 const search = ref("");
 const selectedBankAccount = ref("");
 
@@ -33,12 +36,22 @@ const filteredRules = computed(() => {
   );
 });
 
+async function replaceQuery() {
+  await router.replace({
+    path: route.path,
+    query: {
+      bank_account: selectedBankAccount.value || undefined,
+    },
+  });
+}
+
 async function loadRules() {
   await store.loadRules(selectedBankAccount.value || undefined);
+  await replaceQuery();
 }
 
 onMounted(async () => {
-  await store.initialize({});
+  await store.initialize(route.query);
   selectedBankAccount.value = store.selectedBankAccount;
   await loadRules();
 });
@@ -68,15 +81,18 @@ watch(selectedBankAccount, loadRules);
             {{ filteredRules.length }} visible
           </div>
         </div>
-        <label class="relative block md:w-80">
-          <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-bank-muted" />
-          <input
-            v-model="search"
-            class="h-10 w-full rounded-md border border-bank-line pl-9 pr-3 text-sm outline-none transition focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
-            type="search"
-            placeholder="Search rules"
-          />
-        </label>
+        <FormControl
+          v-model="search"
+          class="md:w-80"
+          type="search"
+          variant="outline"
+          size="md"
+          placeholder="Search rules"
+        >
+          <template #prefix>
+            <Search class="h-4 w-4 text-bank-muted" />
+          </template>
+        </FormControl>
       </div>
 
       <LoadingState v-if="store.loading.rules" label="Loading rules" />

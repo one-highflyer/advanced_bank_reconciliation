@@ -23,11 +23,7 @@ def get_matched_transactions(bank_account, from_date=None, to_date=None):
 		status="reconciled",
 	)
 
-	unique = {}
-	for row in rows:
-		unique.setdefault(row["name"], row)
-
-	return {"rows": list(unique.values())}
+	return {"rows": rows}
 
 
 @frappe.whitelist()

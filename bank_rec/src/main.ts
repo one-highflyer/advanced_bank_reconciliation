@@ -7,6 +7,7 @@ import {
   FrappeUI,
   frappeRequest,
   setConfig,
+  TabButtons,
   Tooltip,
 } from "frappe-ui";
 import { createPinia } from "pinia";
@@ -21,6 +22,7 @@ const globalComponents = {
   Button,
   ErrorMessage,
   FormControl,
+  TabButtons,
   Tooltip,
 };
 

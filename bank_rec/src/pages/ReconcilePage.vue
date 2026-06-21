@@ -21,6 +21,12 @@ const route = useRoute();
 const router = useRouter();
 const activePanel = ref<"match" | "create" | "update" | "details">("match");
 const draftUrl = ref("");
+const panelButtons = [
+  { label: "Match", value: "match" },
+  { label: "Create", value: "create" },
+  { label: "Update", value: "update" },
+  { label: "Details", value: "details" },
+];
 
 const hasBootError = computed(() => Boolean(store.errors.boot));
 const hasBankAccountError = computed(() => Boolean(store.errors.bankAccounts));
@@ -87,6 +93,11 @@ async function updateFilter(
   store.selectedContext = null;
   await replaceQuery();
   await refresh();
+}
+
+async function updateStatementBalance(value: string) {
+  store.statementBalance = value;
+  await replaceQuery();
 }
 
 async function initialize() {
@@ -158,7 +169,7 @@ watch(
 </script>
 
 <template>
-  <div class="flex min-h-0 w-full flex-col gap-4">
+  <div class="flex min-h-0 w-full flex-1 flex-col gap-4 lg:h-[calc(100vh-103px)] lg:overflow-hidden">
     <ErrorState
       v-if="hasBootError"
       title="Bank Rec is unavailable"
@@ -173,12 +184,15 @@ watch(
         :selected-bank-account="store.selectedBankAccount"
         :from-date="store.fromDate"
         :to-date="store.toDate"
+        :statement-balance="store.statementBalance"
         :status="store.transactionStatus"
+        show-statement-balance
         show-status
         :loading="pageLoading || store.loading.transactions || store.loading.summary"
         @update:selected-bank-account="updateFilter('selectedBankAccount', $event)"
         @update:from-date="updateFilter('fromDate', $event)"
         @update:to-date="updateFilter('toDate', $event)"
+        @update:statement-balance="updateStatementBalance"
         @update:status="updateFilter('transactionStatus', $event)"
         @refresh="refresh"
       />
@@ -198,12 +212,12 @@ watch(
       <template v-else>
         <StatementSummary
           :summary="store.summary"
-          :selected-amount="store.selectedAmount"
+          :statement-balance="store.statementBalance"
           :currency="store.activeCurrency"
           :loading="store.loading.summary"
         />
 
-        <div class="grid min-h-[620px] flex-1 gap-4 xl:grid-cols-[minmax(420px,0.95fr)_minmax(480px,1.05fr)]">
+        <div class="grid min-h-[620px] flex-1 gap-4 xl:min-h-0 xl:grid-cols-[minmax(380px,0.8fr)_minmax(620px,1.2fr)]">
           <section class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-bank-line bg-white shadow-sm">
             <div class="flex items-center justify-between gap-3 border-b border-bank-line px-4 py-3">
               <div>
@@ -246,35 +260,11 @@ watch(
               <div class="truncate text-base font-semibold text-bank-ink">
                 {{ store.selectedTransaction?.description || store.selectedTransaction?.name || "No transaction selected" }}
               </div>
-              <div class="mt-1 flex gap-1 overflow-x-auto rounded-lg bg-gray-50 p-1">
-                <button
-                  class="h-8 rounded-md px-3 text-sm font-medium transition"
-                  :class="activePanel === 'match' ? 'bg-white text-bank-ink shadow-sm' : 'text-bank-muted hover:text-bank-ink'"
-                  @click="activePanel = 'match'"
-                >
-                  Match
-                </button>
-                <button
-                  class="h-8 rounded-md px-3 text-sm font-medium transition"
-                  :class="activePanel === 'create' ? 'bg-white text-bank-ink shadow-sm' : 'text-bank-muted hover:text-bank-ink'"
-                  @click="activePanel = 'create'"
-                >
-                  Create
-                </button>
-                <button
-                  class="h-8 rounded-md px-3 text-sm font-medium transition"
-                  :class="activePanel === 'update' ? 'bg-white text-bank-ink shadow-sm' : 'text-bank-muted hover:text-bank-ink'"
-                  @click="activePanel = 'update'"
-                >
-                  Update
-                </button>
-                <button
-                  class="h-8 rounded-md px-3 text-sm font-medium transition"
-                  :class="activePanel === 'details' ? 'bg-white text-bank-ink shadow-sm' : 'text-bank-muted hover:text-bank-ink'"
-                  @click="activePanel = 'details'"
-                >
-                  Details
-                </button>
+              <div class="mt-1 overflow-x-auto">
+                <TabButtons
+                  v-model="activePanel"
+                  :buttons="panelButtons"
+                />
               </div>
             </div>
 

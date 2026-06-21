@@ -632,6 +632,49 @@ class TestBankRecPhaseFiveAPI(FrappeTestCase):
 		names = {row["name"] for row in result["rows"]}
 		self.assertIn(bank_transaction.name, names)
 
+	def test_matched_transactions_include_all_linked_payments(self):
+		first_invoice = create_test_sales_invoice(outstanding=2000)
+		second_invoice = create_test_sales_invoice(outstanding=2950)
+		bank_transaction = create_test_bank_transaction(
+			self.bank_account,
+			deposit=4950,
+			reference_number="_ABR-PHASE5-SPLIT",
+		)
+
+		submit_match(
+			bank_transaction.name,
+			[
+				{
+					"voucher_type": "Sales Invoice",
+					"voucher_name": first_invoice.name,
+					"amount": 2000,
+				},
+				{
+					"voucher_type": "Sales Invoice",
+					"voucher_name": second_invoice.name,
+					"amount": 2950,
+				},
+			],
+		)
+
+		result = get_matched_transactions(
+			self.bank_account,
+			from_date=add_days(nowdate(), -1),
+			to_date=add_days(nowdate(), 1),
+		)
+		row = next(row for row in result["rows"] if row["name"] == bank_transaction.name)
+
+		self.assertEqual(len(row["linked_payments"]), 2)
+		self.assertEqual(
+			{payment["payment_entry"] for payment in row["linked_payments"]},
+			{first_invoice.name, second_invoice.name},
+		)
+		self.assertAlmostEqual(
+			sum(flt(payment["allocated_amount"]) for payment in row["linked_payments"]),
+			4950,
+			places=2,
+		)
+
 	def test_unreconcile_only_keeps_linked_journal_entry_submitted(self):
 		bank_transaction, journal_entry_name = self._matched_journal_entry_fixture(amount=32)
 

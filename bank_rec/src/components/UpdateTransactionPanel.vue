@@ -19,6 +19,13 @@ const referenceNumber = ref("");
 const partyType = ref("");
 const party = ref("");
 
+const partyTypeOptions = [
+  { label: "Not set", value: "" },
+  { label: "Customer", value: "Customer" },
+  { label: "Supplier", value: "Supplier" },
+  { label: "Employee", value: "Employee" },
+];
+
 const dirty = computed(() => {
   if (!props.transaction) {
     return false;
@@ -62,42 +69,29 @@ watch(
 
     <form v-else class="flex flex-1 flex-col" @submit.prevent="submit">
       <div class="grid gap-4 p-4 md:grid-cols-2">
-        <label class="block md:col-span-2">
-          <span class="mb-1 block text-xs font-medium uppercase tracking-wide text-bank-muted">
-            Reference
-          </span>
-          <input
-            v-model="referenceNumber"
-            class="h-10 w-full rounded-md border border-bank-line px-3 text-sm outline-none transition focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
-            type="text"
-          />
-        </label>
+        <FormControl
+          v-model="referenceNumber"
+          class="md:col-span-2"
+          label="Reference"
+          variant="outline"
+          size="md"
+        />
 
-        <label class="block">
-          <span class="mb-1 block text-xs font-medium uppercase tracking-wide text-bank-muted">
-            Party type
-          </span>
-          <select
-            v-model="partyType"
-            class="h-10 w-full rounded-md border border-bank-line bg-white px-3 text-sm outline-none transition focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
-          >
-            <option value="">Not set</option>
-            <option value="Customer">Customer</option>
-            <option value="Supplier">Supplier</option>
-            <option value="Employee">Employee</option>
-          </select>
-        </label>
+        <FormControl
+          v-model="partyType"
+          type="select"
+          label="Party type"
+          variant="outline"
+          size="md"
+          :options="partyTypeOptions"
+        />
 
-        <label class="block">
-          <span class="mb-1 block text-xs font-medium uppercase tracking-wide text-bank-muted">
-            Party
-          </span>
-          <input
-            v-model="party"
-            class="h-10 w-full rounded-md border border-bank-line px-3 text-sm outline-none transition focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
-            type="text"
-          />
-        </label>
+        <FormControl
+          v-model="party"
+          label="Party"
+          variant="outline"
+          size="md"
+        />
       </div>
 
       <div class="mt-auto border-t border-bank-line bg-gray-50 px-4 py-3">

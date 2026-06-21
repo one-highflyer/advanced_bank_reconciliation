@@ -4,11 +4,32 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Bank Rec</title>
+    <link
+      rel="shortcut icon"
+      href="/assets/frappe/images/frappe-favicon.svg"
+      type="image/x-icon"
+    />
+    <link
+      rel="icon"
+      href="/assets/frappe/images/frappe-favicon.svg"
+      type="image/x-icon"
+    />
   </head>
   <body>
     <div id="app"></div>
     <div id="modals"></div>
     <div id="popovers"></div>
+    <script>
+      window.favicon = "{{ favicon or '/assets/frappe/images/frappe-favicon.svg' }}";
+
+      if (window.favicon && window.favicon.indexOf("{") !== 0) {
+        document
+          .querySelectorAll("link[rel='icon'], link[rel='shortcut icon']")
+          .forEach((link) => {
+            link.href = window.favicon;
+          });
+      }
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

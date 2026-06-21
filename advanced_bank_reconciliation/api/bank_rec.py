@@ -61,6 +61,28 @@ def _transaction_to_dto(row, status=None):
 	}
 
 
+def _dedupe_reconciled_rows(rows):
+	unique = {}
+	for row in rows:
+		transaction = unique.setdefault(
+			row["name"],
+			{
+				**row,
+				"linked_payments": [],
+			},
+		)
+		if row.get("payment_document") and row.get("payment_entry"):
+			transaction["linked_payments"].append(
+				{
+					"payment_document": row.get("payment_document"),
+					"payment_entry": row.get("payment_entry"),
+					"allocated_amount": flt(row.get("allocated_amount")),
+				}
+			)
+
+	return list(unique.values())
+
+
 def _bank_account_to_dto(row):
 	account_currency = frappe.get_cached_value("Account", row.account, "account_currency")
 	return {
@@ -82,10 +104,10 @@ def _get_filtered_transactions(bank_account, from_date=None, to_date=None, statu
 			for row in get_existing_bank_transactions(bank_account, from_date, to_date)
 		]
 	if status == "reconciled":
-		return [
+		return _dedupe_reconciled_rows([
 			_transaction_to_dto(row, status="Reconciled")
 			for row in get_reconciled_bank_transactions(bank_account, from_date, to_date)
-		]
+		])
 	if status == "all":
 		unreconciled = _get_filtered_transactions(bank_account, from_date, to_date, "unreconciled")
 		reconciled = _get_filtered_transactions(bank_account, from_date, to_date, "reconciled")

@@ -42,6 +42,7 @@ export interface BankTransaction {
   party_display?: string;
   payment_document?: string;
   payment_entry?: string;
+  linked_payments?: LinkedPayment[];
   allocated_amount: number;
   status?: string;
 }
@@ -63,7 +64,6 @@ export interface StatementSummary {
   from_date?: string;
   to_date?: string;
   unreconciled_count: number;
-  selected_amount: number | null;
   cleared_balance: number;
   unreconciled_total: number;
 }

@@ -10,7 +10,8 @@ import {
   unreconcileTransaction,
 } from "@/services/api";
 import { useBankRecStore } from "@/stores/bankRec";
-import type { BankTransaction } from "@/types/bankRec";
+import type { BankTransaction, LinkedPayment } from "@/types/bankRec";
+import { deskRoute } from "@/utils/desk";
 import { formatDate, formatMoney } from "@/utils/format";
 import ExternalLink from "~icons/lucide/external-link";
 import RotateCcw from "~icons/lucide/rotate-ccw";
@@ -30,17 +31,49 @@ const loadRequestId = ref(0);
 const selectedRow = computed(() =>
   rows.value.find((row) => row.name === selectedName.value)
 );
+const selectedLinkedPayments = computed(() =>
+  selectedRow.value ? linkedPaymentsForRow(selectedRow.value) : []
+);
 const pendingUnreconcileMessage = computed(() =>
   pendingUnreconcile.value
     ? "Unreconcile this transaction and cancel linked Payment Entry or Journal Entry documents?"
     : "Unreconcile this transaction and keep linked documents submitted?"
 );
 
-function voucherUrl(row: BankTransaction) {
-  if (!row.payment_document || !row.payment_entry) {
-    return "";
+function linkedPaymentsForRow(row: BankTransaction): LinkedPayment[] {
+  if (row.linked_payments?.length) {
+    return row.linked_payments;
   }
-  return `/app/${row.payment_document.toLowerCase().replaceAll(" ", "-")}/${row.payment_entry}`;
+  if (row.payment_document && row.payment_entry) {
+    return [
+      {
+        payment_document: row.payment_document,
+        payment_entry: row.payment_entry,
+        allocated_amount: row.allocated_amount,
+      },
+    ];
+  }
+  return [];
+}
+
+function linkedPaymentCount(row: BankTransaction) {
+  return linkedPaymentsForRow(row).length;
+}
+
+function linkedVoucherCountLabel(count: number) {
+  return `${count} linked ${count === 1 ? "voucher" : "vouchers"}`;
+}
+
+function linkedPaymentLabel(payment: LinkedPayment) {
+  return `${payment.payment_document || "Voucher"} ${payment.payment_entry || ""}`.trim();
+}
+
+function bankTransactionUrl(row?: BankTransaction) {
+  return deskRoute("Bank Transaction", row?.name);
+}
+
+function voucherUrl(payment: LinkedPayment) {
+  return deskRoute(payment.payment_document, payment.payment_entry);
 }
 
 async function replaceQuery() {
@@ -152,7 +185,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="flex min-h-0 w-full flex-col gap-4">
+  <div class="flex min-h-0 w-full flex-1 flex-col gap-4 lg:h-[calc(100vh-103px)] lg:overflow-hidden">
     <BankAccountFilters
       :bank-accounts="store.bankAccounts"
       :selected-bank-account="store.selectedBankAccount"
@@ -167,7 +200,7 @@ onMounted(async () => {
 
     <ErrorState v-if="pageError" :message="pageError" />
 
-    <div class="grid min-h-[620px] gap-4 xl:grid-cols-[minmax(520px,1fr)_420px]">
+    <div class="grid min-h-[620px] flex-1 gap-4 xl:min-h-0 xl:grid-cols-[minmax(620px,1fr)_460px]">
       <section class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-bank-line bg-white shadow-sm">
         <div class="border-b border-bank-line px-4 py-3">
           <div class="text-base font-semibold text-bank-ink">Matched transactions</div>
@@ -181,13 +214,14 @@ onMounted(async () => {
           detail="Matched rows appear here after reconciliation."
         />
         <div v-else class="bank-rec-scrollbar min-h-0 flex-1 overflow-auto">
-          <table class="min-w-[900px] divide-y divide-bank-line text-sm">
+          <table class="w-full min-w-[980px] divide-y divide-bank-line text-sm">
             <thead class="sticky top-0 bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-bank-muted">
               <tr>
                 <th class="px-4 py-3">Date</th>
                 <th class="px-4 py-3">Transaction</th>
-                <th class="px-4 py-3">Voucher</th>
+                <th class="px-4 py-3">Linked vouchers</th>
                 <th class="px-4 py-3 text-right">Amount</th>
+                <th class="w-12 px-4 py-3 text-right"></th>
               </tr>
             </thead>
             <tbody class="divide-y divide-bank-line bg-white">
@@ -215,15 +249,48 @@ onMounted(async () => {
                   </div>
                 </td>
                 <td class="max-w-[280px] px-4 py-3">
-                  <div class="truncate text-bank-ink">
-                    {{ row.payment_document || "Voucher" }}
+                  <template v-if="linkedPaymentCount(row) === 1">
+                    <a
+                      class="inline-flex min-w-0 items-center gap-1 font-medium text-bank-accent"
+                      :href="voucherUrl(linkedPaymentsForRow(row)[0])"
+                      target="_blank"
+                      rel="noreferrer"
+                      @click.stop
+                      @keydown.stop
+                    >
+                      <span class="truncate">
+                        {{ linkedPaymentLabel(linkedPaymentsForRow(row)[0]) }}
+                      </span>
+                      <ExternalLink class="h-3.5 w-3.5 shrink-0" />
+                    </a>
+                  </template>
+                  <div v-else-if="linkedPaymentCount(row) > 1" class="grid gap-1">
+                    <div class="font-medium text-bank-ink">
+                      {{ linkedVoucherCountLabel(linkedPaymentCount(row)) }}
+                    </div>
+                    <div class="text-xs text-bank-muted">
+                      Select row to review
+                    </div>
                   </div>
-                  <div class="truncate text-xs text-bank-muted">
-                    {{ row.payment_entry || "Not set" }}
+                  <div v-else class="text-bank-muted">
+                    Not set
                   </div>
                 </td>
                 <td class="px-4 py-3 text-right font-medium text-bank-ink">
                   {{ formatMoney(row.amount, row.currency || store.activeCurrency) }}
+                </td>
+                <td class="px-4 py-3 text-right">
+                  <a
+                    class="inline-flex h-8 w-8 items-center justify-center rounded-md text-bank-muted transition hover:bg-white hover:text-bank-accent"
+                    :href="bankTransactionUrl(row)"
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Open bank transaction in Desk"
+                    @click.stop
+                    @keydown.stop
+                  >
+                    <ExternalLink class="h-4 w-4" />
+                  </a>
                 </td>
               </tr>
             </tbody>
@@ -244,16 +311,24 @@ onMounted(async () => {
           title="No matched row selected"
           detail="Select a row to inspect linked documents."
         />
-        <div v-else class="flex flex-1 flex-col p-4">
+        <div v-else class="bank-rec-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
           <dl class="grid gap-3">
             <div class="rounded-lg border border-bank-line p-3">
               <dt class="text-xs font-medium uppercase tracking-wide text-bank-muted">
-                Voucher
+                Bank transaction
               </dt>
               <dd class="mt-1 break-words text-sm text-bank-ink">
-                {{ selectedRow.payment_document || "Not set" }}
-                {{ selectedRow.payment_entry || "" }}
+                {{ selectedRow.name }}
               </dd>
+              <a
+                class="mt-2 inline-flex items-center gap-2 text-sm font-medium text-bank-accent"
+                :href="bankTransactionUrl(selectedRow)"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <ExternalLink class="h-4 w-4" />
+                Open bank transaction
+              </a>
             </div>
             <div class="rounded-lg border border-bank-line p-3">
               <dt class="text-xs font-medium uppercase tracking-wide text-bank-muted">
@@ -265,16 +340,37 @@ onMounted(async () => {
             </div>
           </dl>
 
-          <a
-            v-if="voucherUrl(selectedRow)"
-            class="mt-4 inline-flex items-center gap-2 text-sm font-medium text-bank-accent"
-            :href="voucherUrl(selectedRow)"
-            target="_blank"
-            rel="noreferrer"
-          >
-            <ExternalLink class="h-4 w-4" />
-            Open voucher
-          </a>
+          <div class="mt-4 rounded-lg border border-bank-line">
+            <div class="border-b border-bank-line px-3 py-2 text-sm font-semibold text-bank-ink">
+              Linked vouchers
+            </div>
+            <div v-if="!selectedLinkedPayments.length" class="px-3 py-4 text-sm text-bank-muted">
+              No linked vouchers
+            </div>
+            <div v-else class="divide-y divide-bank-line">
+              <a
+                v-for="payment in selectedLinkedPayments"
+                :key="`${payment.payment_document}-${payment.payment_entry}`"
+                class="flex items-center justify-between gap-3 px-3 py-2 text-sm transition hover:bg-blue-50/60"
+                :href="voucherUrl(payment)"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <span class="min-w-0 truncate font-medium text-bank-accent">
+                  {{ payment.payment_document || "Voucher" }}
+                  {{ payment.payment_entry || "" }}
+                </span>
+                <span class="shrink-0 text-bank-ink">
+                  {{
+                    formatMoney(
+                      payment.allocated_amount,
+                      selectedRow.currency || store.activeCurrency
+                    )
+                  }}
+                </span>
+              </a>
+            </div>
+          </div>
 
           <div class="mt-auto grid gap-2 pt-4">
             <Button
