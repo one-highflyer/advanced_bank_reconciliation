@@ -599,8 +599,8 @@ Progress notes:
 - Final frontend production build passes.
 - Local unauthenticated route probe for `/bank-rec` returns `403 FORBIDDEN`, which confirms the route exists and Guest is blocked by the permission-checked boot method.
 - Built JS and CSS assets under `/assets/advanced_bank_reconciliation/bank_rec/` return `200 OK`.
-- Old Desk tool route probe redirects Guest to login, which confirms the route still resolves and has not been removed.
-- Chrome plugin verification was attempted after the user requested `@chrome`, but the local Chrome bridge failed before a browser session could be created. Tool discovery did not expose another Chrome control tool, and the install list did not include a Chrome plugin candidate. Authenticated Chrome smoke remains blocked until the local Chrome plugin bridge is available.
+- Old Desk tool route probe redirects Guest to log in, which confirms the route still resolves and has not been removed.
+- Chrome plugin verification was attempted after the user requested `@chrome`, but the local Chrome bridge failed before a browser session could be created. Tool discovery did not expose another Chrome control tool, and the installation list did not include a Chrome plugin candidate. Authenticated Chrome smoke remains blocked until the local Chrome plugin bridge is available.
 - Chrome plugin setup initially failed before session setup, then succeeded after the updated plugin version was available on June 21, 2026.
 - Chrome smoke opened `http://demo.localhost:8000/bank-rec`, confirmed redirect to `/bank-rec/reconcile`, verified Reconcile, Cash Coding, Matched, and Rules pages load in the authenticated browser session, and found no console errors.
 - Chrome smoke surfaced a small page-title issue where Cash Coding rendered as `CashCoding`; fixed in `bank_rec/src/router/index.ts` and rechecked in Chrome.
