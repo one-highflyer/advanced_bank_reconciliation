@@ -583,7 +583,7 @@ Acceptance:
 - MVP flows are complete across phases 1 through 5.
 - Regression tests pass.
 - Frontend build passes.
-- Browser smoke tests pass.
+- Browser smoke and workflow tests pass.
 - Existing tool remains functional.
 
 Progress notes:
@@ -593,7 +593,7 @@ Progress notes:
 - Unreconcile rechecks Bank Transaction write access, locks the row, calls the existing `unreconcile_bank_transaction` helper, and supports both unreconcile-only and cancel-linked-document choices.
 - Unreconcile parses string boolean values from Frappe requests so `cancel_linked_documents=false` is treated as false rather than a truthy string.
 - Implemented `MatchedPage.vue` with bank account/date filters, matched transaction table, selected-row review panel, linked voucher open action, unreconcile-only action, and cancel-linked-and-unreconcile action.
-- Unreconcile actions show confirmation prompts. The cancel-linked path explicitly warns that linked Payment Entry or Journal Entry documents will be cancelled.
+- Replaced the browser-native unreconcile confirmation with an in-app modal so the confirmation is visible in the app shell, testable in Chrome, and consistent with the standalone route experience. The cancel-linked path explicitly warns that linked Payment Entry or Journal Entry documents will be cancelled.
 - Backend tests cover matched listing, unreconcile-only preserving the linked Journal Entry, string boolean parsing for cancel choices, and unreconcile with linked Journal Entry cancellation.
 - Final API module test suite passes across Phases 1 through 5 with 24 tests.
 - Final frontend production build passes.
@@ -606,6 +606,16 @@ Progress notes:
 - Chrome plugin setup was later retried with the updated plugin version and succeeded.
 - Chrome smoke opened `http://demo.localhost:8000/bank-rec`, confirmed redirect to `/bank-rec/reconcile`, verified Reconcile, Cash Coding, Matched, and Rules pages load in the authenticated browser session, and found no console errors.
 - Chrome smoke surfaced a small page-title issue where Cash Coding rendered as `CashCoding`; fixed in `bank_rec/src/router/index.ts` and rechecked in Chrome.
+- Authenticated Chrome workflow verification on `demo.localhost` used isolated `BRCHROME` fixture rows and exercised:
+  - Create Journal Entry from a withdrawal and reconcile it.
+  - Create Payment Entry from a customer deposit and reconcile it.
+  - Match one Bank Transaction against two submitted Payment Entries.
+  - Match one Bank Transaction against an unpaid Sales Invoice.
+  - Cash Coding missing-account validation, then successful cash coding submission.
+  - Update tab metadata save for reference and party fields.
+  - Edit in Full Page draft handoff, with Bank Rec remaining on the same selected route and a Draft Journal Entry created in Desk.
+  - Matched review, linked voucher visibility, unreconcile confirmation modal, and unreconcile-only completion.
+- Database verification after the Chrome workflow confirmed the JE, PE, multi-PE, unpaid invoice, and cash-coding transactions were reconciled with the expected linked documents, the update row stayed unreconciled with metadata saved, the draft handoff created a draft Journal Entry, and the unreconcile-only row returned to `Unreconciled`.
 - No site credential changes were made.
 - Release type was confirmed as `feat`, and local incremental commits were created on branch `feat/bank-rec-route-app`.
 - Generated Bank Rec build output is intentionally ignored and not part of the final branch diff.
@@ -617,13 +627,14 @@ Commands run:
 - `yarn build`
 - `bench --site demo.localhost clear-cache`
 - `curl -I --max-time 8 http://demo.localhost:8000/bank-rec`
-- `curl -I --max-time 8 http://demo.localhost:8000/assets/advanced_bank_reconciliation/bank_rec/assets/index-b47bdffa.js`
+- `curl -I --max-time 8 http://demo.localhost:8000/assets/advanced_bank_reconciliation/bank_rec/assets/index-e68e8b06.js`
 - `curl -I --max-time 8 http://demo.localhost:8000/assets/advanced_bank_reconciliation/bank_rec/assets/index-915ccf9d.css`
 - `curl -I --max-time 8 http://demo.localhost:8000/app/advance-bank-reconciliation-tool`
 - Attempted Chrome plugin setup through `@chrome`; the local browser bridge failed before session setup.
 - Repeated Chrome plugin setup retry through `@chrome`; the local browser bridge still failed before session setup.
 - Repeated Chrome plugin setup retry through `@chrome`; the local browser bridge still failed before session setup with the same bridge metadata error.
 - Retried Chrome plugin setup with updated plugin version and successfully opened the authenticated Bank Rec route app.
+- Used `@chrome` against `http://demo.localhost:8000` for the workflow matrix listed above.
 - `git -C apps/advanced_bank_reconciliation diff --check`
 - Ran a sensitive-string scan against changed paths.
 

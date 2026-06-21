@@ -24,9 +24,15 @@ const selectedName = ref("");
 const loading = ref(false);
 const submittingName = ref("");
 const pageError = ref("");
+const pendingUnreconcile = ref<boolean | null>(null);
 
 const selectedRow = computed(() =>
   rows.value.find((row) => row.name === selectedName.value)
+);
+const pendingUnreconcileMessage = computed(() =>
+  pendingUnreconcile.value
+    ? "Unreconcile this transaction and cancel linked Payment Entry or Journal Entry documents?"
+    : "Unreconcile this transaction and keep linked documents submitted?"
 );
 
 function voucherUrl(row: BankTransaction) {
@@ -94,18 +100,19 @@ async function selectRow(name: string) {
   await replaceQuery();
 }
 
-async function unreconcile(cancelLinkedDocuments: boolean) {
+function requestUnreconcile(cancelLinkedDocuments: boolean) {
   if (!selectedRow.value) {
     return;
   }
+  pendingUnreconcile.value = cancelLinkedDocuments;
+}
 
-  const message = cancelLinkedDocuments
-    ? "Unreconcile this transaction and cancel linked Payment Entry or Journal Entry documents?"
-    : "Unreconcile this transaction and keep linked documents submitted?";
-  if (!window.confirm(message)) {
+async function confirmUnreconcile() {
+  if (!selectedRow.value || pendingUnreconcile.value === null) {
     return;
   }
 
+  const cancelLinkedDocuments = pendingUnreconcile.value;
   submittingName.value = selectedRow.value.name;
   pageError.value = "";
   try {
@@ -120,6 +127,7 @@ async function unreconcile(cancelLinkedDocuments: boolean) {
     pageError.value =
       error instanceof Error ? error.message : "Unable to unreconcile.";
   } finally {
+    pendingUnreconcile.value = null;
     submittingName.value = "";
   }
 }
@@ -256,7 +264,7 @@ onMounted(async () => {
             <Button
               variant="subtle"
               :loading="submittingName === selectedRow.name"
-              @click="unreconcile(false)"
+              @click="requestUnreconcile(false)"
             >
               <template #prefix>
                 <RotateCcw class="h-4 w-4" />
@@ -267,11 +275,49 @@ onMounted(async () => {
               theme="red"
               variant="subtle"
               :loading="submittingName === selectedRow.name"
-              @click="unreconcile(true)"
+              @click="requestUnreconcile(true)"
             >
               Cancel Linked and Unreconcile
             </Button>
           </div>
+        </div>
+      </section>
+    </div>
+
+    <div
+      v-if="pendingUnreconcile !== null && selectedRow"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="bank-rec-unreconcile-title"
+    >
+      <section class="w-full max-w-md rounded-lg border border-bank-line bg-white shadow-xl">
+        <div class="border-b border-bank-line px-4 py-3">
+          <h2 id="bank-rec-unreconcile-title" class="text-base font-semibold text-bank-ink">
+            Unreconcile transaction
+          </h2>
+          <div class="mt-1 truncate text-sm text-bank-muted">
+            {{ selectedRow.name }}
+          </div>
+        </div>
+        <div class="px-4 py-4 text-sm text-bank-ink">
+          {{ pendingUnreconcileMessage }}
+        </div>
+        <div class="flex justify-end gap-2 border-t border-bank-line bg-gray-50 px-4 py-3">
+          <Button
+            variant="subtle"
+            :disabled="Boolean(submittingName)"
+            @click="pendingUnreconcile = null"
+          >
+            Cancel
+          </Button>
+          <Button
+            :theme="pendingUnreconcile ? 'red' : 'blue'"
+            :loading="Boolean(submittingName)"
+            @click="confirmUnreconcile"
+          >
+            {{ pendingUnreconcile ? "Cancel Linked and Unreconcile" : "Unreconcile" }}
+          </Button>
         </div>
       </section>
     </div>
