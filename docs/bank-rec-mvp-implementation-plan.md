@@ -51,7 +51,7 @@ Status values:
 | Phase 2: Match flow | Complete | Match candidates, Update tab, submit match, duplicate-submit guard |
 | Phase 3: Create voucher flow | Complete | Create tab, Journal Entry submit, Payment Entry draft handoff, full-page edit |
 | Phase 4: Cash Coding | Complete | Grid, bulk apply, row-level Journal Entry submit, discard guards |
-| Phase 5: Matched review and hardening | Blocked | Code complete with tests and build passing. Authenticated Chrome smoke is blocked by the local Chrome plugin bridge. |
+| Phase 5: Matched review and hardening | Blocked | Code complete with tests, build, and incremental commits. Authenticated Chrome smoke is blocked by the local Chrome plugin bridge. |
 
 ## Resolved Scope Decisions From Final Review
 
@@ -213,7 +213,7 @@ Frontend and route tasks:
 - Add `bank_rec/` frontend source folder.
 - Add Vite, Vue 3, TypeScript, Pinia, Vue Router, Tailwind, and Frappe UI setup.
 - Add optional local `frappe-ui` alias only if practical, without adding a Git submodule.
-- Add `advanced_bank_reconciliation/www/bank_rec/index.html`.
+- Configure Vite to generate `advanced_bank_reconciliation/www/bank_rec/index.html`.
 - Add `advanced_bank_reconciliation/www/bank_rec/index.py`.
 - Add `add_to_apps_screen` entry with label `Bank Rec`.
 - Add route rule for `/bank-rec` and `/bank-rec/<path:app_path>`.
@@ -267,8 +267,8 @@ Progress notes:
 - Implemented read-only Reconcile split view with transaction list, summary cards, selected transaction detail panel, and linked payment display.
 - Implemented minimal Rules page with bank account filter, search, and `Open` action to Desk in a new tab.
 - Added loading, empty, and error states for boot, bank accounts, transactions, transaction context, summary, and rules.
-- Generated public assets under `advanced_bank_reconciliation/public/bank_rec/`.
-- Added narrow ignore rules for Vite plugin generated type helper files.
+- Configured Vite to generate public assets under `advanced_bank_reconciliation/public/bank_rec/`.
+- Added ignore rules for generated public build output, generated route HTML, and Vite plugin generated type helper files. This matches the Repeat Raven dashboard pattern where source is tracked and app public build output is ignored.
 - Authenticated browser visual verification is deferred to Phase 5 hardening. The local route probe as Guest returned `403 FORBIDDEN`, which is expected because `get_context` calls the permission-checked boot method.
 - First incremental commit is pending user confirmation of semantic release type. Recommendation: `minor`, using `feat`.
 
@@ -283,7 +283,6 @@ Commands run:
 - `sed -n '1,120p' apps/advanced_bank_reconciliation/advanced_bank_reconciliation/www/bank_rec/index.py`
 - `yarn install`
 - `yarn build`
-- `sed -n '1,140p' apps/advanced_bank_reconciliation/advanced_bank_reconciliation/www/bank_rec/index.html`
 - `find apps/advanced_bank_reconciliation/advanced_bank_reconciliation/public/bank_rec -maxdepth 3 -type f | sort`
 - Ran a source dash scan against the new custom source files.
 - `bench --site demo.localhost run-tests --app advanced_bank_reconciliation --module advanced_bank_reconciliation.api.test_bank_rec`
@@ -605,7 +604,8 @@ Progress notes:
 - Chrome plugin setup was retried on June 21, 2026. The local bridge still failed before session setup, so authenticated Chrome smoke remains blocked.
 - Chrome plugin setup was retried again on June 21, 2026. The local bridge still failed before session setup with the same bridge metadata error.
 - No site credential changes were made.
-- First incremental commit is still pending user confirmation of semantic release type. Recommendation: `minor`, using `feat`.
+- Release type was confirmed as `feat`, and three local incremental commits were created on branch `feat/bank-rec-route-app`.
+- Generated Bank Rec build output is intentionally ignored and not part of the final branch diff.
 - Re-ran the API test suite, frontend build, whitespace check, sensitive-string scan of changed paths, route probe, asset probes, and old Desk tool route probe on June 21, 2026.
 
 Commands run:
@@ -628,7 +628,6 @@ Commands run:
 Open blockers before final PR:
 
 - Authenticated Chrome smoke test cannot run until the local Chrome plugin bridge is available.
-- Incremental commits are pending user confirmation of semantic release type. Recommendation: `minor`, using `feat`.
 
 - `/bank-rec` route works.
 - `Bank Rec` app screen entry works.
