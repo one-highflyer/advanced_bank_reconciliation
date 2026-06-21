@@ -131,8 +131,8 @@ def _normalise_vouchers(vouchers):
 
 		if not voucher_type or not voucher_name:
 			frappe.throw(_("Each selected match must include a voucher type and name."))
-		if not amount:
-			frappe.throw(_("Each selected match must include an amount."))
+		if amount <= 0:
+			frappe.throw(_("Each selected match must include a positive amount."))
 
 		normalised.append(
 			{

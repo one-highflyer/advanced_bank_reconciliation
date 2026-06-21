@@ -18,6 +18,7 @@ defineEmits<{
     <button
       v-for="transaction in transactions"
       :key="transaction.name"
+      type="button"
       class="grid w-full grid-cols-[120px_minmax(0,1fr)_130px] gap-3 px-4 py-3 text-left transition hover:bg-blue-50/60"
       :class="transaction.name === selectedName ? 'bg-blue-50' : 'bg-white'"
       @click="$emit('select', transaction.name)"

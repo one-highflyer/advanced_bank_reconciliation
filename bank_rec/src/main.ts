@@ -41,7 +41,11 @@ async function loadDevBoot() {
 }
 
 async function mount() {
-  await loadDevBoot();
+  try {
+    await loadDevBoot();
+  } catch (error) {
+    console.error("Unable to load development boot data.", error);
+  }
 
   const app = createApp(App);
   app.use(FrappeUI);

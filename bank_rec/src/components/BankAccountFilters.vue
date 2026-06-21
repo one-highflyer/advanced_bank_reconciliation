@@ -53,6 +53,7 @@ defineEmits<{
           class="h-10 w-full rounded-md border border-bank-line px-3 text-sm outline-none transition focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
           type="date"
           :value="fromDate"
+          :max="toDate || undefined"
           :disabled="loading"
           @input="$emit('update:fromDate', ($event.target as HTMLInputElement).value)"
         />
@@ -66,6 +67,7 @@ defineEmits<{
           class="h-10 w-full rounded-md border border-bank-line px-3 text-sm outline-none transition focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
           type="date"
           :value="toDate"
+          :min="fromDate || undefined"
           :disabled="loading"
           @input="$emit('update:toDate', ($event.target as HTMLInputElement).value)"
         />

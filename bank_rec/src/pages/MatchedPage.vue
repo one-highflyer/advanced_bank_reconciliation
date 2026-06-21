@@ -25,6 +25,7 @@ const loading = ref(false);
 const submittingName = ref("");
 const pageError = ref("");
 const pendingUnreconcile = ref<boolean | null>(null);
+const loadRequestId = ref(0);
 
 const selectedRow = computed(() =>
   rows.value.find((row) => row.name === selectedName.value)
@@ -59,6 +60,8 @@ async function loadRows() {
     return;
   }
 
+  const requestId = Date.now();
+  loadRequestId.value = requestId;
   loading.value = true;
   pageError.value = "";
   try {
@@ -67,6 +70,9 @@ async function loadRows() {
       from_date: store.fromDate,
       to_date: store.toDate,
     });
+    if (loadRequestId.value !== requestId) {
+      return;
+    }
     rows.value = response.rows;
     if (
       selectedName.value &&
@@ -79,10 +85,15 @@ async function loadRows() {
     }
     await replaceQuery();
   } catch (error) {
+    if (loadRequestId.value !== requestId) {
+      return;
+    }
     pageError.value =
       error instanceof Error ? error.message : "Unable to load matched rows.";
   } finally {
-    loading.value = false;
+    if (loadRequestId.value === requestId) {
+      loading.value = false;
+    }
   }
 }
 
@@ -185,7 +196,12 @@ onMounted(async () => {
                 :key="row.name"
                 class="cursor-pointer transition hover:bg-blue-50/60"
                 :class="row.name === selectedName ? 'bg-blue-50' : ''"
+                role="button"
+                tabindex="0"
+                :aria-pressed="row.name === selectedName"
                 @click="selectRow(row.name)"
+                @keydown.enter.prevent="selectRow(row.name)"
+                @keydown.space.prevent="selectRow(row.name)"
               >
                 <td class="px-4 py-3 text-bank-muted">
                   {{ formatDate(row.date) }}

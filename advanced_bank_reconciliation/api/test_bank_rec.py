@@ -59,6 +59,8 @@ def _ensure_test_user(email, roles):
 	else:
 		user = frappe.get_doc("User", email)
 
+	allowed_roles = set(roles).union({"All", "Desk User"})
+	user.roles = [row for row in user.roles if row.role in allowed_roles]
 	for role in roles:
 		if not any(row.role == role for row in user.roles):
 			user.append("roles", {"role": role})
@@ -68,6 +70,17 @@ def _ensure_test_user(email, roles):
 
 
 def _ensure_company_user_permission(user, company):
+	for permission in frappe.get_all(
+		"User Permission",
+		filters={
+			"user": user,
+			"allow": "Company",
+			"for_value": ["!=", company],
+		},
+		pluck="name",
+	):
+		frappe.delete_doc("User Permission", permission, ignore_permissions=True)
+
 	if not frappe.db.exists(
 		"User Permission",
 		{
@@ -258,6 +271,23 @@ class TestBankRecPhaseTwoAPI(FrappeTestCase):
 		self.assertTrue(
 			any(row.payment_entry == sales_invoice.name for row in bank_transaction.payment_entries)
 		)
+
+	def test_submit_match_rejects_negative_allocation_amount(self):
+		bank_transaction, sales_invoice = self._sales_invoice_match_fixture(amount=45)
+
+		with self.set_user(self.accounts_user):
+			self.assertRaises(
+				frappe.ValidationError,
+				submit_match,
+				bank_transaction.name,
+				[
+					{
+						"voucher_type": "Sales Invoice",
+						"voucher_name": sales_invoice.name,
+						"amount": -45,
+					}
+				],
+			)
 
 	def test_duplicate_submit_returns_idempotent_response_for_same_voucher(self):
 		bank_transaction, sales_invoice = self._sales_invoice_match_fixture(amount=75)

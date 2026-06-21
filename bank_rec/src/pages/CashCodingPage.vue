@@ -91,8 +91,12 @@ async function replaceQuery() {
   });
 }
 
-async function loadRows() {
-  if (!store.selectedBankAccount || !guardDiscard()) {
+async function loadRows(options: { confirmDiscard?: boolean } = {}) {
+  if (!store.selectedBankAccount) {
+    return;
+  }
+
+  if (options.confirmDiscard !== false && !guardDiscard()) {
     return;
   }
 
@@ -139,7 +143,7 @@ async function updateFilter(
     return;
   }
   store[field] = value;
-  await loadRows();
+  await loadRows({ confirmDiscard: false });
 }
 
 function toggleSelected(name: string, checked: boolean) {

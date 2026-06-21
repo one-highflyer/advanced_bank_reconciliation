@@ -34,9 +34,13 @@ const selectedCandidates = computed(() =>
   props.candidates.filter((candidate) => selectedKeys.value.includes(candidate.key))
 );
 
+function allocationAmount(candidate: MatchCandidate) {
+  return Number(amounts.value[candidate.key] ?? Math.abs(candidate.amount));
+}
+
 const selectedTotal = computed(() =>
   selectedCandidates.value.reduce(
-    (total, candidate) => total + Math.abs(Number(amounts.value[candidate.key] || 0)),
+    (total, candidate) => total + Math.abs(allocationAmount(candidate)),
     0
   )
 );
@@ -64,7 +68,7 @@ function submit() {
   const vouchers = selectedCandidates.value.map((candidate) => ({
     voucher_type: candidate.voucher_type,
     voucher_name: candidate.voucher_name,
-    amount: Number(amounts.value[candidate.key] || candidate.amount),
+    amount: allocationAmount(candidate),
   }));
   emit("submit", vouchers);
 }
@@ -73,7 +77,7 @@ watch(
   () => props.candidates,
   (candidates) => {
     amounts.value = Object.fromEntries(
-      candidates.map((candidate) => [candidate.key, candidate.amount])
+      candidates.map((candidate) => [candidate.key, Math.abs(candidate.amount)])
     );
 
     const topRank = Math.max(0, ...candidates.map((candidate) => candidate.rank));

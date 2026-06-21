@@ -43,6 +43,22 @@ def _row_error(row, message):
 	}
 
 
+def _is_expected_row_exception(exc):
+	expected = (frappe.ValidationError, frappe.PermissionError, frappe.DoesNotExistError)
+	link_validation_error = getattr(frappe, "LinkValidationError", None)
+	if link_validation_error:
+		expected = expected + (link_validation_error,)
+	return isinstance(exc, expected)
+
+
+def _row_exception_error(row, exc, title):
+	if _is_expected_row_exception(exc):
+		return _row_error(row, str(exc))
+
+	frappe.log_error(title=title, message=frappe.get_traceback())
+	return _row_error(row, _("Unexpected server error. Please try again."))
+
+
 def _row_success(row, transaction):
 	voucher = None
 	for payment in transaction.get("payment_entries", []):
@@ -139,7 +155,7 @@ def preview_cash_coding(rows):
 				}
 			)
 		except Exception as exc:
-			results.append(_row_error(row, str(exc)))
+			results.append(_row_exception_error(row, exc, "Bank Rec cash coding preview failed"))
 
 	return {"results": results}
 
@@ -197,7 +213,7 @@ def submit_cash_coding(rows):
 			frappe.db.release_savepoint(savepoint)
 		except Exception as exc:
 			frappe.db.rollback(save_point=savepoint)
-			results.append(_row_error(row, str(exc)))
+			results.append(_row_exception_error(row, exc, "Bank Rec cash coding submit failed"))
 
 	return {
 		"results": results,

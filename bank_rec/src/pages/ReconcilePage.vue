@@ -138,12 +138,21 @@ onMounted(initialize);
 watch(
   () => route.query.bank_transaction,
   async (value) => {
-    const selected = Array.isArray(value) ? value[0] : value;
-    if (selected && selected !== store.selectedTransactionName) {
-      store.selectedTransactionName = selected;
-      await store.loadSelectedContext();
-      await Promise.all([store.loadMatchCandidates(), store.loadCreateDefaults()]);
+    const selected = Array.isArray(value) ? value[0] || "" : value || "";
+    if (selected === store.selectedTransactionName) {
+      return;
     }
+
+    store.selectedTransactionName = selected;
+    if (!selected) {
+      store.selectedContext = null;
+      store.matchCandidates = [];
+      store.createDefaults = null;
+      return;
+    }
+
+    await store.loadSelectedContext();
+    await Promise.all([store.loadMatchCandidates(), store.loadCreateDefaults()]);
   }
 );
 </script>
