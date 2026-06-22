@@ -22,6 +22,7 @@ from advanced_bank_reconciliation.api.create_voucher import (
 )
 from advanced_bank_reconciliation.api.cash_coding import (
 	get_cash_coding_rows,
+	preview_cash_coding,
 	submit_cash_coding,
 )
 from advanced_bank_reconciliation.api.matched import (
@@ -289,6 +290,30 @@ class TestBankRecPhaseTwoAPI(FrappeTestCase):
 				],
 			)
 
+	def test_submit_match_rejects_over_allocation(self):
+		bank_transaction = create_test_bank_transaction(
+			self.bank_account_a,
+			deposit=100,
+			reference_number="_ABR-PHASE2-OVER",
+		)
+		sales_invoice = create_test_sales_invoice(outstanding=150)
+
+		with self.assertRaises(frappe.ValidationError):
+			submit_match(
+				bank_transaction.name,
+				[
+					{
+						"voucher_type": "Sales Invoice",
+						"voucher_name": sales_invoice.name,
+						"amount": 150,
+					}
+				],
+			)
+
+		bank_transaction.reload()
+		self.assertNotEqual(bank_transaction.status, "Reconciled")
+		self.assertAlmostEqual(flt(bank_transaction.unallocated_amount), 100.0, places=2)
+
 	def test_duplicate_submit_returns_idempotent_response_for_same_voucher(self):
 		bank_transaction, sales_invoice = self._sales_invoice_match_fixture(amount=75)
 		vouchers = [
@@ -339,6 +364,120 @@ class TestBankRecPhaseTwoAPI(FrappeTestCase):
 		self.assertEqual(bank_transaction.reference_number, "_ABR-PHASE2-NEW")
 		self.assertEqual(bank_transaction.party_type, "Customer")
 		self.assertEqual(bank_transaction.party, TEST_CUSTOMER)
+
+
+class TestBankRecMutationGuardsAPI(FrappeTestCase):
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls.bank_account_a = setup_abr_test_data(company=TEST_COMPANY)
+		cls.bank_account_b = ensure_bank_account_for_company(TEST_COMPANY_2)
+		cls.accounts_user = _ensure_test_user(
+			"abr-mutation-accounts@example.com",
+			["Accounts User"],
+		)
+		cls.disallowed_user = _ensure_test_user(
+			"abr-mutation-sales@example.com",
+			["Sales User"],
+		)
+		_ensure_company_user_permission(cls.accounts_user, TEST_COMPANY)
+		frappe.db.commit()
+
+	def _ledger_account(self, root_type):
+		account = frappe.db.get_value(
+			"Account",
+			{
+				"company": TEST_COMPANY,
+				"root_type": root_type,
+				"is_group": 0,
+				"disabled": 0,
+			},
+			"name",
+		)
+		self.assertTrue(account, "Expected a ledger account for {0}".format(root_type))
+		return account
+
+	def _mutation_calls(self, bank_transaction):
+		account = self._ledger_account("Expense")
+		return {
+			"submit_match": lambda: submit_match(
+				bank_transaction.name,
+				[
+					{
+						"voucher_type": "Sales Invoice",
+						"voucher_name": "_ABR-NO-SUCH-INVOICE",
+						"amount": 1,
+					}
+				],
+			),
+			"update_transaction_metadata": lambda: update_transaction_metadata(
+				bank_transaction.name,
+				"_ABR-MUTATION-GUARD",
+			),
+			"create_voucher_from_transaction": lambda: create_voucher_from_transaction(
+				bank_transaction.name,
+				{
+					"account": account,
+					"posting_date": nowdate(),
+					"reference_date": nowdate(),
+					"reference_number": "_ABR-MUTATION-GUARD",
+				},
+			),
+			"create_voucher_draft_from_transaction": lambda: create_voucher_draft_from_transaction(
+				bank_transaction.name,
+				{
+					"account": account,
+					"posting_date": nowdate(),
+					"reference_date": nowdate(),
+					"reference_number": "_ABR-MUTATION-GUARD",
+				},
+			),
+			"submit_cash_coding": lambda: submit_cash_coding(
+				[
+					{
+						"bank_transaction_name": bank_transaction.name,
+						"account": account,
+						"posting_date": nowdate(),
+						"reference_date": nowdate(),
+						"reference_number": "_ABR-MUTATION-GUARD",
+					}
+				]
+			),
+			"unreconcile_transaction": lambda: unreconcile_transaction(
+				bank_transaction.name,
+				cancel_linked_documents=False,
+			),
+		}
+
+	def test_mutating_endpoints_reject_guest_and_non_bank_rec_user(self):
+		bank_transaction = create_test_bank_transaction(
+			self.bank_account_a,
+			withdrawal=11,
+			reference_number="_ABR-MUTATION-DENY",
+		)
+
+		for user in ("Guest", self.disallowed_user):
+			for name, call in self._mutation_calls(bank_transaction).items():
+				with self.subTest(user=user, endpoint=name):
+					with self.set_user(user):
+						self.assertRaises(frappe.PermissionError, call)
+
+	def test_mutating_endpoints_reject_cross_company_transactions(self):
+		bank_transaction = create_test_bank_transaction(
+			self.bank_account_b,
+			withdrawal=12,
+			reference_number="_ABR-MUTATION-CROSS",
+		)
+
+		with self.set_user(self.accounts_user):
+			for name, call in self._mutation_calls(bank_transaction).items():
+				with self.subTest(endpoint=name):
+					if name == "submit_cash_coding":
+						result = call()
+						self.assertEqual(result["summary"]["error"], 1)
+						self.assertTrue(result["results"][0]["message"])
+					else:
+						self.assertRaises(frappe.PermissionError, call)
 
 
 class TestBankRecPhaseThreeAPI(FrappeTestCase):
@@ -452,6 +591,30 @@ class TestBankRecPhaseThreeAPI(FrappeTestCase):
 		self.assertEqual(payment_entry.docstatus, 0)
 		self.assertEqual(payment_entry.party_type, "Customer")
 		self.assertEqual(payment_entry.party, TEST_CUSTOMER)
+		bank_transaction.reload()
+		self.assertNotEqual(bank_transaction.status, "Reconciled")
+
+	def test_create_voucher_rejects_unsupported_party_type(self):
+		bank_transaction = create_test_bank_transaction(
+			self.bank_account,
+			deposit=24,
+			reference_number="_ABR-PHASE3-PARTY",
+		)
+		account = self._ledger_account("Income")
+
+		with self.assertRaises(frappe.ValidationError):
+			create_voucher_from_transaction(
+				bank_transaction.name,
+				{
+					"account": account,
+					"party_type": "Lead",
+					"party": "_ABR-NO-SUCH-LEAD",
+					"posting_date": nowdate(),
+					"reference_date": nowdate(),
+					"reference_number": "_ABR-PHASE3-PARTY",
+				},
+			)
+
 		bank_transaction.reload()
 		self.assertNotEqual(bank_transaction.status, "Reconciled")
 
@@ -580,6 +743,40 @@ class TestBankRecPhaseFourAPI(FrappeTestCase):
 		invalid_transaction.reload()
 		self.assertEqual(valid_transaction.status, "Reconciled")
 		self.assertNotEqual(invalid_transaction.status, "Reconciled")
+
+	def test_preview_cash_coding_rejects_reconciled_transaction(self):
+		bank_transaction = create_test_bank_transaction(
+			self.bank_account,
+			withdrawal=26,
+			reference_number="_ABR-PHASE4-PREVIEW",
+		)
+		account = self._ledger_account("Expense")
+		submit_cash_coding(
+			[
+				{
+					"bank_transaction_name": bank_transaction.name,
+					"account": account,
+					"posting_date": nowdate(),
+					"reference_date": nowdate(),
+					"reference_number": "_ABR-PHASE4-PREVIEW",
+				}
+			]
+		)
+
+		result = preview_cash_coding(
+			[
+				{
+					"bank_transaction_name": bank_transaction.name,
+					"account": account,
+					"posting_date": nowdate(),
+					"reference_date": nowdate(),
+					"reference_number": "_ABR-PHASE4-PREVIEW",
+				}
+			]
+		)
+
+		self.assertEqual(result["results"][0]["status"], "error")
+		self.assertIn("already reconciled", result["results"][0]["message"])
 
 
 class TestBankRecPhaseFiveAPI(FrappeTestCase):

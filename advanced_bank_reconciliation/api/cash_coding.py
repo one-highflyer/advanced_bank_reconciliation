@@ -9,6 +9,7 @@ from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_b
 from advanced_bank_reconciliation.api.bank_rec import _transaction_to_dto, get_transactions
 from advanced_bank_reconciliation.api.matching import _lock_bank_transaction
 from advanced_bank_reconciliation.api.permission import (
+	assert_party_access,
 	assert_bank_account_access,
 	assert_bank_transaction_access,
 	assert_company_access,
@@ -53,13 +54,21 @@ def _is_expected_row_exception(exc):
 
 def _row_exception_error(row, exc, title):
 	if _is_expected_row_exception(exc):
-		return _row_error(row, str(exc))
+		return _row_error(row, str(exc) or _("Unable to process this row."))
 
 	frappe.log_error(title=title, message=frappe.get_traceback())
 	return _row_error(row, _("Unexpected server error. Please try again."))
 
 
 def _row_success(row, transaction):
+	transaction.reload()
+	if (
+		transaction.status != "Reconciled"
+		or abs(flt(transaction.unallocated_amount)) > 0.01
+		or not transaction.get("payment_entries")
+	):
+		frappe.throw(_("Cash coding did not reconcile the bank transaction."))
+
 	voucher = None
 	for payment in transaction.get("payment_entries", []):
 		voucher = {
@@ -136,12 +145,16 @@ def preview_cash_coding(rows):
 	for row in rows:
 		try:
 			transaction = assert_bank_transaction_access(row.get("bank_transaction_name"))
+			transaction.reload()
+			if transaction.status == "Reconciled" or flt(transaction.unallocated_amount) <= 0:
+				frappe.throw(_("This bank transaction is already reconciled."))
 			company = transaction.company or frappe.get_cached_value(
 				"Bank Account",
 				transaction.bank_account,
 				"company",
 			)
 			assert_company_access(company)
+			assert_party_access(row.get("party_type"), row.get("party"))
 			account = _assert_account(row.get("account"), company)
 			if account.account_type in ["Receivable", "Payable"] and (
 				not row.get("party_type") or not row.get("party")
@@ -190,6 +203,7 @@ def submit_cash_coding(rows):
 				"company",
 			)
 			assert_company_access(company)
+			assert_party_access(row.get("party_type"), row.get("party"))
 			account = _assert_account(row.get("account"), company)
 			if account.account_type in ["Receivable", "Payable"] and (
 				not row.get("party_type") or not row.get("party")

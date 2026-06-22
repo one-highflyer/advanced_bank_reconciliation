@@ -30,21 +30,33 @@ const emit = defineEmits<{
 }>();
 
 const selectedKeys = ref<string[]>([]);
-const amounts = ref<Record<string, number>>({});
+const amounts = ref<Record<string, number | string | null>>({});
 
 const selectedCandidates = computed(() =>
   props.candidates.filter((candidate) => selectedKeys.value.includes(candidate.key))
 );
 
 function allocationAmount(candidate: MatchCandidate) {
-  return Number(amounts.value[candidate.key] ?? Math.abs(candidate.amount));
+  const value = amounts.value[candidate.key] ?? Math.abs(candidate.amount);
+  return Number(value);
 }
 
 const selectedTotal = computed(() =>
-  selectedCandidates.value.reduce(
-    (total, candidate) => total + Math.abs(allocationAmount(candidate)),
-    0
-  )
+  selectedCandidates.value.reduce((total, candidate) => {
+    const amount = allocationAmount(candidate);
+    return total + (Number.isFinite(amount) ? Math.abs(amount) : 0);
+  }, 0)
+);
+
+const invalidSelectedCandidates = computed(() =>
+  selectedCandidates.value.filter((candidate) => {
+    const amount = allocationAmount(candidate);
+    return !Number.isFinite(amount) || amount <= 0;
+  })
+);
+
+const canSubmit = computed(
+  () => Boolean(selectedCandidates.value.length) && !invalidSelectedCandidates.value.length
 );
 
 function confidenceTheme(confidence: MatchCandidate["confidence"]) {
@@ -199,6 +211,7 @@ watch(
                   v-model.number="amounts[candidate.key]"
                   class="h-9 w-28 rounded-md border border-bank-line px-2 text-right text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
                   type="number"
+                  min="0.01"
                   step="0.01"
                 />
               </td>
@@ -219,10 +232,16 @@ watch(
             <span class="font-semibold text-bank-ink">
               {{ formatMoney(selectedTotal, transaction.currency || currency) }}
             </span>
+            <span
+              v-if="invalidSelectedCandidates.length"
+              class="ml-2 font-medium text-red-700"
+            >
+              Enter positive allocation amounts.
+            </span>
           </div>
           <Button
             theme="blue"
-            :disabled="!selectedCandidates.length"
+            :disabled="!canSubmit"
             :loading="submitting"
             @click="submit"
           >

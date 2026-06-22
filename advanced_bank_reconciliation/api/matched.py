@@ -9,6 +9,7 @@ from advanced_bank_reconciliation.api.matching import as_bool, _linked_payment_d
 from advanced_bank_reconciliation.api.permission import (
 	assert_bank_account_access,
 	assert_bank_transaction_access,
+	log_unexpected_api_exception,
 	require_bank_rec_permission,
 )
 
@@ -28,6 +29,14 @@ def get_matched_transactions(bank_account, from_date=None, to_date=None):
 
 @frappe.whitelist()
 def unreconcile_transaction(bank_transaction_name, cancel_linked_documents=False):
+	try:
+		return _unreconcile_transaction(bank_transaction_name, cancel_linked_documents)
+	except Exception as exc:
+		log_unexpected_api_exception(exc, "Bank Rec unreconcile_transaction failed")
+		raise
+
+
+def _unreconcile_transaction(bank_transaction_name, cancel_linked_documents=False):
 	require_bank_rec_permission()
 	cancel_linked_documents = as_bool(cancel_linked_documents)
 	transaction = assert_bank_transaction_access(bank_transaction_name, ptype="write")

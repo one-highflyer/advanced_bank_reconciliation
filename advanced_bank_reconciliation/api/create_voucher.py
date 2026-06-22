@@ -15,8 +15,10 @@ from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_b
 from advanced_bank_reconciliation.api.bank_rec import _bank_account_to_dto, _transaction_to_dto
 from advanced_bank_reconciliation.api.matching import _linked_payment_dto, _lock_bank_transaction
 from advanced_bank_reconciliation.api.permission import (
+	assert_party_access,
 	assert_bank_transaction_access,
 	assert_company_access,
+	log_unexpected_api_exception,
 	require_bank_rec_permission,
 )
 
@@ -91,6 +93,7 @@ def _build_voucher(transaction, payload, allow_edit=False):
 	company = _get_company(transaction)
 	entry_type = _selected_entry_type(payload)
 	common = _common_kwargs(transaction, payload)
+	assert_party_access(common["party_type"], common["party"])
 
 	if entry_type == "Payment Entry":
 		if not common["party_type"] or not common["party"]:
@@ -234,6 +237,14 @@ def get_create_defaults(bank_transaction_name):
 
 @frappe.whitelist()
 def create_voucher_from_transaction(bank_transaction_name, payload):
+	try:
+		return _create_voucher_from_transaction(bank_transaction_name, payload)
+	except Exception as exc:
+		log_unexpected_api_exception(exc, "Bank Rec create_voucher_from_transaction failed")
+		raise
+
+
+def _create_voucher_from_transaction(bank_transaction_name, payload):
 	require_bank_rec_permission()
 	payload = _parse_payload(payload)
 	transaction = assert_bank_transaction_access(bank_transaction_name, ptype="write")
@@ -270,6 +281,14 @@ def create_voucher_from_transaction(bank_transaction_name, payload):
 
 @frappe.whitelist()
 def create_voucher_draft_from_transaction(bank_transaction_name, payload):
+	try:
+		return _create_voucher_draft_from_transaction(bank_transaction_name, payload)
+	except Exception as exc:
+		log_unexpected_api_exception(exc, "Bank Rec create_voucher_draft_from_transaction failed")
+		raise
+
+
+def _create_voucher_draft_from_transaction(bank_transaction_name, payload):
 	require_bank_rec_permission()
 	payload = _parse_payload(payload)
 	transaction = assert_bank_transaction_access(bank_transaction_name, ptype="write")

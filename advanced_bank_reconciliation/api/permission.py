@@ -19,6 +19,8 @@ ALLOWED_VOUCHER_DOCTYPES = frozenset(
 	}
 )
 
+ALLOWED_PARTY_TYPES = frozenset({"Customer", "Supplier", "Employee"})
+
 
 def has_bank_rec_permission(user=None):
 	user = user or frappe.session.user
@@ -34,6 +36,23 @@ def require_bank_rec_permission(user=None):
 	user = user or frappe.session.user
 	if not has_bank_rec_permission(user):
 		raise frappe.PermissionError(_("You are not permitted to use Bank Rec."))
+
+
+def is_expected_api_exception(exc):
+	expected = (frappe.ValidationError, frappe.PermissionError, frappe.DoesNotExistError)
+	link_validation_error = getattr(frappe, "LinkValidationError", None)
+	if link_validation_error:
+		expected = expected + (link_validation_error,)
+	return isinstance(exc, expected)
+
+
+def log_unexpected_api_exception(exc, title):
+	if is_expected_api_exception(exc):
+		return
+
+	frappe.db.rollback()
+	frappe.log_error(title=title, message=frappe.get_traceback())
+	frappe.db.commit()
 
 
 def get_allowed_company_names(user=None):
@@ -61,6 +80,24 @@ def assert_company_access(company, user=None):
 		raise frappe.PermissionError(_("You are not permitted to access company {0}.").format(company))
 
 	return company
+
+
+def assert_party_access(party_type=None, party=None, user=None):
+	user = user or frappe.session.user
+	require_bank_rec_permission(user)
+
+	if party_type and party_type not in ALLOWED_PARTY_TYPES:
+		frappe.throw(_("Party Type {0} is not supported in Bank Rec.").format(party_type))
+	if party and not party_type:
+		frappe.throw(_("Party Type is required when Party is set."))
+	if party_type and not party:
+		frappe.throw(_("Party is required when Party Type is set."))
+	if party_type and party:
+		doc = frappe.get_doc(party_type, party)
+		frappe.has_permission(party_type, "read", doc=doc, user=user, throw=True)
+		return doc
+
+	return None
 
 
 def assert_bank_account_access(bank_account, user=None):

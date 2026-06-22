@@ -10,8 +10,10 @@ from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_b
 )
 from advanced_bank_reconciliation.api.bank_rec import _transaction_to_dto
 from advanced_bank_reconciliation.api.permission import (
+	assert_party_access,
 	assert_bank_transaction_access,
 	assert_voucher_access,
+	log_unexpected_api_exception,
 	require_bank_rec_permission,
 )
 
@@ -24,9 +26,6 @@ DEFAULT_MATCH_DOCUMENT_TYPES = [
 	"unpaid_sales_invoice",
 	"unpaid_purchase_invoice",
 ]
-
-PARTY_TYPES = frozenset({"Customer", "Supplier", "Employee"})
-
 
 def as_bool(value):
 	if isinstance(value, bool):
@@ -211,6 +210,14 @@ def get_match_candidates(
 
 @frappe.whitelist()
 def submit_match(bank_transaction_name, vouchers):
+	try:
+		return _submit_match(bank_transaction_name, vouchers)
+	except Exception as exc:
+		log_unexpected_api_exception(exc, "Bank Rec submit_match failed")
+		raise
+
+
+def _submit_match(bank_transaction_name, vouchers):
 	require_bank_rec_permission()
 	transaction = assert_bank_transaction_access(bank_transaction_name, ptype="write")
 	_lock_bank_transaction(transaction.name)
@@ -270,12 +277,7 @@ def update_transaction_metadata(
 	_lock_bank_transaction(transaction.name)
 	transaction.reload()
 
-	if party_type and party_type not in PARTY_TYPES:
-		frappe.throw(_("Party Type {0} is not supported in Bank Rec.").format(party_type))
-	if party_type and party:
-		frappe.has_permission(party_type, "read", doc=frappe.get_doc(party_type, party), throw=True)
-	if party and not party_type:
-		frappe.throw(_("Party Type is required when Party is set."))
+	assert_party_access(party_type, party)
 
 	transaction.reference_number = reference_number or ""
 	transaction.party_type = party_type or ""
