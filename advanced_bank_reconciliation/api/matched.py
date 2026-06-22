@@ -32,7 +32,7 @@ def unreconcile_transaction(bank_transaction_name, cancel_linked_documents=False
 	try:
 		return _unreconcile_transaction(bank_transaction_name, cancel_linked_documents)
 	except Exception as exc:
-		log_unexpected_api_exception(exc, "Bank Rec unreconcile_transaction failed")
+		log_unexpected_api_exception(exc, "Bank Rec unreconcile_transaction failed", rollback=True)
 		raise
 
 

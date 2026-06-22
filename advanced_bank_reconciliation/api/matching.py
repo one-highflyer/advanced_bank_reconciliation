@@ -213,7 +213,7 @@ def submit_match(bank_transaction_name, vouchers):
 	try:
 		return _submit_match(bank_transaction_name, vouchers)
 	except Exception as exc:
-		log_unexpected_api_exception(exc, "Bank Rec submit_match failed")
+		log_unexpected_api_exception(exc, "Bank Rec submit_match failed", rollback=True)
 		raise
 
 

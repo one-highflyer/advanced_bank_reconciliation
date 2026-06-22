@@ -313,6 +313,7 @@ class TestBankRecPhaseTwoAPI(FrappeTestCase):
 		bank_transaction.reload()
 		self.assertNotEqual(bank_transaction.status, "Reconciled")
 		self.assertAlmostEqual(flt(bank_transaction.unallocated_amount), 100.0, places=2)
+		self.assertFalse(bank_transaction.payment_entries)
 
 	def test_duplicate_submit_returns_idempotent_response_for_same_voucher(self):
 		bank_transaction, sales_invoice = self._sales_invoice_match_fixture(amount=75)
@@ -381,24 +382,26 @@ class TestBankRecMutationGuardsAPI(FrappeTestCase):
 			["Sales User"],
 		)
 		_ensure_company_user_permission(cls.accounts_user, TEST_COMPANY)
+		_ensure_company_user_permission(cls.disallowed_user, TEST_COMPANY)
 		frappe.db.commit()
 
-	def _ledger_account(self, root_type):
+	def _ledger_account(self, root_type, company=TEST_COMPANY):
 		account = frappe.db.get_value(
 			"Account",
 			{
-				"company": TEST_COMPANY,
+				"company": company,
 				"root_type": root_type,
 				"is_group": 0,
 				"disabled": 0,
 			},
 			"name",
 		)
-		self.assertTrue(account, "Expected a ledger account for {0}".format(root_type))
+		self.assertTrue(account, "Expected a ledger account for {0} in {1}".format(root_type, company))
 		return account
 
 	def _mutation_calls(self, bank_transaction):
-		account = self._ledger_account("Expense")
+		company = frappe.db.get_value("Bank Account", bank_transaction.bank_account, "company")
+		account = self._ledger_account("Expense", company=company)
 		return {
 			"submit_match": lambda: submit_match(
 				bank_transaction.name,
@@ -474,7 +477,9 @@ class TestBankRecMutationGuardsAPI(FrappeTestCase):
 				with self.subTest(endpoint=name):
 					if name == "submit_cash_coding":
 						result = call()
+						self.assertEqual(result["summary"]["success"], 0)
 						self.assertEqual(result["summary"]["error"], 1)
+						self.assertEqual(result["results"][0]["status"], "error")
 						self.assertTrue(result["results"][0]["message"])
 					else:
 						self.assertRaises(frappe.PermissionError, call)
@@ -593,6 +598,7 @@ class TestBankRecPhaseThreeAPI(FrappeTestCase):
 		self.assertEqual(payment_entry.party, TEST_CUSTOMER)
 		bank_transaction.reload()
 		self.assertNotEqual(bank_transaction.status, "Reconciled")
+		self.assertFalse(bank_transaction.payment_entries)
 
 	def test_create_voucher_rejects_unsupported_party_type(self):
 		bank_transaction = create_test_bank_transaction(
@@ -617,6 +623,7 @@ class TestBankRecPhaseThreeAPI(FrappeTestCase):
 
 		bank_transaction.reload()
 		self.assertNotEqual(bank_transaction.status, "Reconciled")
+		self.assertFalse(bank_transaction.payment_entries)
 
 	def test_save_as_rule_requires_title_before_voucher_creation(self):
 		bank_transaction = create_test_bank_transaction(
@@ -751,7 +758,7 @@ class TestBankRecPhaseFourAPI(FrappeTestCase):
 			reference_number="_ABR-PHASE4-PREVIEW",
 		)
 		account = self._ledger_account("Expense")
-		submit_cash_coding(
+		setup_result = submit_cash_coding(
 			[
 				{
 					"bank_transaction_name": bank_transaction.name,
@@ -762,6 +769,9 @@ class TestBankRecPhaseFourAPI(FrappeTestCase):
 				}
 			]
 		)
+		self.assertEqual(setup_result["summary"]["success"], 1, setup_result)
+		bank_transaction.reload()
+		self.assertEqual(bank_transaction.status, "Reconciled")
 
 		result = preview_cash_coding(
 			[

@@ -42,17 +42,19 @@ def is_expected_api_exception(exc):
 	expected = (frappe.ValidationError, frappe.PermissionError, frappe.DoesNotExistError)
 	link_validation_error = getattr(frappe, "LinkValidationError", None)
 	if link_validation_error:
-		expected = expected + (link_validation_error,)
+		expected = (*expected, link_validation_error)
 	return isinstance(exc, expected)
 
 
-def log_unexpected_api_exception(exc, title):
+def log_unexpected_api_exception(exc, title, rollback=False):
 	if is_expected_api_exception(exc):
 		return
 
-	frappe.db.rollback()
+	if rollback:
+		frappe.db.rollback()
 	frappe.log_error(title=title, message=frappe.get_traceback())
-	frappe.db.commit()
+	if rollback:
+		frappe.db.commit()
 
 
 def get_allowed_company_names(user=None):
