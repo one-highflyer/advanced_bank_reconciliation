@@ -144,6 +144,7 @@ class TestBankRecPhaseOneAPI(FrappeTestCase):
 		self.assertEqual(boot["default_route"], "/bank-rec/reconcile")
 		self.assertIn("settings", boot)
 		self.assertIn("csrf_token", boot)
+		self.assertEqual(boot["allowed_companies"], [TEST_COMPANY])
 
 	def test_bank_accounts_are_limited_to_permitted_company(self):
 		with self.set_user(self.accounts_user):
@@ -152,6 +153,22 @@ class TestBankRecPhaseOneAPI(FrappeTestCase):
 		names = {row["name"] for row in accounts}
 		self.assertIn(self.bank_account_a, names)
 		self.assertNotIn(self.bank_account_b, names)
+
+	def test_bank_accounts_can_be_filtered_by_permitted_company(self):
+		with self.set_user(self.accounts_user):
+			accounts = get_bank_accounts(company=TEST_COMPANY)
+
+		names = {row["name"] for row in accounts}
+		self.assertIn(self.bank_account_a, names)
+		self.assertNotIn(self.bank_account_b, names)
+
+	def test_bank_account_filter_rejects_unpermitted_company(self):
+		with self.set_user(self.accounts_user):
+			self.assertRaises(
+				frappe.PermissionError,
+				get_bank_accounts,
+				company=TEST_COMPANY_2,
+			)
 
 	def test_cross_company_bank_account_is_rejected(self):
 		with self.set_user(self.accounts_user):

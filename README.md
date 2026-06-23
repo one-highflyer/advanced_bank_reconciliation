@@ -88,6 +88,11 @@ The system automatically:
 
 ## Installation
 
+### Frontend Build Requirement
+
+The modern Bank Rec route app uses frontend packages that require Node.js 20.19.0 or newer.
+If your deployment builder defaults to Node 18, select a custom Node.js 20.19.0+ runtime before running `bench get-app`, `yarn install`, or `bench build`.
+
 ```bash
 # Get the app
 bench get-app https://github.com/one-highflyer/advanced_bank_reconciliation

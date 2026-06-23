@@ -95,6 +95,24 @@ def _bank_account_to_dto(row):
 	}
 
 
+def _get_bank_account_companies():
+	allowed_companies = get_allowed_company_names()
+	if not allowed_companies:
+		return []
+
+	rows = frappe.get_list(
+		"Bank Account",
+		filters={
+			"is_company_account": 1,
+			"company": ["in", allowed_companies],
+		},
+		pluck="company",
+		group_by="company",
+		order_by="company asc",
+	)
+	return sorted({company for company in rows if company})
+
+
 def _get_filtered_transactions(bank_account, from_date=None, to_date=None, status="unreconciled"):
 	assert_bank_account_access(bank_account)
 
@@ -127,6 +145,7 @@ def get_boot():
 		"lang": frappe.local.lang,
 		"dir": "rtl" if is_rtl() else "ltr",
 		"allowed_roles": sorted(frappe.get_roles()),
+		"allowed_companies": _get_bank_account_companies(),
 		"settings": get_abr_default_settings(),
 		"accounting_dimensions": get_accounting_dimensions_for_dialog(),
 	}

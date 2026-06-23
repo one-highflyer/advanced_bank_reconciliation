@@ -80,10 +80,17 @@ async function selectTransaction(name: string) {
 }
 
 async function updateFilter(
-  field: "selectedBankAccount" | "fromDate" | "toDate" | "transactionStatus",
+  field:
+    | "selectedCompany"
+    | "selectedBankAccount"
+    | "fromDate"
+    | "toDate"
+    | "transactionStatus",
   value: string
 ) {
-  if (field === "transactionStatus") {
+  if (field === "selectedCompany") {
+    await store.changeCompany(value);
+  } else if (field === "transactionStatus") {
     store.transactionStatus = value as TransactionStatusFilter;
   } else {
     store[field] = value;
@@ -180,6 +187,8 @@ watch(
 
     <template v-else>
       <BankAccountFilters
+        :companies="store.allowedCompanies"
+        :selected-company="store.selectedCompany"
         :bank-accounts="store.bankAccounts"
         :selected-bank-account="store.selectedBankAccount"
         :from-date="store.fromDate"
@@ -189,6 +198,7 @@ watch(
         show-statement-balance
         show-status
         :loading="pageLoading || store.loading.transactions || store.loading.summary"
+        @update:selected-company="updateFilter('selectedCompany', $event)"
         @update:selected-bank-account="updateFilter('selectedBankAccount', $event)"
         @update:from-date="updateFilter('fromDate', $event)"
         @update:to-date="updateFilter('toDate', $event)"

@@ -4,6 +4,8 @@ import type { BankAccount, TransactionStatusFilter } from "@/types/bankRec";
 import RefreshCcw from "~icons/lucide/refresh-cw";
 
 const props = defineProps<{
+  companies: string[];
+  selectedCompany: string;
   bankAccounts: BankAccount[];
   selectedBankAccount: string;
   fromDate: string;
@@ -16,6 +18,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
+  "update:selectedCompany": [value: string];
   "update:selectedBankAccount": [value: string];
   "update:fromDate": [value: string];
   "update:toDate": [value: string];
@@ -24,8 +27,20 @@ const emit = defineEmits<{
   refresh: [];
 }>();
 
+const companyOptions = computed(() => [
+  { label: "Select company", value: "", disabled: true },
+  ...props.companies.map((company) => ({
+    label: company,
+    value: company,
+  })),
+]);
+
 const bankAccountOptions = computed(() => [
-  { label: "Select bank account", value: "", disabled: true },
+  {
+    label: props.selectedCompany ? "Select bank account" : "Select company first",
+    value: "",
+    disabled: true,
+  },
   ...props.bankAccounts.map((account) => ({
     label: account.account_name || account.name,
     value: account.name,
@@ -50,14 +65,26 @@ function updateStatementBalance(value: unknown) {
   <section class="rounded-lg border border-bank-line bg-white p-3 shadow-sm">
     <div class="flex flex-wrap items-end gap-3">
       <FormControl
-        class="min-w-[260px] flex-1"
+        class="min-w-[220px] flex-1"
+        type="select"
+        label="Company"
+        variant="outline"
+        size="md"
+        :options="companyOptions"
+        :model-value="selectedCompany"
+        :disabled="loading || !companies.length"
+        @update:model-value="emit('update:selectedCompany', String($event || ''))"
+      />
+
+      <FormControl
+        class="min-w-[260px] flex-[1.25]"
         type="select"
         label="Bank account"
         variant="outline"
         size="md"
         :options="bankAccountOptions"
         :model-value="selectedBankAccount"
-        :disabled="loading || !bankAccounts.length"
+        :disabled="loading || !selectedCompany || !bankAccounts.length"
         @update:model-value="emit('update:selectedBankAccount', String($event || ''))"
       />
 
