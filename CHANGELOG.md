@@ -1,3 +1,22 @@
+# [1.8.0](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.14...v1.8.0) (2026-06-23)
+
+
+### Bug Fixes
+
+* **bank-rec:** address PR review feedback ([7bd1ae2](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/7bd1ae2a432e3c62621190a07514c28891c0351d))
+* **bank-rec:** cover review follow-ups ([8677b50](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/8677b50088756c405c7375c382b768e038a75739))
+* **bank-rec:** format cash coding route title ([deaff68](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/deaff689441d2ecbee0fd04878aec04c105bc757))
+* **bank-rec:** harden mutation guards ([ed3d30a](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/ed3d30a0ab630612faace26123c588dd96f7ab2e))
+* **bank-rec:** isolate mutation guard checks ([ca8c256](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/ca8c25663dc788acaae149e7a28f12f0285f2740))
+
+
+### Features
+
+* add modern bank rec workspace ([7a4917f](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/7a4917ff6c1639e3feeb1c08141e6c63691c6eca))
+* **bank-rec:** add route APIs and tests ([e055db0](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/e055db0f7cfe010cd86494c95df5e7538fb3885d))
+* **bank-rec:** add Vue reconciliation app ([b69a6bb](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/b69a6bb8afbddc63f449e0245ab23d01517becbc))
+* **bank-rec:** harden matched review workflow ([906deb4](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/906deb4c15aaf2f12fcee5e68fea79f88945a226))
+
 ## [1.7.14](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.13...v1.7.14) (2026-06-09)
 
 
