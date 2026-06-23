@@ -79,6 +79,7 @@ function windowBoot(): BootData | null {
     lang: window.lang || "en",
     dir: window.dir || "ltr",
     allowed_roles: window.allowed_roles || [],
+    allowed_companies: window.allowed_companies || [],
     settings: window.settings || {},
     accounting_dimensions: window.accounting_dimensions || [],
   };
@@ -87,6 +88,7 @@ function windowBoot(): BootData | null {
 export const useBankRecStore = defineStore("bankRec", {
   state: () => ({
     boot: null as BootData | null,
+    selectedCompany: "",
     bankAccounts: [] as BankAccount[],
     selectedBankAccount: "",
     fromDate: monthStartIso(),
@@ -139,6 +141,9 @@ export const useBankRecStore = defineStore("bankRec", {
   }),
 
   getters: {
+    allowedCompanies(state): string[] {
+      return state.boot?.allowed_companies || [];
+    },
     selectedBankAccountDoc(state): BankAccount | undefined {
       return state.bankAccounts.find(
         (account) => account.name === state.selectedBankAccount
@@ -156,6 +161,13 @@ export const useBankRecStore = defineStore("bankRec", {
 
   actions: {
     applyQuery(query: LocationQuery) {
+      const queryCompany = stringQuery(query.company);
+      const queryBankAccount = stringQuery(query.bank_account);
+      if (queryCompany) {
+        this.selectedCompany = queryCompany;
+      } else if (queryBankAccount) {
+        this.selectedCompany = "";
+      }
       this.selectedBankAccount = stringQuery(
         query.bank_account,
         this.selectedBankAccount
@@ -178,6 +190,7 @@ export const useBankRecStore = defineStore("bankRec", {
 
     queryState() {
       return {
+        company: this.selectedCompany || undefined,
         bank_account: this.selectedBankAccount || undefined,
         from_date: this.fromDate || undefined,
         to_date: this.toDate || undefined,
@@ -209,12 +222,52 @@ export const useBankRecStore = defineStore("bankRec", {
       }
     },
 
+    ensureSelectedCompany() {
+      const allowedCompanies = this.allowedCompanies;
+      if (
+        this.selectedCompany &&
+        allowedCompanies.includes(this.selectedCompany)
+      ) {
+        return;
+      }
+
+      this.selectedCompany = allowedCompanies[0] || "";
+    },
+
     async loadBankAccounts() {
       this.loading.bankAccounts = true;
       this.errors.bankAccounts = "";
 
       try {
-        this.bankAccounts = await getBankAccounts();
+        const resolveCompanyFromAccount =
+          Boolean(this.selectedBankAccount) && !this.selectedCompany;
+
+        if (!resolveCompanyFromAccount) {
+          this.ensureSelectedCompany();
+        }
+
+        this.bankAccounts = await getBankAccounts(
+          resolveCompanyFromAccount ? undefined : this.selectedCompany
+        );
+
+        const selectedAccount = this.bankAccounts.find(
+          (account) => account.name === this.selectedBankAccount
+        );
+        if (selectedAccount && !this.selectedCompany) {
+          this.selectedCompany = selectedAccount.company;
+          this.bankAccounts = await getBankAccounts(this.selectedCompany);
+        }
+
+        if (resolveCompanyFromAccount && !selectedAccount) {
+          this.selectedBankAccount = "";
+          this.selectedTransactionName = "";
+          this.selectedContext = null;
+          this.ensureSelectedCompany();
+          this.bankAccounts = this.selectedCompany
+            ? await getBankAccounts(this.selectedCompany)
+            : [];
+        }
+
         if (
           this.selectedBankAccount &&
           !this.bankAccounts.some(
@@ -223,6 +276,7 @@ export const useBankRecStore = defineStore("bankRec", {
         ) {
           this.selectedBankAccount = "";
           this.selectedTransactionName = "";
+          this.selectedContext = null;
         }
         if (!this.selectedBankAccount && this.bankAccounts.length) {
           this.selectedBankAccount = this.bankAccounts[0].name;
@@ -235,6 +289,23 @@ export const useBankRecStore = defineStore("bankRec", {
       } finally {
         this.loading.bankAccounts = false;
       }
+    },
+
+    async changeCompany(company: string) {
+      if (this.selectedCompany === company) {
+        return;
+      }
+
+      this.selectedCompany = company;
+      this.bankAccounts = [];
+      this.selectedBankAccount = "";
+      this.selectedTransactionName = "";
+      this.selectedContext = null;
+      this.transactions = [];
+      this.summary = null;
+      this.matchCandidates = [];
+      this.createDefaults = null;
+      await this.loadBankAccounts();
     },
 
     async loadTransactions() {

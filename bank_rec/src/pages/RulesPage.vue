@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import BankAccountFilters from "@/components/BankAccountFilters.vue";
 import EmptyState from "@/components/EmptyState.vue";
@@ -40,6 +40,7 @@ async function replaceQuery() {
   await router.replace({
     path: route.path,
     query: {
+      company: store.selectedCompany || undefined,
       bank_account: selectedBankAccount.value || undefined,
     },
   });
@@ -50,24 +51,36 @@ async function loadRules() {
   await replaceQuery();
 }
 
+async function updateCompany(company: string) {
+  await store.changeCompany(company);
+  selectedBankAccount.value = store.selectedBankAccount;
+  await loadRules();
+}
+
+async function updateBankAccount(bankAccount: string) {
+  selectedBankAccount.value = bankAccount;
+  await loadRules();
+}
+
 onMounted(async () => {
   await store.initialize(route.query);
   selectedBankAccount.value = store.selectedBankAccount;
   await loadRules();
 });
-
-watch(selectedBankAccount, loadRules);
 </script>
 
 <template>
   <div class="flex min-h-0 w-full flex-col gap-4">
     <BankAccountFilters
+      :companies="store.allowedCompanies"
+      :selected-company="store.selectedCompany"
       :bank-accounts="store.bankAccounts"
       :selected-bank-account="selectedBankAccount"
       :from-date="store.fromDate"
       :to-date="store.toDate"
       :loading="store.loading.bankAccounts || store.loading.rules"
-      @update:selected-bank-account="selectedBankAccount = $event"
+      @update:selected-company="updateCompany"
+      @update:selected-bank-account="updateBankAccount"
       @update:from-date="store.fromDate = $event"
       @update:to-date="store.toDate = $event"
       @refresh="loadRules"

@@ -80,6 +80,7 @@ async function replaceQuery() {
   await router.replace({
     path: route.path,
     query: {
+      company: store.selectedCompany || undefined,
       bank_account: store.selectedBankAccount || undefined,
       from_date: store.fromDate || undefined,
       to_date: store.toDate || undefined,
@@ -90,6 +91,9 @@ async function replaceQuery() {
 
 async function loadRows() {
   if (!store.selectedBankAccount) {
+    rows.value = [];
+    selectedName.value = "";
+    await replaceQuery();
     return;
   }
 
@@ -131,10 +135,14 @@ async function loadRows() {
 }
 
 async function updateFilter(
-  field: "selectedBankAccount" | "fromDate" | "toDate",
+  field: "selectedCompany" | "selectedBankAccount" | "fromDate" | "toDate",
   value: string
 ) {
-  store[field] = value;
+  if (field === "selectedCompany") {
+    await store.changeCompany(value);
+  } else {
+    store[field] = value;
+  }
   selectedName.value = "";
   await loadRows();
 }
@@ -187,11 +195,14 @@ onMounted(async () => {
 <template>
   <div class="flex min-h-0 w-full flex-1 flex-col gap-4 lg:h-[calc(100vh-103px)] lg:overflow-hidden">
     <BankAccountFilters
+      :companies="store.allowedCompanies"
+      :selected-company="store.selectedCompany"
       :bank-accounts="store.bankAccounts"
       :selected-bank-account="store.selectedBankAccount"
       :from-date="store.fromDate"
       :to-date="store.toDate"
       :loading="loading || Boolean(submittingName)"
+      @update:selected-company="updateFilter('selectedCompany', $event)"
       @update:selected-bank-account="updateFilter('selectedBankAccount', $event)"
       @update:from-date="updateFilter('fromDate', $event)"
       @update:to-date="updateFilter('toDate', $event)"

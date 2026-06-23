@@ -6,6 +6,7 @@ export interface BootData {
   lang: string;
   dir: "ltr" | "rtl";
   allowed_roles: string[];
+  allowed_companies: string[];
   settings: Record<string, unknown>;
   accounting_dimensions: Record<string, unknown>[];
 }
