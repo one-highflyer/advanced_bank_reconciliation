@@ -1,3 +1,10 @@
+## [1.8.1](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.8.0...v1.8.1) (2026-06-23)
+
+
+### Bug Fixes
+
+* **bank-rec:** build route app during deployment ([b448e37](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/b448e3724654373123dce70deec1756f855532ba))
+
 # [1.8.0](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.7.14...v1.8.0) (2026-06-23)
 
 
