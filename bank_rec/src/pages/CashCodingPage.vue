@@ -104,6 +104,7 @@ async function loadRows(options: { confirmDiscard?: boolean } = {}) {
     rows.value = [];
     selected.value = [];
     rowErrors.value = {};
+    clearDirty();
     await replaceQuery();
     return;
   }
