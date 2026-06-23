@@ -428,7 +428,7 @@ export const useBankRecStore = defineStore("bankRec", {
     },
 
     async submitSelectedMatch(vouchers: MatchVoucherSelection[]) {
-      if (!this.selectedTransactionName) {
+      if (!this.selectedTransactionName || this.loading.submitMatch) {
         return null;
       }
 

@@ -290,6 +290,65 @@ class TestBankRecPhaseTwoAPI(FrappeTestCase):
 				],
 			)
 
+	def test_submit_match_rejects_empty_selection(self):
+		bank_transaction = create_test_bank_transaction(
+			self.bank_account_a,
+			deposit=25,
+			reference_number="_ABR-PHASE2-EMPTY",
+		)
+
+		with self.assertRaises(frappe.ValidationError):
+			submit_match(bank_transaction.name, [])
+
+		bank_transaction.reload()
+		self.assertNotEqual(bank_transaction.status, "Reconciled")
+		self.assertAlmostEqual(flt(bank_transaction.unallocated_amount), 25.0, places=2)
+		self.assertFalse(bank_transaction.payment_entries)
+
+	def test_submit_match_rejects_zero_allocation_amount(self):
+		bank_transaction, sales_invoice = self._sales_invoice_match_fixture(amount=35)
+
+		with self.assertRaises(frappe.ValidationError):
+			submit_match(
+				bank_transaction.name,
+				[
+					{
+						"voucher_type": "Sales Invoice",
+						"voucher_name": sales_invoice.name,
+						"amount": 0,
+					}
+				],
+			)
+
+		bank_transaction.reload()
+		self.assertNotEqual(bank_transaction.status, "Reconciled")
+		self.assertAlmostEqual(flt(bank_transaction.unallocated_amount), 35.0, places=2)
+		self.assertFalse(bank_transaction.payment_entries)
+
+	def test_submit_match_rejects_disallowed_voucher_doctype(self):
+		bank_transaction = create_test_bank_transaction(
+			self.bank_account_a,
+			deposit=30,
+			reference_number="_ABR-PHASE2-DOCTYPE",
+		)
+
+		with self.assertRaises(frappe.PermissionError):
+			submit_match(
+				bank_transaction.name,
+				[
+					{
+						"voucher_type": "GL Entry",
+						"voucher_name": "_ABR-NO-SUCH-GL",
+						"amount": 1,
+					}
+				],
+			)
+
+		bank_transaction.reload()
+		self.assertNotEqual(bank_transaction.status, "Reconciled")
+		self.assertAlmostEqual(flt(bank_transaction.unallocated_amount), 30.0, places=2)
+		self.assertFalse(bank_transaction.payment_entries)
+
 	def test_submit_match_rejects_over_allocation(self):
 		bank_transaction = create_test_bank_transaction(
 			self.bank_account_a,
@@ -625,6 +684,38 @@ class TestBankRecPhaseThreeAPI(FrappeTestCase):
 		self.assertNotEqual(bank_transaction.status, "Reconciled")
 		self.assertFalse(bank_transaction.payment_entries)
 
+	def test_save_as_rule_creates_rule_after_voucher_creation(self):
+		bank_transaction = create_test_bank_transaction(
+			self.bank_account,
+			withdrawal=38,
+			reference_number="_ABR-PHASE3-RULE-SUCCESS",
+		)
+		account = self._ledger_account("Expense")
+		rule_title = "_ABR Phase 3 Rule {0}".format(bank_transaction.name)
+
+		result = create_voucher_from_transaction(
+			bank_transaction.name,
+			{
+				"account": account,
+				"posting_date": nowdate(),
+				"reference_date": nowdate(),
+				"reference_number": "_ABR-PHASE3-RULE-SUCCESS",
+				"save_as_rule": True,
+				"rule_title": rule_title,
+			},
+		)
+
+		self.assertEqual(result["status"], "Reconciled")
+		self.assertTrue(result["rule"]["name"])
+		rule = frappe.get_doc("ABR Bank Rule", result["rule"]["name"])
+		self.assertEqual(rule.title, rule_title)
+		self.assertEqual(rule.bank_account, self.bank_account)
+		self.assertEqual(rule.entry_type, "Journal Entry")
+		self.assertEqual(rule.account, account)
+		self.assertTrue(rule.conditions)
+		bank_transaction.reload()
+		self.assertEqual(bank_transaction.status, "Reconciled")
+
 	def test_save_as_rule_requires_title_before_voucher_creation(self):
 		bank_transaction = create_test_bank_transaction(
 			self.bank_account,
@@ -827,6 +918,41 @@ class TestBankRecPhaseFiveAPI(FrappeTestCase):
 		)
 		return bank_transaction, result["voucher_name"]
 
+	def _submitted_bank_journal_entry(self, amount=100):
+		bank_account = frappe.db.get_value("Bank Account", self.bank_account, "account")
+		expense_account = self._ledger_account("Expense")
+		cost_center = frappe.db.get_value(
+			"Cost Center",
+			{"company": TEST_COMPANY, "is_group": 0},
+			"name",
+		)
+		journal_entry = frappe.get_doc(
+			{
+				"doctype": "Journal Entry",
+				"voucher_type": "Bank Entry",
+				"company": TEST_COMPANY,
+				"posting_date": nowdate(),
+				"cheque_no": "_ABR-PHASE5-SHARED",
+				"cheque_date": nowdate(),
+				"accounts": [
+					{
+						"account": expense_account,
+						"debit_in_account_currency": amount,
+						"debit": amount,
+						"cost_center": cost_center,
+					},
+					{
+						"account": bank_account,
+						"credit_in_account_currency": amount,
+						"credit": amount,
+					},
+				],
+			}
+		)
+		journal_entry.insert()
+		journal_entry.submit()
+		return journal_entry
+
 	def test_matched_transactions_list_reconciled_rows(self):
 		bank_transaction, _journal_entry = self._matched_journal_entry_fixture()
 
@@ -893,6 +1019,52 @@ class TestBankRecPhaseFiveAPI(FrappeTestCase):
 		self.assertEqual(journal_entry.docstatus, 1)
 		bank_transaction.reload()
 		self.assertFalse(bank_transaction.payment_entries)
+
+	def test_unreconcile_does_not_cancel_document_still_allocated_elsewhere(self):
+		journal_entry = self._submitted_bank_journal_entry(amount=100)
+		first_transaction = create_test_bank_transaction(
+			self.bank_account,
+			withdrawal=40,
+			reference_number="_ABR-PHASE5-SHARED-1",
+		)
+		second_transaction = create_test_bank_transaction(
+			self.bank_account,
+			withdrawal=60,
+			reference_number="_ABR-PHASE5-SHARED-2",
+		)
+
+		submit_match(
+			first_transaction.name,
+			[
+				{
+					"voucher_type": "Journal Entry",
+					"voucher_name": journal_entry.name,
+					"amount": 40,
+				}
+			],
+		)
+		submit_match(
+			second_transaction.name,
+			[
+				{
+					"voucher_type": "Journal Entry",
+					"voucher_name": journal_entry.name,
+					"amount": 60,
+				}
+			],
+		)
+
+		unreconcile_transaction(first_transaction.name, cancel_linked_documents=True)
+
+		journal_entry.reload()
+		first_transaction.reload()
+		second_transaction.reload()
+		self.assertEqual(journal_entry.docstatus, 1)
+		self.assertFalse(first_transaction.payment_entries)
+		self.assertEqual(second_transaction.status, "Reconciled")
+		self.assertTrue(
+			any(row.payment_entry == journal_entry.name for row in second_transaction.payment_entries)
+		)
 
 	def test_unreconcile_can_cancel_linked_journal_entry(self):
 		bank_transaction, journal_entry_name = self._matched_journal_entry_fixture(amount=34)

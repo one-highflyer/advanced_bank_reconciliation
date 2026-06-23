@@ -1,12 +1,31 @@
+function padDatePart(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function localDateIso(date: Date) {
+  return [
+    date.getFullYear(),
+    padDatePart(date.getMonth() + 1),
+    padDatePart(date.getDate()),
+  ].join("-");
+}
+
+function parseDisplayDate(value: string) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-").map(Number);
+    return new Date(year, month - 1, day);
+  }
+
+  return new Date(value);
+}
+
 export function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateIso(new Date());
 }
 
 export function monthStartIso() {
   const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), 1)
-    .toISOString()
-    .slice(0, 10);
+  return localDateIso(new Date(now.getFullYear(), now.getMonth(), 1));
 }
 
 export function formatDate(value?: string) {
@@ -14,7 +33,7 @@ export function formatDate(value?: string) {
     return "Not set";
   }
 
-  const date = new Date(value);
+  const date = parseDisplayDate(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }

@@ -81,7 +81,12 @@ function getServerMessage(payload: FrappeResponse<unknown>) {
   }
 
   if (payload.exc_type) {
-    return payload.exc_type;
+    const exceptionName = payload.exc_type.split(".").pop() || "";
+    const label = exceptionName
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/Exception$/, "Error")
+      .trim();
+    return label || "The server returned an error.";
   }
 
   return "The server returned an error.";

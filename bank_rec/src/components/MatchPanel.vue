@@ -83,6 +83,10 @@ function voucherUrl(candidate: MatchCandidate) {
 }
 
 function submit() {
+  if (!canSubmit.value || props.submitting) {
+    return;
+  }
+
   const vouchers = selectedCandidates.value.map((candidate) => ({
     voucher_type: candidate.voucher_type,
     voucher_name: candidate.voucher_name,
@@ -241,7 +245,7 @@ watch(
           </div>
           <Button
             theme="blue"
-            :disabled="!canSubmit"
+            :disabled="!canSubmit || submitting"
             :loading="submitting"
             @click="submit"
           >
