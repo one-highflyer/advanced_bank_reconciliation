@@ -6,6 +6,20 @@ app_email = "hello@highflyerglobal.com"
 app_license = "gpl-3.0"
 # required_apps = []
 
+add_to_apps_screen = [
+    {
+        "name": "bank_rec",
+        "title": "Bank Rec",
+        "route": "/bank-rec",
+        "has_permission": "advanced_bank_reconciliation.api.permission.has_bank_rec_permission",
+    }
+]
+
+website_route_rules = [
+    {"from_route": "/bank-rec/<path:app_path>", "to_route": "bank_rec"},
+    {"from_route": "/bank-rec", "to_route": "bank_rec"},
+]
+
 # Includes in <head>
 # ------------------
 

@@ -7,3 +7,7 @@ node_modules
 __pycache__
 
 advanced_bank_reconciliation/public/dist
+advanced_bank_reconciliation/public/bank_rec
+advanced_bank_reconciliation/www/bank_rec/index.html
+bank_rec/auto-imports.d.ts
+bank_rec/components.d.ts

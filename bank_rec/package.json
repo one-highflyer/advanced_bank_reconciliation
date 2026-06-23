@@ -1,0 +1,29 @@
+{
+  "name": "advanced-bank-reconciliation-bank-rec",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "serve": "vite preview"
+  },
+  "dependencies": {
+    "@vitejs/plugin-vue": "^4.2.3",
+    "frappe-ui": "1.0.0-beta.3",
+    "pinia": "^2.0.33",
+    "vue": "^3.5.14",
+    "vue-router": "^4.2.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "autoprefixer": "^10.4.13",
+    "postcss": "^8.4.5",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.0.2",
+    "vite": "^4.4.9"
+  },
+  "resolutions": {
+    "cheerio": "1.0.0-rc.12"
+  }
+}

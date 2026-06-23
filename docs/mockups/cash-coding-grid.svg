@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="920" viewBox="0 0 1440 920">
+  <rect width="1440" height="920" fill="#f7f8fa"/>
+  <rect x="0" y="0" width="1440" height="64" fill="#ffffff"/>
+  <text x="32" y="40" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="700" fill="#1f2937">Bank Rec</text>
+  <text x="186" y="39" font-family="Inter, Arial, sans-serif" font-size="13" fill="#4b5563">Reconcile</text>
+  <rect x="286" y="18" width="116" height="32" rx="6" fill="#edf2ff"/>
+  <text x="312" y="39" font-family="Inter, Arial, sans-serif" font-size="13" fill="#1f4ed8">Cash Coding</text>
+  <text x="432" y="39" font-family="Inter, Arial, sans-serif" font-size="13" fill="#4b5563">Matched</text>
+  <text x="522" y="39" font-family="Inter, Arial, sans-serif" font-size="13" fill="#4b5563">Rules</text>
+  <rect x="32" y="88" width="1376" height="76" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="56" y="118" font-family="Inter, Arial, sans-serif" font-size="12" fill="#6b7280">Bank Account</text>
+  <rect x="56" y="126" width="260" height="28" rx="6" fill="#f9fafb" stroke="#d1d5db"/>
+  <text x="68" y="145" font-family="Inter, Arial, sans-serif" font-size="12" fill="#111827">Main Operating Account</text>
+  <text x="344" y="118" font-family="Inter, Arial, sans-serif" font-size="12" fill="#6b7280">Date Range</text>
+  <rect x="344" y="126" width="220" height="28" rx="6" fill="#f9fafb" stroke="#d1d5db"/>
+  <text x="356" y="145" font-family="Inter, Arial, sans-serif" font-size="12" fill="#111827">01 Jun 2026 to 30 Jun 2026</text>
+  <rect x="1062" y="118" width="146" height="36" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="1090" y="141" font-family="Inter, Arial, sans-serif" font-size="13" fill="#374151">Bulk Apply</text>
+  <rect x="1224" y="118" width="160" height="36" rx="6" fill="#2563eb"/>
+  <text x="1248" y="141" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="600" fill="#ffffff">Save Selected</text>
+  <rect x="32" y="184" width="1376" height="64" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <rect x="56" y="202" width="86" height="28" rx="14" fill="#eff6ff"/>
+  <text x="99" y="221" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="700" text-anchor="middle" fill="#1d4ed8">All 38</text>
+  <rect x="154" y="202" width="120" height="28" rx="14" fill="#f3f4f6"/>
+  <text x="214" y="221" font-family="Inter, Arial, sans-serif" font-size="12" fill="#374151" text-anchor="middle">Rule Suggested</text>
+  <rect x="286" y="202" width="86" height="28" rx="14" fill="#f3f4f6"/>
+  <text x="329" y="221" font-family="Inter, Arial, sans-serif" font-size="12" fill="#374151" text-anchor="middle">Errors</text>
+  <rect x="384" y="202" width="96" height="28" rx="14" fill="#f3f4f6"/>
+  <text x="432" y="221" font-family="Inter, Arial, sans-serif" font-size="12" fill="#374151" text-anchor="middle">Selected</text>
+  <rect x="512" y="197" width="280" height="38" rx="6" fill="#fff7ed" stroke="#fed7aa"/>
+  <text x="652" y="221" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="700" fill="#9a3412" text-anchor="middle">Tax is not posted from cash coding</text>
+  <text x="1170" y="222" font-family="Inter, Arial, sans-serif" font-size="13" fill="#374151">Selected total: $525.00</text>
+  <rect x="32" y="272" width="1376" height="596" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <rect x="32" y="272" width="1376" height="42" rx="8" fill="#f9fafb"/>
+  <text x="62" y="298" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="700" fill="#374151">Date</text>
+  <text x="154" y="298" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="700" fill="#374151">Description</text>
+  <text x="402" y="298" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="700" fill="#374151">Money In</text>
+  <text x="502" y="298" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="700" fill="#374151">Money Out</text>
+  <text x="618" y="298" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="700" fill="#374151">Party</text>
+  <text x="796" y="298" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="700" fill="#374151">Account</text>
+  <text x="1008" y="298" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="700" fill="#374151">Cost Center</text>
+  <text x="1166" y="298" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="700" fill="#374151">Reference</text>
+  <text x="1310" y="298" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="700" fill="#374151">Status</text>
+  <line x1="32" y1="314" x2="1408" y2="314" stroke="#e5e7eb"/>
+  <rect x="52" y="338" width="18" height="18" rx="4" fill="#2563eb"/>
+  <text x="92" y="352" font-family="Inter, Arial, sans-serif" font-size="12" fill="#111827">20 Jun</text>
+  <text x="154" y="352" font-family="Inter, Arial, sans-serif" font-size="12" fill="#111827">Monthly service fee</text>
+  <text x="454" y="352" font-family="Inter, Arial, sans-serif" font-size="12" text-anchor="end" fill="#6b7280"></text>
+  <text x="558" y="352" font-family="Inter, Arial, sans-serif" font-size="12" text-anchor="end" fill="#b91c1c">$75.00</text>
+  <rect x="618" y="330" width="142" height="34" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="632" y="352" font-family="Inter, Arial, sans-serif" font-size="12" fill="#111827">Supplier</text>
+  <rect x="796" y="330" width="180" height="34" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="810" y="352" font-family="Inter, Arial, sans-serif" font-size="12" fill="#111827">Bank Charges</text>
+  <rect x="1008" y="330" width="128" height="34" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="1022" y="352" font-family="Inter, Arial, sans-serif" font-size="12" fill="#111827">Main</text>
+  <rect x="1166" y="330" width="116" height="34" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="1180" y="352" font-family="Inter, Arial, sans-serif" font-size="12" fill="#111827">REF-001</text>
+  <rect x="1304" y="334" width="72" height="26" rx="13" fill="#dcfce7"/>
+  <text x="1340" y="351" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="700" text-anchor="middle" fill="#166534">Ready</text>
+  <line x1="32" y1="382" x2="1408" y2="382" stroke="#e5e7eb"/>
+  <rect x="52" y="406" width="18" height="18" rx="4" fill="#2563eb"/>
+  <text x="92" y="420" font-family="Inter, Arial, sans-serif" font-size="12" fill="#111827">19 Jun</text>
+  <text x="154" y="420" font-family="Inter, Arial, sans-serif" font-size="12" fill="#111827">Interest received</text>
+  <text x="454" y="420" font-family="Inter, Arial, sans-serif" font-size="12" text-anchor="end" fill="#047857">$450.00</text>
+  <rect x="618" y="398" width="142" height="34" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="632" y="420" font-family="Inter, Arial, sans-serif" font-size="12" fill="#9ca3af">Optional</text>
+  <rect x="796" y="398" width="180" height="34" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="810" y="420" font-family="Inter, Arial, sans-serif" font-size="12" fill="#111827">Interest Income</text>
+  <rect x="1008" y="398" width="128" height="34" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="1022" y="420" font-family="Inter, Arial, sans-serif" font-size="12" fill="#111827">Main</text>
+  <rect x="1166" y="398" width="116" height="34" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="1180" y="420" font-family="Inter, Arial, sans-serif" font-size="12" fill="#111827">REF-002</text>
+  <rect x="1304" y="402" width="72" height="26" rx="13" fill="#dcfce7"/>
+  <text x="1340" y="419" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="700" text-anchor="middle" fill="#166534">Ready</text>
+  <line x1="32" y1="450" x2="1408" y2="450" stroke="#e5e7eb"/>
+  <rect x="52" y="474" width="18" height="18" rx="4" fill="#ffffff" stroke="#9ca3af"/>
+  <text x="92" y="488" font-family="Inter, Arial, sans-serif" font-size="12" fill="#111827">18 Jun</text>
+  <text x="154" y="488" font-family="Inter, Arial, sans-serif" font-size="12" fill="#111827">Uncoded payment</text>
+  <text x="454" y="488" font-family="Inter, Arial, sans-serif" font-size="12" text-anchor="end" fill="#047857">$1,200.00</text>
+  <rect x="618" y="466" width="142" height="34" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="632" y="488" font-family="Inter, Arial, sans-serif" font-size="12" fill="#9ca3af">Select</text>
+  <rect x="796" y="466" width="180" height="34" rx="6" fill="#ffffff" stroke="#ef4444"/>
+  <text x="810" y="488" font-family="Inter, Arial, sans-serif" font-size="12" fill="#ef4444">Required</text>
+  <rect x="1008" y="466" width="128" height="34" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="1022" y="488" font-family="Inter, Arial, sans-serif" font-size="12" fill="#9ca3af">Optional</text>
+  <rect x="1166" y="466" width="116" height="34" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="1180" y="488" font-family="Inter, Arial, sans-serif" font-size="12" fill="#9ca3af">Optional</text>
+  <rect x="1304" y="470" width="72" height="26" rx="13" fill="#fee2e2"/>
+  <text x="1340" y="487" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="700" text-anchor="middle" fill="#991b1b">Error</text>
+  <rect x="56" y="804" width="600" height="38" rx="6" fill="#fef2f2" stroke="#fecaca"/>
+  <text x="76" y="828" font-family="Inter, Arial, sans-serif" font-size="12" fill="#991b1b">1 selected row needs an account before it can be reconciled.</text>
+</svg>

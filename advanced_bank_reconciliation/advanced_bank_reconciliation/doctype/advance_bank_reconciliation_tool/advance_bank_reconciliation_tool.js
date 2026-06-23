@@ -2,6 +2,43 @@
 // For license information, please see license.txt
 frappe.provide("nexwave.accounts.bank_reconciliation");
 
+function get_modern_bank_rec_url(frm) {
+	const params = new URLSearchParams();
+	const add_param = (key, value) => {
+		if (value === undefined || value === null || value === "") return;
+		params.set(key, value);
+	};
+
+	add_param("bank_account", frm.doc.bank_account);
+	add_param("from_date", frm.doc.bank_statement_from_date);
+	add_param("to_date", frm.doc.bank_statement_to_date);
+	add_param("statement_balance", frm.doc.bank_statement_closing_balance);
+
+	const query = params.toString();
+	return query ? `/bank-rec/reconcile?${query}` : "/bank-rec/reconcile";
+}
+
+function render_modern_bank_rec_prompt(frm) {
+	const cards_field = frm.get_field("reconciliation_tool_cards");
+	if (!cards_field?.$wrapper?.length) return;
+
+	let $prompt = frm.$wrapper.find(".abr-modern-bank-rec-prompt");
+	if (!$prompt.length) {
+		$prompt = $(`
+			<div class="abr-modern-bank-rec-prompt alert alert-info" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+				<div>
+					<div><strong>${__("Try the new Bank Rec")}</strong></div>
+					<div class="small text-muted">${__("Use the split-screen reconciliation and cash coding views with the current filters.")}</div>
+				</div>
+				<a class="btn btn-sm btn-primary" href="/bank-rec/reconcile">${__("Open Bank Rec")}</a>
+			</div>
+		`);
+		$prompt.insertBefore(cards_field.$wrapper);
+	}
+
+	$prompt.find("a").attr("href", get_modern_bank_rec_url(frm));
+}
+
 frappe.ui.form.on("Advance Bank Reconciliation Tool", {
 	setup: function (frm) {
 		frm.set_query("bank_account", function () {
@@ -39,6 +76,7 @@ frappe.ui.form.on("Advance Bank Reconciliation Tool", {
 
 	refresh: function (frm) {
 		frm.disable_save();
+		render_modern_bank_rec_prompt(frm);
 		frappe.require("advance-bank-reconciliation-tool.bundle.js", () => frm.trigger("make_reconciliation_tool"));
 
 		frm.add_custom_button(__("Upload Bank Statement"), () => {
@@ -101,6 +139,7 @@ frappe.ui.form.on("Advance Bank Reconciliation Tool", {
 	},
 
 	bank_account: function (frm) {
+		render_modern_bank_rec_prompt(frm);
 		frappe.db.get_value("Bank Account", frm.doc.bank_account, "account", (r) => {
 			frappe.db.get_value("Account", r.account, "account_currency", (r) => {
 				frm.doc.account_currency = r.account_currency;
@@ -111,11 +150,21 @@ frappe.ui.form.on("Advance Bank Reconciliation Tool", {
 	},
 
 	bank_statement_from_date: function (frm) {
+		render_modern_bank_rec_prompt(frm);
 		frm.trigger("get_account_opening_balance");
+	},
+
+	bank_statement_to_date: function (frm) {
+		render_modern_bank_rec_prompt(frm);
+	},
+
+	bank_statement_closing_balance: function (frm) {
+		render_modern_bank_rec_prompt(frm);
 	},
 
 	make_reconciliation_tool(frm) {
 		frm.get_field("reconciliation_tool_cards").$wrapper.empty();
+		render_modern_bank_rec_prompt(frm);
 		if (frm.doc.bank_account && frm.doc.bank_statement_to_date) {
 			frm.trigger("get_cleared_balance").then(() => {
 				if (
