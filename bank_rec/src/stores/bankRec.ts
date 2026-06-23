@@ -161,7 +161,13 @@ export const useBankRecStore = defineStore("bankRec", {
 
   actions: {
     applyQuery(query: LocationQuery) {
-      this.selectedCompany = stringQuery(query.company, this.selectedCompany);
+      const queryCompany = stringQuery(query.company);
+      const queryBankAccount = stringQuery(query.bank_account);
+      if (queryCompany) {
+        this.selectedCompany = queryCompany;
+      } else if (queryBankAccount) {
+        this.selectedCompany = "";
+      }
       this.selectedBankAccount = stringQuery(
         query.bank_account,
         this.selectedBankAccount
@@ -250,6 +256,16 @@ export const useBankRecStore = defineStore("bankRec", {
         if (selectedAccount && !this.selectedCompany) {
           this.selectedCompany = selectedAccount.company;
           this.bankAccounts = await getBankAccounts(this.selectedCompany);
+        }
+
+        if (resolveCompanyFromAccount && !selectedAccount) {
+          this.selectedBankAccount = "";
+          this.selectedTransactionName = "";
+          this.selectedContext = null;
+          this.ensureSelectedCompany();
+          this.bankAccounts = this.selectedCompany
+            ? await getBankAccounts(this.selectedCompany)
+            : [];
         }
 
         if (
