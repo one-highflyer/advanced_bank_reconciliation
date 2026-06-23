@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "scripts": {
+    "postinstall": "cd bank_rec && yarn install",
+    "dev": "cd bank_rec && yarn dev",
+    "build": "cd bank_rec && yarn build"
+  }
+}
