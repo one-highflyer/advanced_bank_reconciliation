@@ -1,3 +1,16 @@
+# [1.9.0](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.8.1...v1.9.0) (2026-06-23)
+
+
+### Bug Fixes
+
+* **bank-rec:** clear cash coding dirty state ([fc8381a](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/fc8381a1097cefa50a0d7d0fb03cd190b24aa80e))
+* **bank-rec:** normalize account-only route state ([a884c73](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/a884c73a0be3aa7ea5022607630152d820a0408a))
+
+
+### Features
+
+* **bank-rec:** filter bank accounts by company ([fc9bed9](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/fc9bed9cd193b83b3aec0e9f00484252f3c219f9))
+
 ## [1.8.1](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.8.0...v1.8.1) (2026-06-23)
 
 
