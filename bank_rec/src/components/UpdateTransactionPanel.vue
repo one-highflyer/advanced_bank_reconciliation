@@ -103,6 +103,7 @@ watch(
         <div class="flex justify-end">
           <Button
             theme="blue"
+            variant="solid"
             type="submit"
             :disabled="!dirty"
             :loading="submitting"

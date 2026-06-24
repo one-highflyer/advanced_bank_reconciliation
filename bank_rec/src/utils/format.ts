@@ -71,10 +71,10 @@ export function formatMoney(amount?: number | null, currency?: string) {
 export function signedAmountClass(amount?: number | null) {
   const value = Number(amount || 0);
   if (value > 0) {
-    return "text-green-700";
+    return "text-bank-success";
   }
   if (value < 0) {
-    return "text-red-700";
+    return "text-bank-ink";
   }
-  return "text-gray-700";
+  return "text-bank-muted";
 }

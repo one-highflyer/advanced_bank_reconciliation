@@ -12,7 +12,7 @@ import {
 import { useBankRecStore } from "@/stores/bankRec";
 import type { BankTransaction, LinkedPayment } from "@/types/bankRec";
 import { deskRoute } from "@/utils/desk";
-import { formatDate, formatMoney } from "@/utils/format";
+import { formatDate, formatMoney, signedAmountClass } from "@/utils/format";
 import ExternalLink from "~icons/lucide/external-link";
 import RotateCcw from "~icons/lucide/rotate-ccw";
 
@@ -215,7 +215,7 @@ onMounted(async () => {
       <section class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-bank-line bg-white shadow-sm">
         <div class="border-b border-bank-line px-4 py-3">
           <div class="text-base font-semibold text-bank-ink">Matched transactions</div>
-          <div class="text-sm text-bank-muted">{{ rows.length }} rows</div>
+          <div class="text-sm tabular-nums text-bank-muted">{{ rows.length }} rows</div>
         </div>
 
         <LoadingState v-if="loading" label="Loading matched rows" />
@@ -240,7 +240,11 @@ onMounted(async () => {
                 v-for="row in rows"
                 :key="row.name"
                 class="cursor-pointer transition hover:bg-blue-50/60"
-                :class="row.name === selectedName ? 'bg-blue-50' : ''"
+                :class="
+                  row.name === selectedName
+                    ? 'bg-blue-50 shadow-[inset_3px_0_0_0_#0891B2]'
+                    : ''
+                "
                 role="button"
                 tabindex="0"
                 :aria-pressed="row.name === selectedName"
@@ -248,7 +252,7 @@ onMounted(async () => {
                 @keydown.enter.prevent="selectRow(row.name)"
                 @keydown.space.prevent="selectRow(row.name)"
               >
-                <td class="px-4 py-3 text-bank-muted">
+                <td class="px-4 py-3 tabular-nums text-bank-muted">
                   {{ formatDate(row.date) }}
                 </td>
                 <td class="max-w-[320px] px-4 py-3">
@@ -276,7 +280,7 @@ onMounted(async () => {
                     </a>
                   </template>
                   <div v-else-if="linkedPaymentCount(row) > 1" class="grid gap-1">
-                    <div class="font-medium text-bank-ink">
+                    <div class="font-medium tabular-nums text-bank-ink">
                       {{ linkedVoucherCountLabel(linkedPaymentCount(row)) }}
                     </div>
                     <div class="text-xs text-bank-muted">
@@ -287,7 +291,10 @@ onMounted(async () => {
                     Not set
                   </div>
                 </td>
-                <td class="px-4 py-3 text-right font-medium text-bank-ink">
+                <td
+                  class="px-4 py-3 text-right font-medium tabular-nums"
+                  :class="signedAmountClass(row.amount)"
+                >
                   {{ formatMoney(row.amount, row.currency || store.activeCurrency) }}
                 </td>
                 <td class="px-4 py-3 text-right">
@@ -345,7 +352,10 @@ onMounted(async () => {
               <dt class="text-xs font-medium uppercase tracking-wide text-bank-muted">
                 Amount
               </dt>
-              <dd class="mt-1 text-sm font-semibold text-bank-ink">
+              <dd
+                class="mt-1 text-sm font-semibold tabular-nums"
+                :class="signedAmountClass(selectedRow.amount)"
+              >
                 {{ formatMoney(selectedRow.amount, selectedRow.currency || store.activeCurrency) }}
               </dd>
             </div>
@@ -371,7 +381,7 @@ onMounted(async () => {
                   {{ payment.payment_document || "Voucher" }}
                   {{ payment.payment_entry || "" }}
                 </span>
-                <span class="shrink-0 text-bank-ink">
+                <span class="shrink-0 tabular-nums text-bank-ink">
                   {{
                     formatMoney(
                       payment.allocated_amount,
@@ -436,6 +446,7 @@ onMounted(async () => {
           </Button>
           <Button
             :theme="pendingUnreconcile ? 'red' : 'blue'"
+            variant="solid"
             :loading="Boolean(submittingName)"
             @click="confirmUnreconcile"
           >

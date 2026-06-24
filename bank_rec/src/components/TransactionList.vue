@@ -2,6 +2,8 @@
 import type { BankTransaction } from "@/types/bankRec";
 import { deskRoute } from "@/utils/desk";
 import { formatDate, formatMoney, signedAmountClass } from "@/utils/format";
+import ArrowDownRight from "~icons/lucide/arrow-down-right";
+import ArrowUpRight from "~icons/lucide/arrow-up-right";
 import ExternalLink from "~icons/lucide/external-link";
 
 defineProps<{
@@ -17,6 +19,12 @@ defineEmits<{
 function bankTransactionUrl(transaction: BankTransaction) {
   return deskRoute("Bank Transaction", transaction.name);
 }
+
+function isInflow(transaction: BankTransaction) {
+  if (transaction.direction === "deposit") return true;
+  if (transaction.direction === "withdrawal") return false;
+  return Number(transaction.amount) > 0;
+}
 </script>
 
 <template>
@@ -25,14 +33,18 @@ function bankTransactionUrl(transaction: BankTransaction) {
       v-for="transaction in transactions"
       :key="transaction.name"
       class="grid w-full cursor-pointer grid-cols-[120px_minmax(0,1fr)_130px_32px] gap-3 px-4 py-3 text-left transition hover:bg-blue-50/60"
-      :class="transaction.name === selectedName ? 'bg-blue-50' : 'bg-white'"
+      :class="
+        transaction.name === selectedName
+          ? 'bg-blue-50 shadow-[inset_3px_0_0_0_#0891B2]'
+          : 'bg-white'
+      "
       role="button"
       tabindex="0"
       @click="$emit('select', transaction.name)"
       @keydown.enter.prevent="$emit('select', transaction.name)"
       @keydown.space.prevent="$emit('select', transaction.name)"
     >
-      <div class="text-sm text-bank-muted">
+      <div class="text-sm tabular-nums text-bank-muted">
         {{ formatDate(transaction.date) }}
       </div>
       <div class="min-w-0">
@@ -46,16 +58,27 @@ function bankTransactionUrl(transaction: BankTransaction) {
           </span>
         </div>
       </div>
-      <div class="text-right">
+      <div class="flex flex-col items-end">
         <div
-          class="text-sm font-semibold"
+          class="text-sm font-semibold tabular-nums"
           :class="signedAmountClass(transaction.amount)"
         >
           {{ formatMoney(transaction.amount, transaction.currency || currency) }}
         </div>
-        <div class="mt-1 text-xs capitalize text-bank-muted">
-          {{ transaction.direction }}
-        </div>
+        <span
+          v-if="isInflow(transaction)"
+          class="mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold bg-green-50 text-green-700"
+        >
+          <ArrowUpRight class="h-3 w-3" />
+          In
+        </span>
+        <span
+          v-else
+          class="mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold bg-gray-100 text-bank-muted"
+        >
+          <ArrowDownRight class="h-3 w-3" />
+          Out
+        </span>
       </div>
       <a
         class="inline-flex h-8 w-8 items-center justify-center rounded-md text-bank-muted transition hover:bg-white hover:text-bank-accent"

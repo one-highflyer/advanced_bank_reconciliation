@@ -234,7 +234,7 @@ watch(
                 <div class="text-base font-semibold text-bank-ink">
                   Bank transactions
                 </div>
-                <div class="text-sm text-bank-muted">
+                <div class="text-sm tabular-nums text-bank-muted">
                   {{ store.transactions.length }} rows
                 </div>
               </div>

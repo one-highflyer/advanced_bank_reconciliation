@@ -10,6 +10,7 @@ import { formatDate, formatMoney } from "@/utils/format";
 import EmptyState from "@/components/EmptyState.vue";
 import ErrorState from "@/components/ErrorState.vue";
 import LoadingState from "@/components/LoadingState.vue";
+import Check from "~icons/lucide/check";
 import CheckCircle2 from "~icons/lucide/check-circle-2";
 import ExternalLink from "~icons/lucide/external-link";
 import RefreshCcw from "~icons/lucide/refresh-cw";
@@ -59,14 +60,39 @@ const canSubmit = computed(
   () => Boolean(selectedCandidates.value.length) && !invalidSelectedCandidates.value.length
 );
 
-function confidenceTheme(confidence: MatchCandidate["confidence"]) {
+const allocatableAmount = computed(() => {
+  if (!props.transaction) {
+    return 0;
+  }
+  const unallocated = Math.abs(Number(props.transaction.unallocated_amount || 0));
+  return unallocated || Math.abs(Number(props.transaction.amount || 0));
+});
+
+const fullyAllocated = computed(
+  () =>
+    Boolean(selectedCandidates.value.length) &&
+    allocatableAmount.value > 0 &&
+    Math.abs(selectedTotal.value - allocatableAmount.value) < 0.005
+);
+
+function confidenceDotClass(confidence: MatchCandidate["confidence"]) {
   if (confidence === "high") {
-    return "green";
+    return "bg-green-500";
   }
   if (confidence === "medium") {
-    return "orange";
+    return "bg-amber-500";
   }
-  return "gray";
+  return "bg-bank-subtle";
+}
+
+function confidenceLabel(confidence: MatchCandidate["confidence"]) {
+  if (confidence === "high") {
+    return "High confidence";
+  }
+  if (confidence === "medium") {
+    return "Medium confidence";
+  }
+  return "Low confidence";
 }
 
 function toggleCandidate(candidate: MatchCandidate, checked: boolean) {
@@ -117,7 +143,7 @@ watch(
     <div class="flex items-center justify-between gap-3 border-b border-bank-line px-4 py-3">
       <div>
         <div class="text-base font-semibold text-bank-ink">Match</div>
-        <div class="text-sm text-bank-muted">
+        <div class="text-sm tabular-nums text-bank-muted">
           {{ candidates.length }} candidates
         </div>
       </div>
@@ -161,7 +187,11 @@ watch(
             </tr>
           </thead>
           <tbody class="divide-y divide-bank-line bg-white">
-            <tr v-for="candidate in candidates" :key="candidate.key">
+            <tr
+              v-for="candidate in candidates"
+              :key="candidate.key"
+              :class="selectedKeys.includes(candidate.key) ? 'bg-bank-accent-50' : ''"
+            >
               <td class="px-4 py-3 align-top">
                 <input
                   class="h-4 w-4 rounded border-bank-line text-bank-accent"
@@ -182,10 +212,16 @@ watch(
                   </span>
                   <ExternalLink class="h-3.5 w-3.5 shrink-0" />
                 </a>
-                <div class="mt-1 flex flex-wrap gap-1">
-                  <Badge :theme="confidenceTheme(candidate.confidence)">
-                    {{ candidate.confidence }}
-                  </Badge>
+                <div class="mt-1.5">
+                  <span class="inline-flex items-center gap-1.5 text-xs font-semibold">
+                    <span
+                      class="h-2 w-2 rounded-full"
+                      :class="confidenceDotClass(candidate.confidence)"
+                    />
+                    {{ confidenceLabel(candidate.confidence) }}
+                  </span>
+                </div>
+                <div class="mt-1.5 flex flex-wrap gap-1">
                   <Badge
                     v-for="reason in candidate.reasons"
                     :key="reason"
@@ -204,16 +240,16 @@ watch(
                   {{ candidate.party_name || candidate.party || "No party" }}
                 </div>
               </td>
-              <td class="px-4 py-3 align-top text-bank-ink">
+              <td class="px-4 py-3 align-top tabular-nums text-bank-ink">
                 {{ formatDate(candidate.posting_date || candidate.reference_date) }}
               </td>
-              <td class="px-4 py-3 text-right align-top font-medium text-bank-ink">
+              <td class="px-4 py-3 text-right align-top font-medium tabular-nums text-bank-ink">
                 {{ formatMoney(candidate.amount, candidate.currency || currency) }}
               </td>
               <td class="px-4 py-3 text-right align-top">
                 <input
                   v-model.number="amounts[candidate.key]"
-                  class="h-9 w-28 rounded-md border border-bank-line px-2 text-right text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+                  class="h-9 w-28 rounded-md border border-bank-line px-2 text-right text-sm tabular-nums outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
                   type="number"
                   min="0.01"
                   step="0.01"
@@ -231,20 +267,30 @@ watch(
           :message="submitError"
         />
         <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div class="text-sm text-bank-muted">
-            Selected total:
-            <span class="font-semibold text-bank-ink">
-              {{ formatMoney(selectedTotal, transaction.currency || currency) }}
+          <div class="flex flex-wrap items-center gap-2 text-sm text-bank-muted">
+            <span>
+              Selected total:
+              <span class="font-semibold tabular-nums text-bank-ink">
+                {{ formatMoney(selectedTotal, transaction.currency || currency) }}
+              </span>
+            </span>
+            <span
+              v-if="fullyAllocated"
+              class="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700"
+            >
+              <Check class="h-3.5 w-3.5" />
+              Fully allocated
             </span>
             <span
               v-if="invalidSelectedCandidates.length"
-              class="ml-2 font-medium text-red-700"
+              class="font-medium text-red-700"
             >
               Enter positive allocation amounts.
             </span>
           </div>
           <Button
             theme="blue"
+            variant="solid"
             :disabled="!canSubmit || submitting"
             :loading="submitting"
             @click="submit"

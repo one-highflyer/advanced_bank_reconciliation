@@ -1,12 +1,17 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { RouterLink, RouterView, useRoute } from "vue-router";
+import CheckCheck from "~icons/lucide/check-check";
 import CheckCircle2 from "~icons/lucide/check-circle-2";
 import FileCheck2 from "~icons/lucide/file-check-2";
 import ListChecks from "~icons/lucide/list-checks";
 import Table2 from "~icons/lucide/table-2";
 
 const route = useRoute();
+
+function isActive(to: string) {
+  return route.path === to || route.path.startsWith(`${to}/`);
+}
 
 const navItems = [
   {
@@ -42,12 +47,19 @@ const activeTitle = computed(() => route.name?.toString() || "Reconcile");
       <div
         class="mx-auto flex min-h-[64px] w-full max-w-[1920px] flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between md:px-6 2xl:px-8"
       >
-        <div class="min-w-0">
-          <div class="text-xl font-semibold leading-7 text-bank-ink">
-            Bank Rec
+        <div class="flex min-w-0 items-center gap-3">
+          <div
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-gradient-to-br from-[#67E8F9] via-[#0891B2] to-[#155E75] text-white shadow-sm"
+          >
+            <CheckCheck class="h-5 w-5" />
           </div>
-          <div class="truncate text-sm text-bank-muted">
-            {{ activeTitle }}
+          <div class="min-w-0">
+            <div class="text-xl font-semibold leading-7 text-bank-ink">
+              Bank Rec
+            </div>
+            <div class="truncate text-sm text-bank-muted">
+              {{ activeTitle }}
+            </div>
           </div>
         </div>
 
@@ -62,7 +74,11 @@ const activeTitle = computed(() => route.name?.toString() || "Reconcile");
             class="flex h-9 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-medium text-bank-muted transition hover:bg-white hover:text-bank-ink"
             active-class="bg-white text-bank-ink shadow-sm"
           >
-            <component :is="item.icon" class="h-4 w-4" />
+            <component
+              :is="item.icon"
+              class="h-4 w-4"
+              :class="isActive(item.to) ? 'text-bank-accent' : ''"
+            />
             <span>{{ item.label }}</span>
           </RouterLink>
         </nav>

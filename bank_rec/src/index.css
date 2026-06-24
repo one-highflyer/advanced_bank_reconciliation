@@ -10,8 +10,8 @@ body,
 
 body {
   margin: 0;
-  background: #f7f8fa;
-  color: #1f2933;
+  background: #F5F7FA;
+  color: #1E293B;
 }
 
 button,
@@ -35,4 +35,39 @@ select {
   border-radius: 999px;
   border: 3px solid transparent;
   background-clip: content-box;
+}
+
+:root {
+  /* brand: blue -> cyan */
+  --blue-50:#ECFEFF; --blue-100:#CFFAFE; --blue-200:#A5F3FC; --blue-300:#67E8F9;
+  --blue-400:#22D3EE; --blue-500:#0891B2; --blue-600:#0E7490; --blue-700:#155E75;
+  --blue-800:#155E75; --blue-900:#164E63;
+  --surface-blue-1:#F0FDFF; --surface-blue-2:#CFFAFE; --surface-blue-3:#0E7490;
+  --ink-blue-1:#ECFEFF; --ink-blue-2:#0891B2; --ink-blue-3:#0E7490; --ink-blue-link:#0E7490;
+  --outline-blue-1:#A5F3FC;
+
+  /* success: green -> NexWave green */
+  --green-50:#F0FDF4; --green-100:#DCFCE7; --green-200:#BBF7D0; --green-300:#86EFAC;
+  --green-400:#4ADE80; --green-500:#22C55E; --green-600:#16A34A; --green-700:#15803D;
+  --green-800:#166534; --green-900:#14532D;
+  --surface-green-1:#F0FDF4; --surface-green-2:#DCFCE7; --surface-green-3:#16A34A;
+  --ink-green-1:#F0FDF4; --ink-green-2:#22C55E; --ink-green-3:#16A34A;
+  --outline-green-1:#BBF7D0; --outline-green-2:#86EFAC;
+
+  /* error: red -> rose */
+  --red-50:#FFF1F2; --red-100:#FFE4E6; --red-200:#FECDD3; --red-300:#FDA4AF;
+  --red-400:#FB7185; --red-500:#F43F5E; --red-600:#E11D48; --red-700:#BE123C;
+  --red-800:#9F1239; --red-900:#881337;
+  --surface-red-1:#FFF1F2; --surface-red-2:#FFE4E6; --surface-red-3:#FECDD3; --surface-red-4:#FDA4AF;
+  --surface-red-5:#E11D48; --surface-red-6:#BE123C; --surface-red-7:#9F1239;
+  --ink-red-1:#FFF1F2; --ink-red-2:#FB7185; --ink-red-3:#F43F5E; --ink-red-4:#E11D48;
+  --outline-red-1:#FECDD3; --outline-red-2:#FDA4AF; --outline-red-3:#F43F5E;
+
+  /* warning: amber -> orange */
+  --amber-50:#FFF7ED; --amber-100:#FFEDD5; --amber-200:#FED7AA; --amber-300:#FDBA74;
+  --amber-400:#FB923C; --amber-500:#F97316; --amber-600:#EA580C; --amber-700:#C2410C;
+  --amber-800:#9A3412; --amber-900:#7C2D12;
+  --surface-amber-1:#FFF7ED; --surface-amber-2:#FFEDD5; --surface-amber-3:#EA580C;
+  --ink-amber-1:#FFF7ED; --ink-amber-2:#F97316; --ink-amber-3:#C2410C;
+  --outline-amber-1:#FDBA74; --outline-amber-2:#FB923C;
 }

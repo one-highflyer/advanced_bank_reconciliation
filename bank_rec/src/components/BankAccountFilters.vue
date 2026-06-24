@@ -89,7 +89,7 @@ function updateStatementBalance(value: unknown) {
       />
 
       <FormControl
-        class="w-full sm:w-40"
+        class="w-full tabular-nums sm:w-40"
         type="date"
         label="From"
         variant="outline"
@@ -101,7 +101,7 @@ function updateStatementBalance(value: unknown) {
       />
 
       <FormControl
-        class="w-full sm:w-40"
+        class="w-full tabular-nums sm:w-40"
         type="date"
         label="To"
         variant="outline"
@@ -114,7 +114,7 @@ function updateStatementBalance(value: unknown) {
 
       <FormControl
         v-if="showStatementBalance"
-        class="w-full sm:w-48"
+        class="w-full tabular-nums sm:w-48"
         type="number"
         label="Statement closing balance"
         variant="outline"
