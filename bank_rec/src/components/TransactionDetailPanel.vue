@@ -75,12 +75,12 @@ function paymentUrl(payment: LinkedPayment) {
 
     <div v-else class="bank-rec-scrollbar min-h-0 flex-1 overflow-y-auto p-4">
       <div class="rounded-lg border border-bank-line p-4">
-        <div class="text-sm text-bank-muted">{{ formatDate(transaction.date) }}</div>
+        <div class="text-sm tabular-nums text-bank-muted">{{ formatDate(transaction.date) }}</div>
         <div class="mt-2 text-lg font-semibold text-bank-ink">
           {{ transaction.description || transaction.bank_party_name || transaction.name }}
         </div>
         <div
-          class="mt-3 text-2xl font-semibold"
+          class="mt-3 text-2xl font-semibold tabular-nums"
           :class="signedAmountClass(transaction.amount)"
         >
           {{ formatMoney(transaction.amount, transaction.currency || currency) }}
@@ -125,7 +125,7 @@ function paymentUrl(payment: LinkedPayment) {
           <dt class="text-xs font-medium uppercase tracking-wide text-bank-muted">
             Unallocated
           </dt>
-          <dd class="mt-1 text-sm font-semibold text-bank-ink">
+          <dd class="mt-1 text-sm font-semibold tabular-nums text-bank-ink">
             {{
               formatMoney(
                 transaction.unallocated_amount,
@@ -173,7 +173,7 @@ function paymentUrl(payment: LinkedPayment) {
             <div v-else class="min-w-0 truncate text-bank-ink">
               {{ paymentLabel(payment) }}
             </div>
-            <div class="shrink-0 font-medium text-bank-ink">
+            <div class="shrink-0 font-medium tabular-nums text-bank-ink">
               {{
                 formatMoney(
                   payment.allocated_amount,

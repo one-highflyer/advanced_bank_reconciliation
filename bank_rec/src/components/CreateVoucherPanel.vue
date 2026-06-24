@@ -213,6 +213,7 @@ watch(
 
         <FormControl
           v-model="postingDate"
+          class="tabular-nums"
           type="date"
           label="Posting date"
           variant="outline"
@@ -221,6 +222,7 @@ watch(
 
         <FormControl
           v-model="referenceDate"
+          class="tabular-nums"
           type="date"
           label="Reference date"
           variant="outline"
@@ -312,7 +314,7 @@ watch(
             </template>
             Edit in Full Page
           </Button>
-          <Button theme="blue" type="submit" :loading="creating">
+          <Button theme="blue" variant="solid" type="submit" :loading="creating">
             <template #prefix>
               <Save class="h-4 w-4" />
             </template>

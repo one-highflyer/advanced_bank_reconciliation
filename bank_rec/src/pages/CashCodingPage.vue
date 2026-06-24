@@ -9,9 +9,10 @@ import ReconcileProgressDialog from "@/components/ReconcileProgressDialog.vue";
 import { getCashCodingRows, submitCashCoding } from "@/services/api";
 import { useBankRecStore } from "@/stores/bankRec";
 import type { CashCodingRow, CreateOption } from "@/types/bankRec";
-import { formatDate, formatMoney } from "@/utils/format";
+import { formatDate, formatMoney, signedAmountClass } from "@/utils/format";
 import CheckCircle2 from "~icons/lucide/check-circle-2";
 import RefreshCcw from "~icons/lucide/refresh-cw";
+import TriangleAlert from "~icons/lucide/triangle-alert";
 
 type ViewFilter = "all" | "uncoded" | "rule_suggested" | "errors" | "selected";
 
@@ -285,7 +286,8 @@ onBeforeRouteLeave(() => guardDiscard());
       @refresh="loadRows"
     />
 
-    <div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+    <div class="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+      <TriangleAlert class="h-4 w-4 shrink-0 text-amber-500" />
       Tax is not posted from cash coding.
     </div>
 
@@ -332,7 +334,7 @@ onBeforeRouteLeave(() => guardDiscard());
             </template>
             Refresh
           </Button>
-          <Button theme="blue" :loading="submitting" @click="submitSelected">
+          <Button theme="blue" variant="solid" :loading="submitting" @click="submitSelected">
             <template #prefix>
               <CheckCircle2 class="h-4 w-4" />
             </template>
@@ -354,7 +356,7 @@ onBeforeRouteLeave(() => guardDiscard());
               <th class="w-9 px-3 py-3"></th>
               <th class="w-24 px-3 py-3">Date</th>
               <th class="w-[18%] px-3 py-3">Transaction</th>
-              <th class="w-28 px-3 py-3 text-right">Amount</th>
+              <th class="w-32 px-3 py-3 text-right">Amount</th>
               <th class="w-[16%] px-3 py-3">Account</th>
               <th class="w-[18%] px-3 py-3">Contact</th>
               <th class="w-[13%] px-3 py-3">Cost center</th>
@@ -366,7 +368,13 @@ onBeforeRouteLeave(() => guardDiscard());
             <tr
               v-for="row in visibleRows"
               :key="row.transaction.name"
-              :class="rowErrors[row.transaction.name] ? 'bg-red-50/50' : ''"
+              :class="
+                rowErrors[row.transaction.name]
+                  ? 'bg-red-50/50'
+                  : selected.includes(row.transaction.name)
+                    ? 'bg-bank-accent-50'
+                    : ''
+              "
             >
               <td class="px-3 py-3 align-top">
                 <input
@@ -376,7 +384,7 @@ onBeforeRouteLeave(() => guardDiscard());
                   @change="toggleSelected(row.transaction.name, ($event.target as HTMLInputElement).checked)"
                 />
               </td>
-              <td class="px-3 py-3 align-top text-bank-muted">
+              <td class="px-3 py-3 align-top tabular-nums text-bank-muted">
                 {{ formatDate(row.transaction.date) }}
               </td>
               <td class="min-w-0 px-3 py-3 align-top">
@@ -387,7 +395,10 @@ onBeforeRouteLeave(() => guardDiscard());
                   {{ rowErrors[row.transaction.name] || row.transaction.bank_party_name || "No party" }}
                 </div>
               </td>
-              <td class="px-3 py-3 text-right align-top font-medium text-bank-ink">
+              <td
+                class="whitespace-nowrap px-3 py-3 text-right align-top font-medium tabular-nums"
+                :class="signedAmountClass(row.transaction.amount)"
+              >
                 {{ formatMoney(row.transaction.amount, row.transaction.currency || store.activeCurrency) }}
               </td>
               <td class="px-3 py-3 align-top">

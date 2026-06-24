@@ -90,7 +90,7 @@ onMounted(async () => {
       <div class="flex flex-col gap-3 border-b border-bank-line px-4 py-3 md:flex-row md:items-center md:justify-between">
         <div>
           <div class="text-base font-semibold text-bank-ink">Rules</div>
-          <div class="text-sm text-bank-muted">
+          <div class="text-sm tabular-nums text-bank-muted">
             {{ filteredRules.length }} visible
           </div>
         </div>
@@ -156,11 +156,17 @@ onMounted(async () => {
                   {{ rule.party || rule.party_type || "Not set" }}
                 </div>
               </td>
-              <td class="px-4 py-3 text-bank-ink">
+              <td class="px-4 py-3 tabular-nums text-bank-ink">
                 {{ rule.priority ?? "Not set" }}
               </td>
               <td class="px-4 py-3">
                 <Badge :theme="rule.enabled ? 'green' : 'gray'">
+                  <template #prefix>
+                    <span
+                      class="h-2 w-2 rounded-full"
+                      :class="rule.enabled ? 'bg-green-500' : 'bg-bank-subtle'"
+                    />
+                  </template>
                   {{ rule.enabled ? "Enabled" : "Disabled" }}
                 </Badge>
               </td>
