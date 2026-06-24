@@ -1,3 +1,10 @@
+## [1.9.1](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.9.0...v1.9.1) (2026-06-24)
+
+
+### Bug Fixes
+
+* **bank-rec:** align reconciliation UI to NexWave cyan/slate design system ([a78c25c](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/a78c25c39f772d1ecbf095e76c8b60f9d156c5d4))
+
 # [1.9.0](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.8.1...v1.9.0) (2026-06-23)
 
 
