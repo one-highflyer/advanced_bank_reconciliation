@@ -84,14 +84,25 @@ def _dedupe_reconciled_rows(rows):
 
 
 def _bank_account_to_dto(row):
-	account_currency = frappe.get_cached_value("Account", row.account, "account_currency")
+	account = (
+		frappe.get_cached_value(
+			"Account",
+			row.account,
+			["account_currency", "root_type", "report_type"],
+			as_dict=True,
+		)
+		if row.account
+		else {}
+	) or {}
 	return {
 		"name": row.name,
 		"account_name": row.account_name,
 		"bank": row.bank,
 		"account": row.account,
 		"company": row.company,
-		"currency": account_currency,
+		"currency": account.get("account_currency"),
+		"account_root_type": account.get("root_type"),
+		"account_report_type": account.get("report_type"),
 	}
 
 

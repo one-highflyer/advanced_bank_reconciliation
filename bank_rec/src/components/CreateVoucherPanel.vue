@@ -61,6 +61,26 @@ const accountingDimensions = computed(
 const dimensionOptions = computed(
   () => props.defaults?.options.dimension_options || {}
 );
+function isBalanceSheetRootType(rootType?: string) {
+  return ["Asset", "Liability", "Equity"].includes(rootType || "");
+}
+
+const bankAccountIsBalanceSheet = computed(() => {
+  const bankAccount = props.defaults?.bank_account;
+  if (!bankAccount?.account) {
+    return false;
+  }
+  if (!bankAccount.account_report_type && !bankAccount.account_root_type) {
+    return true;
+  }
+  return (
+    bankAccount.account_report_type === "Balance Sheet" ||
+    isBalanceSheetRootType(bankAccount.account_root_type)
+  );
+});
+const selectedAccountIsBalanceSheet = computed(() =>
+  isBalanceSheetRootType(accountOption.value?.root_type)
+);
 const selectedAccountIsProfitAndLoss = computed(() =>
   ["Income", "Expense"].includes(accountOption.value?.root_type || "")
 );
@@ -121,8 +141,9 @@ function dimensionOptionLabel(option: DimensionOption) {
 
 function isDimensionRequired(dimension: AccountingDimension) {
   return Boolean(
-    dimension.mandatory_for_bs ||
-      (selectedAccountIsProfitAndLoss.value && dimension.mandatory_for_pl)
+    (dimension.mandatory_for_bs &&
+      (bankAccountIsBalanceSheet.value || selectedAccountIsBalanceSheet.value)) ||
+      (dimension.mandatory_for_pl && selectedAccountIsProfitAndLoss.value)
   );
 }
 

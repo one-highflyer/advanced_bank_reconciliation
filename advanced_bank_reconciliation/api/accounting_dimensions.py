@@ -82,7 +82,7 @@ def get_accounting_dimension_options(dimensions, company=None):
 				filters=filters,
 				fields=fields,
 				order_by="modified desc",
-				limit_page_length=100,
+				limit_page_length=0,
 			)
 		except Exception:
 			get_logger().warning(

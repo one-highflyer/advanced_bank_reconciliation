@@ -35,9 +35,6 @@ const selectedKeys = ref<string[]>([]);
 const amounts = ref<Record<string, number | string | null>>({});
 const search = ref("");
 
-const selectedCandidates = computed(() =>
-  props.candidates.filter((candidate) => selectedKeys.value.includes(candidate.key))
-);
 const filteredCandidates = computed(() => {
   const term = search.value.trim().toLowerCase();
   if (!term) {
@@ -47,6 +44,9 @@ const filteredCandidates = computed(() => {
     candidateSearchText(candidate).includes(term)
   );
 });
+const selectedCandidates = computed(() =>
+  filteredCandidates.value.filter((candidate) => selectedKeys.value.includes(candidate.key))
+);
 
 function allocationAmount(candidate: MatchCandidate) {
   const value = amounts.value[candidate.key] ?? Math.abs(candidate.amount);
@@ -117,7 +117,10 @@ function candidateSearchText(candidate: MatchCandidate) {
     candidate.party_type,
     candidate.posting_date,
     candidate.reference_date,
+    formatDate(candidate.posting_date),
+    formatDate(candidate.reference_date),
     candidate.amount,
+    formatMoney(candidate.amount, candidate.currency || props.currency),
     candidate.currency,
     confidenceLabel(candidate.confidence),
     ...candidate.reasons,
@@ -214,6 +217,7 @@ watch(
             v-model="search"
             class="h-9 w-full rounded-md border border-bank-line bg-white pl-9 pr-3 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
             type="search"
+            aria-label="Search match candidates"
             placeholder="Search documents, references, parties, dates, amounts"
           />
         </div>

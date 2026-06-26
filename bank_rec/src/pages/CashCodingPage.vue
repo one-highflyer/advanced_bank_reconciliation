@@ -79,6 +79,24 @@ const tableMinWidth = computed(
   () => `${1120 + accountingDimensions.value.length * 180}px`
 );
 
+function isBalanceSheetRootType(rootType?: string) {
+  return ["Asset", "Liability", "Equity"].includes(rootType || "");
+}
+
+const bankAccountIsBalanceSheet = computed(() => {
+  const bankAccount = store.selectedBankAccountDoc;
+  if (!bankAccount?.account) {
+    return false;
+  }
+  if (!bankAccount.account_report_type && !bankAccount.account_root_type) {
+    return true;
+  }
+  return (
+    bankAccount.account_report_type === "Balance Sheet" ||
+    isBalanceSheetRootType(bankAccount.account_root_type)
+  );
+});
+
 function defaultDimensionValues(dimensions: AccountingDimension[]) {
   return Object.fromEntries(
     dimensions.map((dimension) => [dimension.fieldname, dimension.default_value || ""])
@@ -113,13 +131,18 @@ function dimensionOptionLabel(option: DimensionOption) {
   return typeof displayValue === "string" ? displayValue : option.name;
 }
 
+function isBalanceSheetAccount(accountName: string) {
+  return isBalanceSheetRootType(accountByName.value[accountName]?.root_type);
+}
+
 function isProfitAndLossAccount(accountName: string) {
   return ["Income", "Expense"].includes(accountByName.value[accountName]?.root_type || "");
 }
 
 function isDimensionRequired(dimension: AccountingDimension, row: CashCodingRow) {
   return Boolean(
-    dimension.mandatory_for_bs ||
+    (dimension.mandatory_for_bs &&
+      (bankAccountIsBalanceSheet.value || isBalanceSheetAccount(row.account))) ||
       (isProfitAndLossAccount(row.account) && dimension.mandatory_for_pl)
   );
 }
@@ -128,6 +151,10 @@ function missingRequiredDimension(row: CashCodingRow) {
   return accountingDimensions.value.find(
     (dimension) => isDimensionRequired(dimension, row) && !row.dimensions[dimension.fieldname]
   );
+}
+
+function isDimensionRequiredInVisibleRows(dimension: AccountingDimension) {
+  return visibleRows.value.some((row) => isDimensionRequired(dimension, row));
 }
 
 function markDirty(name: string) {
@@ -292,15 +319,20 @@ async function submitSelected() {
     return;
   }
 
-  const rowMissingDimension = selectedRows.value.find((row) => missingRequiredDimension(row));
-  if (rowMissingDimension) {
-    const dimension = missingRequiredDimension(rowMissingDimension);
-    if (!dimension) {
-      return;
+  let rowMissingDimension: CashCodingRow | undefined;
+  let missingDimension: AccountingDimension | undefined;
+  for (const row of selectedRows.value) {
+    const dimension = missingRequiredDimension(row);
+    if (dimension) {
+      rowMissingDimension = row;
+      missingDimension = dimension;
+      break;
     }
+  }
+  if (rowMissingDimension && missingDimension) {
     rowErrors.value = {
       ...rowErrors.value,
-      [rowMissingDimension.transaction.name]: `${dimensionLabel(dimension)} is required.`,
+      [rowMissingDimension.transaction.name]: `${dimensionLabel(missingDimension)} is required.`,
     };
     pageError.value = "One or more selected rows are missing a required dimension.";
     return;
@@ -467,7 +499,7 @@ onBeforeRouteLeave(() => guardDiscard());
                 :key="dimension.fieldname"
                 class="w-44 px-3 py-3"
               >
-                {{ dimensionLabel(dimension) }}{{ dimension.mandatory_for_bs || dimension.mandatory_for_pl ? " *" : "" }}
+                {{ dimensionLabel(dimension) }}{{ isDimensionRequiredInVisibleRows(dimension) ? " *" : "" }}
               </th>
               <th class="w-[10%] px-3 py-3">Reference</th>
             </tr>

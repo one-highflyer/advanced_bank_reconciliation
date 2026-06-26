@@ -34,6 +34,8 @@ export interface BankAccount {
   account: string;
   company: string;
   currency?: string;
+  account_root_type?: string;
+  account_report_type?: string;
 }
 
 export type TransactionDirection = "deposit" | "withdrawal" | "unknown";
