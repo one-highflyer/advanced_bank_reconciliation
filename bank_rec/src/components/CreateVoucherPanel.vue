@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import type {
+  AccountingDimension,
   BankTransaction,
   CreateDefaultsResponse,
   CreateVoucherPayload,
+  DimensionOption,
 } from "@/types/bankRec";
 import EmptyState from "@/components/EmptyState.vue";
 import ErrorState from "@/components/ErrorState.vue";
@@ -38,6 +40,7 @@ const referenceDate = ref("");
 const referenceNumber = ref("");
 const costCenter = ref("");
 const project = ref("");
+const dimensionValues = ref<Record<string, string>>({});
 const saveAsRule = ref(false);
 const ruleTitle = ref("");
 const validationError = ref("");
@@ -52,6 +55,15 @@ const partyTypeOptions = [
 const accountOption = computed(() =>
   props.defaults?.options.accounts.find((row) => row.name === account.value)
 );
+const accountingDimensions = computed(
+  () => props.defaults?.options.accounting_dimensions || []
+);
+const dimensionOptions = computed(
+  () => props.defaults?.options.dimension_options || {}
+);
+const selectedAccountIsProfitAndLoss = computed(() =>
+  ["Income", "Expense"].includes(accountOption.value?.root_type || "")
+);
 
 const isPaymentEntryPath = computed(() => !account.value && partyType.value && party.value);
 const contactLabel = computed(() =>
@@ -62,6 +74,7 @@ const accountLabel = computed(() =>
 );
 
 function payload(): CreateVoucherPayload {
+  const dimensions = getDimensionPayload();
   return {
     account: account.value,
     party_type: partyType.value,
@@ -72,9 +85,45 @@ function payload(): CreateVoucherPayload {
     reference_number: referenceNumber.value,
     cost_center: costCenter.value,
     project: project.value,
+    dimensions,
     save_as_rule: saveAsRule.value,
     rule_title: ruleTitle.value,
   };
+}
+
+function getDimensionPayload() {
+  const dimensions = Object.fromEntries(
+    Object.entries(dimensionValues.value).filter(([, value]) => Boolean(value))
+  );
+  return Object.keys(dimensions).length ? dimensions : undefined;
+}
+
+function defaultDimensionValues(dimensions: AccountingDimension[]) {
+  return Object.fromEntries(
+    dimensions.map((dimension) => [dimension.fieldname, dimension.default_value || ""])
+  );
+}
+
+function dimensionLabel(dimension: AccountingDimension) {
+  return dimension.label || dimension.fieldname;
+}
+
+function dimensionDatalistId(dimension: AccountingDimension) {
+  return `bank-rec-create-dimension-${dimension.fieldname}`;
+}
+
+function dimensionOptionLabel(option: DimensionOption) {
+  const displayValue = Object.entries(option).find(
+    ([key, value]) => key !== "name" && typeof value === "string" && value
+  )?.[1];
+  return typeof displayValue === "string" ? displayValue : option.name;
+}
+
+function isDimensionRequired(dimension: AccountingDimension) {
+  return Boolean(
+    dimension.mandatory_for_bs ||
+      (selectedAccountIsProfitAndLoss.value && dimension.mandatory_for_pl)
+  );
 }
 
 function validate() {
@@ -93,6 +142,13 @@ function validate() {
   }
   if (saveAsRule.value && !ruleTitle.value) {
     validationError.value = "Rule title is required when saving a rule.";
+    return false;
+  }
+  const missingDimension = accountingDimensions.value.find(
+    (dimension) => isDimensionRequired(dimension) && !dimensionValues.value[dimension.fieldname]
+  );
+  if (missingDimension) {
+    validationError.value = `${dimensionLabel(missingDimension)} is required.`;
     return false;
   }
   return true;
@@ -122,6 +178,9 @@ watch(
     referenceNumber.value = props.defaults?.defaults.reference_number || "";
     costCenter.value = "";
     project.value = "";
+    dimensionValues.value = defaultDimensionValues(
+      props.defaults?.options.accounting_dimensions || []
+    );
     saveAsRule.value = false;
     ruleTitle.value = "";
     validationError.value = "";
@@ -270,6 +329,25 @@ watch(
               :value="row.name"
             >
               {{ row.project_name || row.name }}
+            </option>
+          </datalist>
+        </div>
+
+        <div v-for="dimension in accountingDimensions" :key="dimension.fieldname">
+          <FormControl
+            v-model="dimensionValues[dimension.fieldname]"
+            :label="`${dimensionLabel(dimension)}${isDimensionRequired(dimension) ? ' *' : ''}`"
+            variant="outline"
+            size="md"
+            :list="dimensionDatalistId(dimension)"
+          />
+          <datalist :id="dimensionDatalistId(dimension)">
+            <option
+              v-for="option in dimensionOptions[dimension.fieldname] || []"
+              :key="option.name"
+              :value="option.name"
+            >
+              {{ dimensionOptionLabel(option) }}
             </option>
           </datalist>
         </div>

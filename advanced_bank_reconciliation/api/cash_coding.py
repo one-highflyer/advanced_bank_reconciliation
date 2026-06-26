@@ -6,6 +6,7 @@ from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_b
 	create_journal_entry_bts,
 	get_abr_default_settings,
 )
+from advanced_bank_reconciliation.api.accounting_dimensions import get_accounting_dimension_context
 from advanced_bank_reconciliation.api.bank_rec import _transaction_to_dto, get_transactions
 from advanced_bank_reconciliation.api.matching import _lock_bank_transaction
 from advanced_bank_reconciliation.api.permission import (
@@ -89,6 +90,7 @@ def _row_success(row, transaction):
 def get_cash_coding_rows(bank_account, from_date=None, to_date=None):
 	bank_account_doc = assert_bank_account_access(bank_account)
 	company = bank_account_doc.company
+	dimension_context = get_accounting_dimension_context(company)
 	rows = get_transactions(
 		bank_account=bank_account,
 		from_date=from_date,
@@ -104,6 +106,7 @@ def get_cash_coding_rows(bank_account, from_date=None, to_date=None):
 				"party": row.get("party") or "",
 				"cost_center": "",
 				"project": "",
+				"dimensions": {},
 				"reference_number": row.get("reference_number") or "",
 				"notes": "",
 				"suggested_rule": None,
@@ -132,6 +135,7 @@ def get_cash_coding_rows(bank_account, from_date=None, to_date=None):
 				order_by="modified desc",
 				limit_page_length=100,
 			),
+			**dimension_context,
 		},
 	}
 

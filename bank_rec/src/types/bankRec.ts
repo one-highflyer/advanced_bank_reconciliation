@@ -1,3 +1,19 @@
+export interface AccountingDimension {
+  fieldname: string;
+  fieldtype?: string;
+  label?: string;
+  options?: string;
+  has_company_field?: boolean;
+  default_value?: string;
+  mandatory_for_bs?: boolean;
+  mandatory_for_pl?: boolean;
+}
+
+export interface DimensionOption {
+  name: string;
+  [key: string]: unknown;
+}
+
 export interface BootData {
   default_route: string;
   site_name: string;
@@ -8,7 +24,7 @@ export interface BootData {
   allowed_roles: string[];
   allowed_companies: string[];
   settings: Record<string, unknown>;
-  accounting_dimensions: Record<string, unknown>[];
+  accounting_dimensions: AccountingDimension[];
 }
 
 export interface BankAccount {
@@ -158,6 +174,8 @@ export interface CreateDefaultsResponse {
     mode_of_payments: CreateOption[];
     cost_centers: CreateOption[];
     projects: CreateOption[];
+    accounting_dimensions: AccountingDimension[];
+    dimension_options: Record<string, DimensionOption[]>;
   };
 }
 
@@ -200,6 +218,7 @@ export interface CashCodingRow {
   party: string;
   cost_center: string;
   project: string;
+  dimensions: Record<string, string>;
   reference_number: string;
   notes: string;
   suggested_rule?: { name: string; title: string } | null;
@@ -211,6 +230,8 @@ export interface CashCodingRowsResponse {
     accounts: CreateOption[];
     cost_centers: CreateOption[];
     projects: CreateOption[];
+    accounting_dimensions: AccountingDimension[];
+    dimension_options: Record<string, DimensionOption[]>;
   };
 }
 

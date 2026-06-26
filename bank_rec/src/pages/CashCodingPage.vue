@@ -8,7 +8,12 @@ import LoadingState from "@/components/LoadingState.vue";
 import ReconcileProgressDialog from "@/components/ReconcileProgressDialog.vue";
 import { getCashCodingRows, submitCashCoding } from "@/services/api";
 import { useBankRecStore } from "@/stores/bankRec";
-import type { CashCodingRow, CreateOption } from "@/types/bankRec";
+import type {
+  AccountingDimension,
+  CashCodingRow,
+  CreateOption,
+  DimensionOption,
+} from "@/types/bankRec";
 import { formatDate, formatMoney, signedAmountClass } from "@/utils/format";
 import CheckCircle2 from "~icons/lucide/check-circle-2";
 import RefreshCcw from "~icons/lucide/refresh-cw";
@@ -24,6 +29,8 @@ const rows = ref<CashCodingRow[]>([]);
 const accountOptions = ref<CreateOption[]>([]);
 const costCenterOptions = ref<CreateOption[]>([]);
 const projectOptions = ref<CreateOption[]>([]);
+const accountingDimensions = ref<AccountingDimension[]>([]);
+const dimensionOptions = ref<Record<string, DimensionOption[]>>({});
 const selected = ref<string[]>([]);
 const dirtyRows = ref<Set<string>>(new Set());
 const rowErrors = ref<Record<string, string>>({});
@@ -35,6 +42,7 @@ const viewFilter = ref<ViewFilter>("all");
 const bulkAccount = ref("");
 const bulkCostCenter = ref("");
 const bulkProject = ref("");
+const bulkDimensions = ref<Record<string, string>>({});
 const viewFilterButtons = [
   { label: "All", value: "all" },
   { label: "Uncoded", value: "uncoded" },
@@ -64,6 +72,63 @@ const selectedRows = computed(() =>
 );
 
 const hasDirtyRows = computed(() => dirtyRows.value.size > 0);
+const accountByName = computed(() =>
+  Object.fromEntries(accountOptions.value.map((row) => [row.name, row]))
+);
+const tableMinWidth = computed(
+  () => `${1120 + accountingDimensions.value.length * 180}px`
+);
+
+function defaultDimensionValues(dimensions: AccountingDimension[]) {
+  return Object.fromEntries(
+    dimensions.map((dimension) => [dimension.fieldname, dimension.default_value || ""])
+  );
+}
+
+function normalizeCashCodingRow(
+  row: CashCodingRow,
+  dimensions: AccountingDimension[]
+): CashCodingRow {
+  return {
+    ...row,
+    dimensions: {
+      ...defaultDimensionValues(dimensions),
+      ...(row.dimensions || {}),
+    },
+  };
+}
+
+function dimensionLabel(dimension: AccountingDimension) {
+  return dimension.label || dimension.fieldname;
+}
+
+function dimensionDatalistId(dimension: AccountingDimension) {
+  return `cash-coding-dimension-${dimension.fieldname}`;
+}
+
+function dimensionOptionLabel(option: DimensionOption) {
+  const displayValue = Object.entries(option).find(
+    ([key, value]) => key !== "name" && typeof value === "string" && value
+  )?.[1];
+  return typeof displayValue === "string" ? displayValue : option.name;
+}
+
+function isProfitAndLossAccount(accountName: string) {
+  return ["Income", "Expense"].includes(accountByName.value[accountName]?.root_type || "");
+}
+
+function isDimensionRequired(dimension: AccountingDimension, row: CashCodingRow) {
+  return Boolean(
+    dimension.mandatory_for_bs ||
+      (isProfitAndLossAccount(row.account) && dimension.mandatory_for_pl)
+  );
+}
+
+function missingRequiredDimension(row: CashCodingRow) {
+  return accountingDimensions.value.find(
+    (dimension) => isDimensionRequired(dimension, row) && !row.dimensions[dimension.fieldname]
+  );
+}
 
 function markDirty(name: string) {
   const next = new Set(dirtyRows.value);
@@ -130,7 +195,11 @@ async function loadRows(options: { confirmDiscard?: boolean } = {}) {
     if (loadRequestId.value !== requestId) {
       return;
     }
-    rows.value = response.rows;
+    const responseDimensions =
+      response.options.accounting_dimensions || store.boot?.accounting_dimensions || [];
+    accountingDimensions.value = responseDimensions;
+    dimensionOptions.value = response.options.dimension_options || {};
+    rows.value = response.rows.map((row) => normalizeCashCodingRow(row, responseDimensions));
     accountOptions.value = response.options.accounts;
     costCenterOptions.value = response.options.cost_centers;
     projectOptions.value = response.options.projects;
@@ -196,6 +265,12 @@ function applyBulk() {
     if (bulkProject.value) {
       row.project = bulkProject.value;
     }
+    accountingDimensions.value.forEach((dimension) => {
+      const value = bulkDimensions.value[dimension.fieldname];
+      if (value) {
+        row.dimensions[dimension.fieldname] = value;
+      }
+    });
     markDirty(row.transaction.name);
   });
 }
@@ -214,6 +289,20 @@ async function submitSelected() {
       [missingAccount.transaction.name]: "Account is required.",
     };
     pageError.value = "One or more selected rows are missing an account.";
+    return;
+  }
+
+  const rowMissingDimension = selectedRows.value.find((row) => missingRequiredDimension(row));
+  if (rowMissingDimension) {
+    const dimension = missingRequiredDimension(rowMissingDimension);
+    if (!dimension) {
+      return;
+    }
+    rowErrors.value = {
+      ...rowErrors.value,
+      [rowMissingDimension.transaction.name]: `${dimensionLabel(dimension)} is required.`,
+    };
+    pageError.value = "One or more selected rows are missing a required dimension.";
     return;
   }
 
@@ -297,7 +386,7 @@ onBeforeRouteLeave(() => guardDiscard());
     />
 
     <section class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-bank-line bg-white shadow-sm">
-      <div class="grid gap-3 border-b border-bank-line p-4 lg:grid-cols-[1fr_1fr_1fr_auto]">
+      <div class="grid gap-3 border-b border-bank-line p-4 sm:grid-cols-2 xl:grid-cols-4">
         <FormControl
           v-model="bulkAccount"
           variant="outline"
@@ -319,7 +408,16 @@ onBeforeRouteLeave(() => guardDiscard());
           list="cash-coding-projects"
           placeholder="Project"
         />
-        <Button variant="subtle" @click="applyBulk">Apply</Button>
+        <FormControl
+          v-for="dimension in accountingDimensions"
+          :key="dimension.fieldname"
+          v-model="bulkDimensions[dimension.fieldname]"
+          variant="outline"
+          size="md"
+          :list="dimensionDatalistId(dimension)"
+          :placeholder="dimensionLabel(dimension)"
+        />
+        <Button class="xl:justify-self-start" variant="subtle" @click="applyBulk">Apply</Button>
       </div>
 
       <div class="flex flex-col gap-3 border-b border-bank-line px-4 py-3 md:flex-row md:items-center md:justify-between">
@@ -350,7 +448,10 @@ onBeforeRouteLeave(() => guardDiscard());
         detail="Change filters or date range."
       />
       <div v-else class="bank-rec-scrollbar min-h-[360px] flex-1 overflow-auto lg:min-h-0">
-        <table class="w-full min-w-[1120px] table-fixed divide-y divide-bank-line text-sm">
+        <table
+          class="w-full table-fixed divide-y divide-bank-line text-sm"
+          :style="{ minWidth: tableMinWidth }"
+        >
           <thead class="sticky top-0 bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-bank-muted">
             <tr>
               <th class="w-9 px-3 py-3"></th>
@@ -361,6 +462,13 @@ onBeforeRouteLeave(() => guardDiscard());
               <th class="w-[18%] px-3 py-3">Contact</th>
               <th class="w-[13%] px-3 py-3">Cost center</th>
               <th class="w-[13%] px-3 py-3">Project</th>
+              <th
+                v-for="dimension in accountingDimensions"
+                :key="dimension.fieldname"
+                class="w-44 px-3 py-3"
+              >
+                {{ dimensionLabel(dimension) }}{{ dimension.mandatory_for_bs || dimension.mandatory_for_pl ? " *" : "" }}
+              </th>
               <th class="w-[10%] px-3 py-3">Reference</th>
             </tr>
           </thead>
@@ -444,6 +552,18 @@ onBeforeRouteLeave(() => guardDiscard());
                   @input="markDirty(row.transaction.name)"
                 />
               </td>
+              <td
+                v-for="dimension in accountingDimensions"
+                :key="dimension.fieldname"
+                class="px-3 py-3 align-top"
+              >
+                <input
+                  v-model="row.dimensions[dimension.fieldname]"
+                  class="h-9 w-full min-w-0 rounded-md border border-bank-line px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+                  :list="dimensionDatalistId(dimension)"
+                  @input="markDirty(row.transaction.name)"
+                />
+              </td>
               <td class="px-3 py-3 align-top">
                 <input
                   v-model="row.reference_number"
@@ -470,6 +590,19 @@ onBeforeRouteLeave(() => guardDiscard());
     <datalist id="cash-coding-projects">
       <option v-for="row in projectOptions" :key="row.name" :value="row.name">
         {{ row.project_name || row.name }}
+      </option>
+    </datalist>
+    <datalist
+      v-for="dimension in accountingDimensions"
+      :id="dimensionDatalistId(dimension)"
+      :key="dimension.fieldname"
+    >
+      <option
+        v-for="option in dimensionOptions[dimension.fieldname] || []"
+        :key="option.name"
+        :value="option.name"
+      >
+        {{ dimensionOptionLabel(option) }}
       </option>
     </datalist>
 
