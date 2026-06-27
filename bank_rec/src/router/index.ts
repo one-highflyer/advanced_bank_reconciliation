@@ -23,7 +23,11 @@ export const router = createRouter({
     },
     {
       path: "/cash-coding",
-      redirect: "/bank-coding",
+      redirect: (to) => ({
+        path: "/bank-coding",
+        query: to.query,
+        hash: to.hash,
+      }),
     },
     {
       path: "/matched",

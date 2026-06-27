@@ -183,6 +183,7 @@ function guardDiscard() {
 async function replaceQuery() {
   await router.replace({
     path: route.path,
+    hash: route.hash || undefined,
     query: {
       company: store.selectedCompany || undefined,
       bank_account: store.selectedBankAccount || undefined,
