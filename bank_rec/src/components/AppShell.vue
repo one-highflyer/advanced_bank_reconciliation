@@ -20,8 +20,8 @@ const navItems = [
     icon: CheckCircle2,
   },
   {
-    label: "Cash Coding",
-    to: "/cash-coding",
+    label: "Bank Coding",
+    to: "/bank-coding",
     icon: Table2,
   },
   {

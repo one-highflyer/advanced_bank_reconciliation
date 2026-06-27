@@ -68,7 +68,7 @@ def _row_success(row, transaction):
 		or abs(flt(transaction.unallocated_amount)) > 0.01
 		or not transaction.get("payment_entries")
 	):
-		frappe.throw(_("Cash coding did not reconcile the bank transaction."))
+		frappe.throw(_("Bank coding did not reconcile the bank transaction."))
 
 	voucher = None
 	for payment in transaction.get("payment_entries", []):
@@ -172,7 +172,7 @@ def preview_cash_coding(rows):
 				}
 			)
 		except Exception as exc:
-			results.append(_row_exception_error(row, exc, "Bank Rec cash coding preview failed"))
+			results.append(_row_exception_error(row, exc, "Bank Rec bank coding preview failed"))
 
 	return {"results": results}
 
@@ -231,7 +231,7 @@ def submit_cash_coding(rows):
 			frappe.db.release_savepoint(savepoint)
 		except Exception as exc:
 			frappe.db.rollback(save_point=savepoint)
-			results.append(_row_exception_error(row, exc, "Bank Rec cash coding submit failed"))
+			results.append(_row_exception_error(row, exc, "Bank Rec bank coding submit failed"))
 
 	return {
 		"results": results,

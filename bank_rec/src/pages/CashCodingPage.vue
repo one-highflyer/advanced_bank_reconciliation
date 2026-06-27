@@ -121,7 +121,7 @@ function dimensionLabel(dimension: AccountingDimension) {
 }
 
 function dimensionDatalistId(dimension: AccountingDimension) {
-  return `cash-coding-dimension-${dimension.fieldname}`;
+  return `bank-coding-dimension-${dimension.fieldname}`;
 }
 
 function dimensionOptionLabel(option: DimensionOption) {
@@ -177,7 +177,7 @@ function guardDiscard() {
   if (!hasDirtyRows.value) {
     return true;
   }
-  return window.confirm("Discard unsaved cash coding changes?");
+  return window.confirm("Discard unsaved bank coding changes?");
 }
 
 async function replaceQuery() {
@@ -237,7 +237,7 @@ async function loadRows(options: { confirmDiscard?: boolean } = {}) {
       return;
     }
     pageError.value =
-      error instanceof Error ? error.message : "Unable to load cash coding rows.";
+      error instanceof Error ? error.message : "Unable to load bank coding rows.";
   } finally {
     if (loadRequestId.value === requestId) {
       loading.value = false;
@@ -363,7 +363,7 @@ async function submitSelected() {
     await store.loadBankAccounts();
   } catch (error) {
     pageError.value =
-      error instanceof Error ? error.message : "Unable to submit cash coding.";
+      error instanceof Error ? error.message : "Unable to submit bank coding.";
   } finally {
     submitting.value = false;
   }
@@ -409,7 +409,7 @@ onBeforeRouteLeave(() => guardDiscard());
 
     <div class="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
       <TriangleAlert class="h-4 w-4 shrink-0 text-amber-500" />
-      Tax is not posted from cash coding.
+      Tax is not posted from bank coding.
     </div>
 
     <ErrorState
@@ -423,21 +423,21 @@ onBeforeRouteLeave(() => guardDiscard());
           v-model="bulkAccount"
           variant="outline"
           size="md"
-          list="cash-coding-accounts"
+          list="bank-coding-accounts"
           placeholder="Account"
         />
         <FormControl
           v-model="bulkCostCenter"
           variant="outline"
           size="md"
-          list="cash-coding-cost-centers"
+          list="bank-coding-cost-centers"
           placeholder="Cost center"
         />
         <FormControl
           v-model="bulkProject"
           variant="outline"
           size="md"
-          list="cash-coding-projects"
+          list="bank-coding-projects"
           placeholder="Project"
         />
         <FormControl
@@ -473,10 +473,10 @@ onBeforeRouteLeave(() => guardDiscard());
         </div>
       </div>
 
-      <LoadingState v-if="loading" label="Loading cash coding rows" />
+      <LoadingState v-if="loading" label="Loading bank coding rows" />
       <EmptyState
         v-else-if="!visibleRows.length"
-        title="No cash coding rows"
+        title="No bank coding rows"
         detail="Change filters or date range."
       />
       <div v-else class="bank-rec-scrollbar min-h-[360px] flex-1 overflow-auto lg:min-h-0">
@@ -545,7 +545,7 @@ onBeforeRouteLeave(() => guardDiscard());
                 <input
                   v-model="row.account"
                   class="h-9 w-full min-w-0 rounded-md border border-bank-line px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
-                  list="cash-coding-accounts"
+                  list="bank-coding-accounts"
                   @input="markDirty(row.transaction.name)"
                 />
               </td>
@@ -572,7 +572,7 @@ onBeforeRouteLeave(() => guardDiscard());
                 <input
                   v-model="row.cost_center"
                   class="h-9 w-full min-w-0 rounded-md border border-bank-line px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
-                  list="cash-coding-cost-centers"
+                  list="bank-coding-cost-centers"
                   @input="markDirty(row.transaction.name)"
                 />
               </td>
@@ -580,7 +580,7 @@ onBeforeRouteLeave(() => guardDiscard());
                 <input
                   v-model="row.project"
                   class="h-9 w-full min-w-0 rounded-md border border-bank-line px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
-                  list="cash-coding-projects"
+                  list="bank-coding-projects"
                   @input="markDirty(row.transaction.name)"
                 />
               </td>
@@ -609,17 +609,17 @@ onBeforeRouteLeave(() => guardDiscard());
       </div>
     </section>
 
-    <datalist id="cash-coding-accounts">
+    <datalist id="bank-coding-accounts">
       <option v-for="row in accountOptions" :key="row.name" :value="row.name">
         {{ row.account_name || row.name }}
       </option>
     </datalist>
-    <datalist id="cash-coding-cost-centers">
+    <datalist id="bank-coding-cost-centers">
       <option v-for="row in costCenterOptions" :key="row.name" :value="row.name">
         {{ row.cost_center_name || row.name }}
       </option>
     </datalist>
-    <datalist id="cash-coding-projects">
+    <datalist id="bank-coding-projects">
       <option v-for="row in projectOptions" :key="row.name" :value="row.name">
         {{ row.project_name || row.name }}
       </option>
@@ -640,7 +640,7 @@ onBeforeRouteLeave(() => guardDiscard());
 
     <ReconcileProgressDialog
       :open="submitting"
-      title="Posting cash coding"
+      title="Posting bank coding"
       message="Posting valid rows and keeping failed rows visible."
     />
   </div>

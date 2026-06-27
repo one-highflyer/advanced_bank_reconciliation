@@ -4,7 +4,7 @@
   <text x="32" y="40" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="700" fill="#1f2937">Bank Rec</text>
   <rect x="184" y="18" width="96" height="32" rx="6" fill="#edf2ff"/>
   <text x="208" y="39" font-family="Inter, Arial, sans-serif" font-size="13" fill="#1f4ed8">Reconcile</text>
-  <text x="310" y="39" font-family="Inter, Arial, sans-serif" font-size="13" fill="#4b5563">Cash Coding</text>
+  <text x="310" y="39" font-family="Inter, Arial, sans-serif" font-size="13" fill="#4b5563">Bank Coding</text>
   <text x="430" y="39" font-family="Inter, Arial, sans-serif" font-size="13" fill="#4b5563">Matched</text>
   <text x="520" y="39" font-family="Inter, Arial, sans-serif" font-size="13" fill="#4b5563">Rules</text>
   <rect x="32" y="88" width="1376" height="76" rx="8" fill="#ffffff" stroke="#e5e7eb"/>

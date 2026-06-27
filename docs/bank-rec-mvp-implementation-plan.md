@@ -13,14 +13,14 @@ Build through Phase 5 only:
 1. MVP shell and read-only Reconcile
 2. MVP match flow
 3. MVP create voucher flow
-4. MVP Cash Coding
+4. MVP Bank Coding
 5. MVP matched review and hardening
 
 Out of MVP:
 
 - `/bank-rec-tool` route or redirect.
 - Transfers.
-- Split cash coding.
+- Split bank coding.
 - Tax coding.
 - Statement-balance Difference card unless a statement closing balance is supplied.
 - Reconciliation-session model.
@@ -50,13 +50,13 @@ Status values:
 | Phase 1: Shell and read-only Reconcile | Complete | Route app, permission facade, read-only APIs, minimal Rules list, frontend build |
 | Phase 2: Match flow | Complete | Match candidates, Update tab, submit match, duplicate-submit guard |
 | Phase 3: Create voucher flow | Complete | Create tab, Journal Entry submit, Payment Entry draft handoff, full-page edit |
-| Phase 4: Cash Coding | Complete | Grid, bulk apply, row-level Journal Entry submit, discard guards |
+| Phase 4: Bank Coding | Complete | Grid, bulk apply, row-level Journal Entry submit, discard guards |
 | Phase 5: Matched review and hardening | Complete | Tests, build, route probes, Chrome smoke, incremental commits, and PR are complete |
 
 ## Resolved Scope Decisions From Final Review
 
 - Build the `Update` tab in MVP. It edits Bank Transaction metadata only, such as reference number, party type, and party.
-- Ship a minimal `Rules` page in MVP because create flow can save a bank rule and cash coding can consume rule suggestions. The MVP page is list, search, and "Open in Desk"; it is not a full rules manager.
+- Ship a minimal `Rules` page in MVP because create flow can save a bank rule and bank coding can consume rule suggestions. The MVP page is list, search, and "Open in Desk"; it is not a full rules manager.
 - Hide `Settings` from MVP navigation. Backend settings can still load through `get_boot`.
 - Include `Mode of Payment` in the Create flow when the inferred Payment Entry path requires it.
 
@@ -67,12 +67,12 @@ These requirements apply to every implementation phase.
 UX states:
 
 - Every page and panel must have explicit loading, empty, error, and partial-failure states.
-- Handle first-run cases: no permitted bank accounts, no selected transaction, zero unreconciled rows, no match candidates, no cash-coding rows, and no matched transactions.
+- Handle first-run cases: no permitted bank accounts, no selected transaction, zero unreconciled rows, no match candidates, no bank-coding rows, and no matched transactions.
 - Empty states should give the next useful action, such as changing filters, choosing another bank account, or using Create when no match candidates exist.
 
 Async safety:
 
-- Use the `Date.now()` request-id discard pattern for transaction context, match candidates, create defaults, update metadata refreshes, cash-coding row reloads, and any other selection-dependent async call.
+- Use the `Date.now()` request-id discard pattern for transaction context, match candidates, create defaults, update metadata refreshes, bank-coding row reloads, and any other selection-dependent async call.
 - Never render async results for a Bank Transaction that is no longer selected.
 
 Route state:
@@ -86,15 +86,15 @@ Route state:
 Mutating actions:
 
 - Disable mutating buttons while a submit is in flight.
-- Backend methods for simple match, create voucher, update metadata, cash coding submit, and unreconcile must recheck current document state before writing.
+- Backend methods for simple match, create voucher, update metadata, bank coding submit, and unreconcile must recheck current document state before writing.
 - Add idempotency or locking checks where duplicate clicks could create duplicate allocations, duplicate vouchers, or duplicate Journal Entries.
 - Return structured errors that can be displayed in the active panel without exposing hidden voucher internals.
 
 Progress and long jobs:
 
-- Mount `ReconcileProgressDialog.vue` for any match, create, draft handoff, or cash-coding operation that returns a background job or may take longer than a few seconds.
+- Mount `ReconcileProgressDialog.vue` for any match, create, draft handoff, or bank-coding operation that returns a background job or may take longer than a few seconds.
 - Subscribe to `bulk_reconciliation_progress` for reused bulk reconciliation paths.
-- Subscribe to `cash_coding_progress` and `cash_coding_complete` for new cash-coding background paths.
+- Subscribe to `cash_coding_progress` and `cash_coding_complete` for new bank-coding background paths.
 
 Selection and auto-advance:
 
@@ -104,10 +104,10 @@ Selection and auto-advance:
 
 Unsaved edits:
 
-- Confirm before discarding unsaved cash-coding edits on refresh, filter changes, bank-account changes, route changes, or browser navigation.
+- Confirm before discarding unsaved bank-coding edits on refresh, filter changes, bank-account changes, route changes, or browser navigation.
 - Do not rely on "preserve edits where practical" as the safety model. If edits cannot be preserved, ask before discarding them.
 
-Cash-coding validation:
+Bank-coding validation:
 
 - Prevent mixed-direction bulk apply when the field being applied changes accounting meaning by direction. Allow direction-neutral fields such as cost center, project, dimensions, reference, and notes.
 - Block submit client-side when selected rows are missing required fields such as account.
@@ -218,7 +218,7 @@ Frontend and route tasks:
 - Add `add_to_apps_screen` entry with label `Bank Rec`.
 - Add route rule for `/bank-rec` and `/bank-rec/<path:app_path>`.
 - Do not add `/bank-rec-tool`.
-- Implement app shell with Reconcile, Cash Coding, Matched, and Rules navigation.
+- Implement app shell with Reconcile, Bank Coding, Matched, and Rules navigation.
 - Do not show Settings in MVP navigation.
 - Implement bank account and date filters.
 - Implement URL query sync and restore for bank account, date range, and selected Bank Transaction.
@@ -262,7 +262,7 @@ Progress notes:
 - Added hook entries for the Apps screen label `Bank Rec` and `/bank-rec` route rules. No `/bank-rec-tool` route was added.
 - Added `bank_rec/` Vue 3, TypeScript, Vite, Pinia, Vue Router, Tailwind, and Frappe UI frontend package.
 - Pinned `frappe-ui` to `1.0.0-beta.3` and used a local alias helper only for optional development checkouts. No submodule was added.
-- Implemented app navigation for Reconcile, Cash Coding, Matched, and Rules. Settings is not shown.
+- Implemented app navigation for Reconcile, Bank Coding, Matched, and Rules. Settings is not shown.
 - Implemented bank account, date, and status filters with URL query sync for `bank_account`, `from_date`, `to_date`, `status`, and `bank_transaction`.
 - Implemented read-only Reconcile split view with transaction list, summary cards, selected transaction detail panel, and linked payment display.
 - Implemented minimal Rules page with bank account filter, search, and `Open` action to Desk in a new tab.
@@ -456,7 +456,7 @@ Commands run:
 - `bench --site demo.localhost run-tests --app advanced_bank_reconciliation --module advanced_bank_reconciliation.api.test_bank_rec`
 - `yarn build`
 
-## Phase 4: MVP Cash Coding
+## Phase 4: MVP Bank Coding
 
 Status: Complete
 
@@ -471,7 +471,7 @@ Backend tasks:
 - Create one Journal Entry per coded Bank Transaction.
 - Use savepoints so valid rows can post when other rows fail.
 - Return row-level success and error results.
-- Add cash-coding realtime events if row count makes background processing necessary.
+- Add bank-coding realtime events if row count makes background processing necessary.
 - Do not implement tax posting.
 - Do not implement split coding.
 - Do not implement transfers.
@@ -486,14 +486,14 @@ Frontend tasks:
 - Confirm before discarding unsaved edits on refresh, filter changes, bank-account changes, route changes, or browser navigation.
 - Prevent mixed-direction bulk apply for direction-sensitive fields.
 - Block submit when selected rows are missing required fields such as account.
-- Mount progress dialog and subscribe to cash-coding progress events when the backend returns a job.
-- Disable submit while cash-coding submit is in flight.
+- Mount progress dialog and subscribe to bank-coding progress events when the backend returns a job.
+- Disable submit while bank-coding submit is in flight.
 - Keep failed rows selected after submit.
 - Show row-level errors.
 
 Tests:
 
-- Cash coding creates Journal Entry and reconciles Bank Transaction.
+- Bank coding creates Journal Entry and reconciles Bank Transaction.
 - Row-level errors do not roll back successful rows.
 - Required account validation.
 - Permission rejection for cross-company rows.
@@ -501,7 +501,7 @@ Tests:
 - Split rows are rejected in MVP.
 - Mixed-direction bulk apply guard.
 - Unsaved edit discard confirmation.
-- Duplicate submit guard for cash coding.
+- Duplicate submit guard for bank coding.
 
 Acceptance:
 
@@ -510,21 +510,21 @@ Acceptance:
 - Invalid rows remain visible with row-level errors.
 - Selected rows missing required account are blocked before submit, while backend row-level errors still handle late validation failures.
 - Bulk apply speeds repeated coding.
-- UI clearly indicates tax is not handled by MVP cash coding.
+- UI clearly indicates tax is not handled by MVP bank coding.
 
 Progress notes:
 
 - Added `advanced_bank_reconciliation/api/cash_coding.py` with `get_cash_coding_rows`, `preview_cash_coding`, and `submit_cash_coding`.
-- Cash coding rows reuse unreconciled Bank Transaction data and include company-scoped account, cost center, and project options.
+- Bank coding rows reuse unreconciled Bank Transaction data and include company-scoped account, cost center, and project options.
 - Submit creates one Journal Entry per selected Bank Transaction through the existing ABR Journal Entry helper and reconciles via the existing clearance-date behavior.
 - Row-level savepoints allow valid rows to post even when other rows fail validation.
 - Backend validates bank account access, Bank Transaction access, account company, ledger account status, required account, contact requirements for receivable or payable accounts, and locks each Bank Transaction before posting.
-- The frontend Cash Coding page now has bank account and date filters, row selection, editable account/contact/cost center/project/reference fields, account/cost center/project datalist options, filter chips, row errors, and selected-row submit.
-- Added a distinct amber warning: `Tax is not posted from cash coding.`
+- The frontend Bank Coding page now has bank account and date filters, row selection, editable account/contact/cost center/project/reference fields, account/cost center/project datalist options, filter chips, row errors, and selected-row submit.
+- Added a distinct amber warning: `Tax is not posted from bank coding.`
 - Bulk apply supports account, cost center, and project. It blocks account bulk-apply across mixed money directions while allowing neutral fields.
 - Unsaved edits are guarded on refresh, filter changes, bank-account changes, route changes, and browser navigation.
-- Cash-coding row loads use the request-id stale response discard pattern.
-- Cash-coding submit opens `ReconcileProgressDialog.vue` while rows are being posted.
+- Bank-coding row loads use the request-id stale response discard pattern.
+- Bank-coding submit opens `ReconcileProgressDialog.vue` while rows are being posted.
 - Successful rows are removed from the grid after submit. Failed rows remain visible with row-level errors.
 - Tax posting, split coding, and transfers are not implemented in MVP.
 - Backend tests cover row loading, successful Journal Entry coding, and row-level partial failure.
@@ -565,7 +565,7 @@ Tests:
 - Unreconcile and cancel linked document.
 - Accounting Period locked behavior.
 - Existing unreconcile behavior remains unchanged.
-- Browser tests for Reconcile, Match, Update, Create, Cash Coding, Rules, Matched, route refresh restore, progress dialog, and responsive layout.
+- Browser tests for Reconcile, Match, Update, Create, Bank Coding, Rules, Matched, route refresh restore, progress dialog, and responsive layout.
 
 Manual QA:
 
@@ -602,18 +602,18 @@ Progress notes:
 - Old Desk tool route probe redirects Guest to log in, which confirms the route still resolves and has not been removed.
 - Chrome plugin verification was attempted after the user requested `@chrome`, but the local Chrome bridge failed before a browser session could be created. Tool discovery did not expose another Chrome control tool, and the installation list did not include a Chrome plugin candidate. Authenticated Chrome smoke remains blocked until the local Chrome plugin bridge is available.
 - Chrome plugin setup initially failed before session setup, then succeeded after the updated plugin version was available on June 21, 2026.
-- Chrome smoke opened `http://demo.localhost:8000/bank-rec`, confirmed redirect to `/bank-rec/reconcile`, verified Reconcile, Cash Coding, Matched, and Rules pages load in the authenticated browser session, and found no console errors.
-- Chrome smoke surfaced a small page-title issue where Cash Coding rendered as `CashCoding`; fixed in `bank_rec/src/router/index.ts` and rechecked in Chrome.
+- Chrome smoke opened `http://demo.localhost:8000/bank-rec`, confirmed redirect to `/bank-rec/reconcile`, verified Reconcile, Bank Coding, Matched, and Rules pages load in the authenticated browser session, and found no console errors.
+- Chrome smoke surfaced a small page-title issue where Bank Coding rendered as `CashCoding`; fixed in `bank_rec/src/router/index.ts` and rechecked in Chrome.
 - Authenticated Chrome workflow verification on `demo.localhost` used isolated `BRCHROME` fixture rows and exercised:
   - Create Journal Entry from a withdrawal and reconcile it.
   - Create Payment Entry from a customer deposit and reconcile it.
   - Match one Bank Transaction against two submitted Payment Entries.
   - Match one Bank Transaction against an unpaid Sales Invoice.
-  - Cash Coding missing-account validation, then successful cash coding submission.
+  - Bank Coding missing-account validation, then successful bank coding submission.
   - Update tab metadata update for reference and party fields.
   - Edit in Full Page draft handoff, with Bank Rec remaining on the same selected route and a Draft Journal Entry created in Desk.
   - Matched review, linked voucher visibility, unreconcile confirmation modal, and unreconcile-only completion.
-- Database verification after the Chrome workflow confirmed the JE, PE, multi-PE, unpaid invoice, and cash-coding transactions were reconciled with the expected linked documents, the update row stayed unreconciled with metadata saved, the draft handoff created a draft Journal Entry, and the unreconcile-only row returned to `Unreconciled`.
+- Database verification after the Chrome workflow confirmed the JE, PE, multi-PE, unpaid invoice, and bank-coding transactions were reconciled with the expected linked documents, the update row stayed unreconciled with metadata saved, the draft handoff created a draft Journal Entry, and the unreconcile-only row returned to `Unreconciled`.
 - No site credential changes were made.
 - Release type was confirmed as `feat`, and local incremental commits were created on branch `feat/bank-rec-route-app`.
 - Generated Bank Rec build output is intentionally ignored and not part of the final branch diff.
@@ -645,15 +645,15 @@ Commands run:
 - Update tab works for Bank Transaction metadata.
 - Create voucher flow works.
 - Edit in Full Page preserves entered create values by opening a Draft voucher in a new tab, keeps the Bank Rec tab state intact, and does not reconcile until the user completes reconciliation through the normal Bank Rec flow.
-- Cash Coding works for non-tax simple coding.
+- Bank Coding works for non-tax simple coding.
 - Minimal Rules list works and opens Desk for edit or delete.
 - Settings is hidden from MVP navigation.
 - Matched review and unreconcile work.
-- Long-running match and cash-coding actions show progress.
+- Long-running match and bank-coding actions show progress.
 - Mutating actions have duplicate-submit guards.
 - Selection-dependent async calls discard stale responses.
 - Hard refresh restores route filters and selected Bank Transaction where permitted.
-- Cash-coding unsaved edits require confirmation before discard.
+- Bank-coding unsaved edits require confirmation before discard.
 - Summary cards do not show Difference without statement closing balance.
 - Tax, transfers, splits, and reconciliation-session model remain out of MVP.
 - Python tests pass.
@@ -668,6 +668,6 @@ Track these after MVP completion:
 - Phase 6: Statement balance check.
 - Phase 7: Transfers.
 - Phase 8: Tax coding.
-- Phase 9: Split cash coding.
+- Phase 9: Split bank coding.
 - Phase 10: Match adjustments and bank fees.
 - Phase 11: Attachments and receipt capture.
