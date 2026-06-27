@@ -10,6 +10,7 @@ on:
 
 env:
   FRAPPE_BRANCH: version-15
+  CI: "Yes"
 
 concurrency:
   group: ci-${{ github.ref }}-${{ github.event.number || github.sha }}
@@ -98,18 +99,40 @@ jobs:
           mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL character_set_server = 'utf8mb4'"
           mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL collation_server = 'utf8mb4_unicode_ci'"
 
-      - name: Install
+      - name: Get ERPNext
         working-directory: ${{ github.workspace }}/../frappe-bench
         run: |
           bench get-app erpnext --branch "$FRAPPE_BRANCH"
+
+      - name: Get app
+        working-directory: ${{ github.workspace }}/../frappe-bench
+        run: |
           bench get-app advanced_bank_reconciliation $GITHUB_WORKSPACE
+
+      - name: Setup requirements
+        working-directory: ${{ github.workspace }}/../frappe-bench
+        run: |
           bench setup requirements --dev
+
+      - name: Create test site
+        working-directory: ${{ github.workspace }}/../frappe-bench
+        run: |
           bench new-site --db-root-password root --admin-password admin test_site
+
+      - name: Install ERPNext
+        working-directory: ${{ github.workspace }}/../frappe-bench
+        run: |
           bench --site test_site install-app erpnext
+
+      - name: Install app
+        working-directory: ${{ github.workspace }}/../frappe-bench
+        run: |
           bench --site test_site install-app advanced_bank_reconciliation
-          bench build
-        env:
-          CI: "Yes"
+
+      - name: Build app assets
+        working-directory: ${{ github.workspace }}/../frappe-bench
+        run: |
+          bench build --app advanced_bank_reconciliation
 
       - name: Run Tests
         working-directory: ${{ github.workspace }}/../frappe-bench
