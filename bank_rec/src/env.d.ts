@@ -22,5 +22,5 @@ interface Window {
   allowed_roles?: string[];
   allowed_companies?: string[];
   settings?: Record<string, unknown>;
-  accounting_dimensions?: Record<string, unknown>[];
+  accounting_dimensions?: import("@/types/bankRec").AccountingDimension[];
 }

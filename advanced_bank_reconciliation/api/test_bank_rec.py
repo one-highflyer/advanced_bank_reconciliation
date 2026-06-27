@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, flt, nowdate
@@ -595,6 +597,43 @@ class TestBankRecPhaseThreeAPI(FrappeTestCase):
 		self.assertTrue(result["options"]["accounts"])
 		self.assertIn("posting_date", result["defaults"])
 
+	def test_create_defaults_include_accounting_dimensions(self):
+		bank_transaction = create_test_bank_transaction(
+			self.bank_account,
+			withdrawal=27,
+			reference_number="_ABR-PHASE3-DIMS",
+		)
+		dimension_context = {
+			"accounting_dimensions": [
+				{
+					"fieldname": "region",
+					"fieldtype": "Link",
+					"label": "Region",
+					"options": "Region",
+					"has_company_field": True,
+					"default_value": "_Test Region",
+					"mandatory_for_bs": True,
+					"mandatory_for_pl": False,
+				}
+			],
+			"dimension_options": {"region": [{"name": "_Test Region"}]},
+		}
+
+		with patch(
+			"advanced_bank_reconciliation.api.create_voucher.get_accounting_dimension_context",
+			return_value=dimension_context,
+		):
+			result = get_create_defaults(bank_transaction.name)
+
+		self.assertEqual(
+			result["options"]["accounting_dimensions"],
+			dimension_context["accounting_dimensions"],
+		)
+		self.assertEqual(
+			result["options"]["dimension_options"],
+			dimension_context["dimension_options"],
+		)
+
 	def test_create_journal_entry_from_withdrawal_reconciles_transaction(self):
 		bank_transaction = create_test_bank_transaction(
 			self.bank_account,
@@ -794,6 +833,51 @@ class TestBankRecPhaseFourAPI(FrappeTestCase):
 
 		names = {row["transaction"]["name"] for row in result["rows"]}
 		self.assertIn(bank_transaction.name, names)
+
+	def test_cash_coding_rows_include_accounting_dimensions(self):
+		bank_transaction = create_test_bank_transaction(
+			self.bank_account,
+			withdrawal=17,
+			reference_number="_ABR-PHASE4-DIMS",
+		)
+		dimension_context = {
+			"accounting_dimensions": [
+				{
+					"fieldname": "region",
+					"fieldtype": "Link",
+					"label": "Region",
+					"options": "Region",
+					"has_company_field": True,
+					"default_value": "_Test Region",
+					"mandatory_for_bs": True,
+					"mandatory_for_pl": False,
+				}
+			],
+			"dimension_options": {"region": [{"name": "_Test Region"}]},
+		}
+
+		with patch(
+			"advanced_bank_reconciliation.api.cash_coding.get_accounting_dimension_context",
+			return_value=dimension_context,
+		):
+			result = get_cash_coding_rows(
+				self.bank_account,
+				from_date=add_days(nowdate(), -1),
+				to_date=add_days(nowdate(), 1),
+			)
+
+		row = next(
+			row for row in result["rows"] if row["transaction"]["name"] == bank_transaction.name
+		)
+		self.assertEqual(row["dimensions"], {})
+		self.assertEqual(
+			result["options"]["accounting_dimensions"],
+			dimension_context["accounting_dimensions"],
+		)
+		self.assertEqual(
+			result["options"]["dimension_options"],
+			dimension_context["dimension_options"],
+		)
 
 	def test_submit_cash_coding_reconciles_valid_row(self):
 		bank_transaction = create_test_bank_transaction(

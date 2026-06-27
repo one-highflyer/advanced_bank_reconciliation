@@ -17,9 +17,17 @@ export const router = createRouter({
       component: ReconcilePage,
     },
     {
-      path: "/cash-coding",
-      name: "Cash Coding",
+      path: "/bank-coding",
+      name: "Bank Coding",
       component: CashCodingPage,
+    },
+    {
+      path: "/cash-coding",
+      redirect: (to) => ({
+        path: "/bank-coding",
+        query: to.query,
+        hash: to.hash,
+      }),
     },
     {
       path: "/matched",

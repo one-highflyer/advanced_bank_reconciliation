@@ -14,6 +14,7 @@ import Check from "~icons/lucide/check";
 import CheckCircle2 from "~icons/lucide/check-circle-2";
 import ExternalLink from "~icons/lucide/external-link";
 import RefreshCcw from "~icons/lucide/refresh-cw";
+import Search from "~icons/lucide/search";
 
 const props = defineProps<{
   transaction?: BankTransaction;
@@ -32,9 +33,19 @@ const emit = defineEmits<{
 
 const selectedKeys = ref<string[]>([]);
 const amounts = ref<Record<string, number | string | null>>({});
+const search = ref("");
 
+const filteredCandidates = computed(() => {
+  const term = search.value.trim().toLowerCase();
+  if (!term) {
+    return props.candidates;
+  }
+  return props.candidates.filter((candidate) =>
+    candidateSearchText(candidate).includes(term)
+  );
+});
 const selectedCandidates = computed(() =>
-  props.candidates.filter((candidate) => selectedKeys.value.includes(candidate.key))
+  filteredCandidates.value.filter((candidate) => selectedKeys.value.includes(candidate.key))
 );
 
 function allocationAmount(candidate: MatchCandidate) {
@@ -95,6 +106,30 @@ function confidenceLabel(confidence: MatchCandidate["confidence"]) {
   return "Low confidence";
 }
 
+function candidateSearchText(candidate: MatchCandidate) {
+  return [
+    candidate.voucher_name,
+    candidate.voucher_type,
+    candidate.source_type,
+    candidate.reference_number,
+    candidate.party_name,
+    candidate.party,
+    candidate.party_type,
+    candidate.posting_date,
+    candidate.reference_date,
+    formatDate(candidate.posting_date),
+    formatDate(candidate.reference_date),
+    candidate.amount,
+    formatMoney(candidate.amount, candidate.currency || props.currency),
+    candidate.currency,
+    confidenceLabel(candidate.confidence),
+    ...candidate.reasons,
+  ]
+    .filter((value) => value !== undefined && value !== null)
+    .join(" ")
+    .toLowerCase();
+}
+
 function toggleCandidate(candidate: MatchCandidate, checked: boolean) {
   if (checked && !selectedKeys.value.includes(candidate.key)) {
     selectedKeys.value = [...selectedKeys.value, candidate.key];
@@ -133,6 +168,7 @@ watch(
       (candidate) => candidate.rank === topRank && candidate.confidence === "high"
     );
     selectedKeys.value = topCandidates.length === 1 ? [topCandidates[0].key] : [];
+    search.value = "";
   },
   { immediate: true }
 );
@@ -144,7 +180,7 @@ watch(
       <div>
         <div class="text-base font-semibold text-bank-ink">Match</div>
         <div class="text-sm tabular-nums text-bank-muted">
-          {{ candidates.length }} candidates
+          {{ search ? `${filteredCandidates.length} of ${candidates.length}` : candidates.length }} candidates
         </div>
       </div>
       <Button variant="subtle" :loading="loading" @click="$emit('refresh')">
@@ -174,7 +210,27 @@ watch(
     />
 
     <template v-else>
-      <div class="bank-rec-scrollbar min-h-0 flex-1 overflow-auto">
+      <div class="border-b border-bank-line px-4 py-3">
+        <div class="relative">
+          <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-bank-muted" />
+          <input
+            v-model="search"
+            class="h-9 w-full rounded-md border border-bank-line bg-white pl-9 pr-3 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+            type="search"
+            aria-label="Search match candidates"
+            placeholder="Search documents, references, parties, dates, amounts"
+          />
+        </div>
+      </div>
+
+      <EmptyState
+        v-if="!filteredCandidates.length"
+        class="min-h-0 flex-1"
+        title="No candidates match search"
+        detail="Change the search term or refresh candidates."
+      />
+
+      <div v-else class="bank-rec-scrollbar min-h-0 flex-1 overflow-auto">
         <table class="min-w-full divide-y divide-bank-line text-sm">
           <thead class="sticky top-0 bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-bank-muted">
             <tr>
@@ -188,7 +244,7 @@ watch(
           </thead>
           <tbody class="divide-y divide-bank-line bg-white">
             <tr
-              v-for="candidate in candidates"
+              v-for="candidate in filteredCandidates"
               :key="candidate.key"
               :class="selectedKeys.includes(candidate.key) ? 'bg-bank-accent-50' : ''"
             >

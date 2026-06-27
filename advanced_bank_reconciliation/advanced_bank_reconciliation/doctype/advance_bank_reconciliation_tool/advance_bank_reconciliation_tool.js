@@ -28,7 +28,7 @@ function render_modern_bank_rec_prompt(frm) {
 			<div class="abr-modern-bank-rec-prompt alert alert-info" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
 				<div>
 					<div><strong>${__("Try the new Bank Rec")}</strong></div>
-					<div class="small text-muted">${__("Use the split-screen reconciliation and cash coding views with the current filters.")}</div>
+					<div class="small text-muted">${__("Use the split-screen reconciliation and bank coding views with the current filters.")}</div>
 				</div>
 				<a class="btn btn-sm btn-primary" href="/bank-rec/reconcile">${__("Open Bank Rec")}</a>
 			</div>

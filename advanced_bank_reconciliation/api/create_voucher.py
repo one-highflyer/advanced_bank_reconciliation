@@ -12,6 +12,7 @@ from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_b
 	create_payment_entry_bts,
 	get_abr_default_settings,
 )
+from advanced_bank_reconciliation.api.accounting_dimensions import get_accounting_dimension_context
 from advanced_bank_reconciliation.api.bank_rec import _bank_account_to_dto, _transaction_to_dto
 from advanced_bank_reconciliation.api.matching import _linked_payment_dto, _lock_bank_transaction
 from advanced_bank_reconciliation.api.permission import (
@@ -186,6 +187,7 @@ def get_create_defaults(bank_transaction_name):
 	company = _get_company(transaction)
 	bank_account = frappe.get_doc("Bank Account", transaction.bank_account)
 	settings = get_abr_default_settings()
+	dimension_context = get_accounting_dimension_context(company)
 
 	accounts = frappe.get_list(
 		"Account",
@@ -231,6 +233,7 @@ def get_create_defaults(bank_transaction_name):
 			"mode_of_payments": mode_of_payments,
 			"cost_centers": cost_centers,
 			"projects": projects,
+			**dimension_context,
 		},
 	}
 

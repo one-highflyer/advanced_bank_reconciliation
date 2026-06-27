@@ -8,7 +8,7 @@ The current tool must remain available and working as-is. The new experience wil
 
 ## Product Positioning
 
-This is not a 100% Xero parity project. The UI should borrow the parts of Xero that make daily work faster, especially the split-screen transaction flow and the cash-coding grid, but the accounting model must remain NexWave-native.
+This is not a 100% Xero parity project. The UI should borrow the parts of Xero that make daily work faster, especially the split-screen transaction flow and the bank-coding grid, but the accounting model must remain NexWave-native.
 
 Key model difference:
 
@@ -31,7 +31,7 @@ Rationale:
 - It is short enough to type and remember.
 - It reads like a product/workspace name, not a developer utility.
 - "Tool" is redundant in user navigation. The UI itself is the tool.
-- It leaves room for subroutes such as `/bank-rec/reconcile`, `/bank-rec/cash-coding`, `/bank-rec/matched`, and `/bank-rec/rules`.
+- It leaves room for subroutes such as `/bank-rec/reconcile`, `/bank-rec/bank-coding`, `/bank-rec/matched`, and `/bank-rec/rules`.
 
 No compatibility route:
 
@@ -44,8 +44,8 @@ No compatibility route:
 - Do not reuse the current modal-first UI as the primary interaction model.
 - Do not replace the proven reconciliation backend in the first version.
 - Do not implement transfers between bank accounts in MVP.
-- Do not implement split cash coding in MVP.
-- Do not implement tax-rate behavior for cash coding in MVP.
+- Do not implement split bank coding in MVP.
+- Do not implement tax-rate behavior for bank coding in MVP.
 - Do not introduce a Xero-style reconciliation-session model in MVP.
 - Do not expose customer-specific examples, names, URLs, or data in docs, tests, commits, or PR text.
 
@@ -54,7 +54,7 @@ No compatibility route:
 The new UI has three primary surfaces:
 
 1. Reconcile
-2. Cash Coding
+2. Bank Coding
 3. Review Matched
 
 Bank rules remain accessible through a minimal MVP list, with edit and delete handled by links to the existing Desk form. Settings are loaded behind the scenes and should not appear as an MVP navigation item until a user-facing settings workflow is designed.
@@ -65,7 +65,7 @@ Bank rules remain accessible through a minimal MVP list, with edit and delete ha
 - App screen label: `Bank Rec`.
 - Do not add `/bank-rec-tool` as a route or redirect.
 - Transfers are a later iteration, not MVP.
-- Cash coding splits are a later iteration, not MVP.
+- Bank coding splits are a later iteration, not MVP.
 - Tax coding is a later iteration after the accounting treatment is specified.
 - Reconciliation remains clearance-date based. No reconciliation-session model is planned for MVP.
 - The Update tab is included in MVP for bank-transaction metadata edits.
@@ -84,7 +84,7 @@ Suggested subroutes:
 
 ```text
 /bank-rec/reconcile
-/bank-rec/cash-coding
+/bank-rec/bank-coding
 /bank-rec/matched
 /bank-rec/rules
 ```
@@ -119,7 +119,7 @@ The `bank_rec` Python page serves the Vue app shell. The browser-visible URL rem
 Route state:
 
 - Persist `bank_account`, `from_date`, `to_date`, and the selected `bank_transaction` in the URL query where the current page uses them.
-- Restore those query values on hard refresh and direct subroute visits such as `/bank-rec/cash-coding`.
+- Restore those query values on hard refresh and direct subroute visits such as `/bank-rec/bank-coding`.
 - If a restored bank account or transaction is no longer permitted or no longer exists in the filtered result, show the normal empty or permission state and fall back to the first valid row only when that is safe.
 - Use route replace for frequent selection changes so browser Back remains useful.
 
@@ -387,13 +387,13 @@ Functional details:
 - Payment Entry creation must preserve multi-currency behavior.
 - Translate hidden voucher-type validation errors into the split-screen language. For example, show that a contact is required for the selected account instead of surfacing an internal Payment Entry party error.
 
-## Cash Coding Workflow
+## Bank Coding Workflow
 
 Goal: let users code many simple bank transactions in a grid and reconcile them in bulk.
 
 User flow:
 
-1. User opens `Cash Coding`.
+1. User opens `Bank Coding`.
 2. Grid loads unreconciled transactions suitable for coding.
 3. Bank rules can pre-fill account, party, cost center, project, and dimensions.
 4. User edits rows inline.
@@ -403,7 +403,7 @@ User flow:
 
 Mockup:
 
-![Cash coding grid](mockups/cash-coding-grid.svg)
+![Bank coding grid](mockups/bank-coding-grid.svg)
 
 MVP row fields:
 
@@ -429,8 +429,8 @@ MVP behavior:
 - Return row-level results.
 - Let users filter to uncoded, rule-suggested, errors, or selected rows.
 - Support bulk apply for selected rows, so account, party, cost center, project, dimensions, reference, and notes can be filled down before submit.
-- Treat tax coding as out of scope. The MVP cash-coding grid must not imply that taxable GST/BAS transactions are being posted tax-correctly.
-- Show a visible but compact cash-coding warning banner that tax is not posted from MVP cash coding. Do not render this as a filter chip. Users should use full voucher entry for taxable transactions until the tax phase exists.
+- Treat tax coding as out of scope. The MVP bank-coding grid must not imply that taxable GST/BAS transactions are being posted tax-correctly.
+- Show a visible but compact bank-coding warning banner that tax is not posted from MVP bank coding. Do not render this as a filter chip. Users should use full voucher entry for taxable transactions until the tax phase exists.
 - Block mixed-direction bulk apply unless the user narrows the selection to one direction or explicitly changes only direction-neutral fields.
 - Block submit for selected rows missing required client-side fields such as account. The backend must still return row-level errors for rows that become invalid after validation starts.
 - Confirm before discarding unsaved grid edits on refresh, filter changes, route changes, or bank-account changes.
@@ -498,7 +498,7 @@ Match candidate:
 }
 ```
 
-Cash coding row result:
+Bank coding row result:
 
 ```json
 {
@@ -514,7 +514,7 @@ Cash coding row result:
 Frontend:
 
 - Show toast for overall success or failure.
-- Show row-level errors in cash coding.
+- Show row-level errors in bank coding.
 - Keep failed rows selected after bulk submit.
 - Confirm before discarding unsaved grid edits.
 - Disable mutating buttons while the request is in flight.
@@ -522,8 +522,8 @@ Frontend:
 
 Backend:
 
-- Use savepoints for row-level cash coding failures.
-- Add idempotency or locking checks around simple match, create voucher, and cash coding submit so duplicate clicks cannot create duplicate allocations or duplicate vouchers.
+- Use savepoints for row-level bank coding failures.
+- Add idempotency or locking checks around simple match, create voucher, and bank coding submit so duplicate clicks cannot create duplicate allocations or duplicate vouchers.
 - Use the shared ABR logger module.
 - Use `frappe.log_error()` for critical failures after rollback and commit the error log.
 - Return structured errors suitable for table display.
@@ -533,7 +533,7 @@ Backend:
 Use realtime events for operations that may take longer than a few seconds:
 
 - Bulk unpaid invoice reconciliation
-- Cash coding bulk submit when row count is high
+- Bank coding bulk submit when row count is high
 - Rule preview for large date ranges
 
 Event names:
@@ -544,9 +544,9 @@ cash_coding_progress
 cash_coding_complete
 ```
 
-For existing bulk match flows, subscribe the new UI to the current `bulk_reconciliation_progress` event instead of changing the existing emitter. New cash-coding bulk work can add dedicated cash-coding events because that path does not exist in the old tool.
+For existing bulk match flows, subscribe the new UI to the current `bulk_reconciliation_progress` event instead of changing the existing emitter. New bank-coding bulk work can add dedicated bank-coding events because that path does not exist in the old tool.
 
-The frontend must mount `ReconcileProgressDialog.vue` for long-running match and cash-coding operations. Users should see progress, partial failures, completion, and retry-ready error states instead of a silent wait.
+The frontend must mount `ReconcileProgressDialog.vue` for long-running match and bank-coding operations. Users should see progress, partial failures, completion, and retry-ready error states instead of a silent wait.
 
 ## Build And Install
 
@@ -581,8 +581,8 @@ Python tests:
 - Match candidate response shape.
 - Submit match against regular voucher.
 - Submit match against unpaid invoices.
-- Cash coding creates Journal Entry and reconciles Bank Transaction.
-- Cash coding returns row-level errors without rolling back successful rows.
+- Bank coding creates Journal Entry and reconciles Bank Transaction.
+- Bank coding returns row-level errors without rolling back successful rows.
 - Unreconcile behavior remains unchanged.
 - Statement summary does not return a `difference` value unless statement closing balance is supplied.
 - Unreconcile and cancel flows respect Accounting Period and standard document validation.
@@ -595,11 +595,11 @@ Frontend tests:
   - Reconcile split-screen loading.
 - Match submit.
 - Create voucher submit.
-- Cash coding row validation.
+- Bank coding row validation.
 - Empty and first-run states for no bank accounts, no selected transaction, no unreconciled rows, and no match candidates.
-- Double-submit prevention for match, create, update, cash coding, and unreconcile.
+- Double-submit prevention for match, create, update, bank coding, and unreconcile.
 - Stale async response discard while moving quickly between transactions.
-- Unsaved cash-coding edit discard confirmation.
+- Unsaved bank-coding edit discard confirmation.
 - Responsive layout.
 
 Manual QA:
@@ -648,14 +648,14 @@ Phase 3: MVP create voucher flow
 - Add "Edit in Full Page" secondary action that saves current values as a Draft voucher and opens it in Desk in a new browser tab.
 - Exclude bank-account transfers from the create flow in MVP.
 
-Phase 4: MVP Cash Coding
+Phase 4: MVP Bank Coding
 
 - Add editable grid.
 - Add rule suggestion preview.
 - Add bulk apply for selected rows.
 - Add row-level validation.
 - Add confirm-on-discard for unsaved grid edits.
-- Add progress dialog subscription for long-running cash-coding submit.
+- Add progress dialog subscription for long-running bank-coding submit.
 - Add bulk Journal Entry creation and reconciliation.
 - Support one coded Journal Entry per Bank Transaction.
 - Exclude split coding in MVP.
@@ -683,12 +683,12 @@ Phase 7: Later iteration, transfers
 
 Phase 8: Later iteration, tax coding
 
-- Define accounting treatment for tax-inclusive and tax-exclusive cash coding.
+- Define accounting treatment for tax-inclusive and tax-exclusive bank coding.
 - Add tax templates, tax accounts, and validation rules after the treatment is approved.
 - Add test cases for tax rounding, reversals, and basic taxable spend and receive-money coding.
 - Consider adding a tax field to bank rules only after the tax posting model is approved.
 
-Phase 9: Later iteration, split cash coding
+Phase 9: Later iteration, split bank coding
 
 - Allow one Bank Transaction to be split across multiple coding lines.
 - Validate that split totals equal the bank transaction amount before posting.
@@ -698,7 +698,7 @@ Phase 10: Later iteration, match adjustments and bank fees
 
 - Allow a small adjustment line while matching an otherwise valid voucher.
 - Support bank fees, FX cents, and minor rounding differences without forcing users into a separate manual document.
-- Reuse the same validation rules as cash coding and voucher creation.
+- Reuse the same validation rules as bank coding and voucher creation.
 
 Phase 11: Later iteration, attachments and receipt capture
 
@@ -712,7 +712,7 @@ Risk: duplicate business logic between old and new UI.
 
 Mitigation: new UI calls backend facade methods that reuse existing ABR functions.
 
-Risk: cash coding posts incorrect accounting entries at speed.
+Risk: bank coding posts incorrect accounting entries at speed.
 
 Mitigation: MVP supports Journal Entry coding only, validates every row server-side, and avoids tax behavior until designed.
 
