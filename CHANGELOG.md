@@ -1,3 +1,13 @@
+## [1.9.2](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.9.1...v1.9.2) (2026-06-27)
+
+
+### Bug Fixes
+
+* **bank-rec:** address dimension and match search review ([29562f5](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/29562f546d3ef8e9a9c14389087abd28eb45cbf7))
+* **bank-rec:** preserve bank coding redirect state ([fcac044](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/fcac04446f51fd644986e6c1d2a706d7c1b6d894))
+* **bank-rec:** show dimensions and search match candidates ([22fca9d](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/22fca9d6cdf4bfd9652213399499ea745fcad1d9))
+* **bank-rec:** use bank coding label ([2bfd2f0](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/2bfd2f01609bf5c73af909dbb01128213b6c3785))
+
 ## [1.9.1](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.9.0...v1.9.1) (2026-06-24)
 
 
