@@ -3,6 +3,7 @@
 import json
 
 import frappe
+from advanced_bank_reconciliation.api.permission import assert_party_access
 from advanced_bank_reconciliation.utils.logger import get_logger
 from erpnext import get_default_cost_center
 from erpnext.accounts.doctype.bank_transaction.bank_transaction import (
@@ -327,6 +328,12 @@ def get_account_balance(bank_account, till_date):
 def update_bank_transaction(bank_transaction_name, reference_number, party_type=None, party=None):
 	# updates bank transaction based on the new parameters provided by the user from Vouchers
 	bank_transaction = frappe.get_doc("Bank Transaction", bank_transaction_name)
+	company = bank_transaction.company or frappe.get_cached_value(
+		"Bank Account",
+		bank_transaction.bank_account,
+		"company",
+	)
+	assert_party_access(party_type, party, company=company)
 	bank_transaction.reference_number = reference_number
 	bank_transaction.party_type = party_type
 	bank_transaction.party = party
@@ -415,7 +422,15 @@ def create_journal_entry_bts(
 	bank_transaction = frappe.db.get_values(
 		"Bank Transaction",
 		bank_transaction_name,
-		fieldname=["name", "deposit", "withdrawal", "bank_account", "currency", "unallocated_amount"],
+		fieldname=[
+			"name",
+			"deposit",
+			"withdrawal",
+			"bank_account",
+			"company",
+			"currency",
+			"unallocated_amount",
+		],
 		as_dict=True,
 	)[0]
 	company_account = frappe.get_value("Bank Account", bank_transaction.bank_account, "account")
@@ -428,7 +443,8 @@ def create_journal_entry_bts(
 				)
 			)
 
-	company = frappe.get_value("Account", company_account, "company")
+	company = bank_transaction.company or frappe.get_value("Account", company_account, "company")
+	assert_party_access(party_type, party, company=company)
 	resolved_cost_center = cost_center or get_default_cost_center(company)
 	company_default_currency = frappe.get_cached_value("Company", company, "default_currency")
 	company_account_currency = frappe.get_cached_value("Account", company_account, "account_currency")
@@ -611,14 +627,22 @@ def create_payment_entry_bts(
 	bank_transaction = frappe.db.get_values(
 		"Bank Transaction",
 		bank_transaction_name,
-		fieldname=["name", "unallocated_amount", "deposit", "bank_account", "currency"],
+		fieldname=[
+			"name",
+			"unallocated_amount",
+			"deposit",
+			"bank_account",
+			"company",
+			"currency",
+		],
 		as_dict=True,
 	)[0]
 
 	payment_type = "Receive" if bank_transaction.deposit > 0.0 else "Pay"
 
 	bank_account = frappe.get_cached_value("Bank Account", bank_transaction.bank_account, "account")
-	company = frappe.get_cached_value("Account", bank_account, "company")
+	company = bank_transaction.company or frappe.get_cached_value("Account", bank_account, "company")
+	assert_party_access(party_type, party, company=company)
 	party_account = get_party_account(party_type, party, company)
 
 	bank_currency = bank_transaction.currency

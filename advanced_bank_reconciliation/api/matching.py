@@ -277,7 +277,12 @@ def update_transaction_metadata(
 	_lock_bank_transaction(transaction.name)
 	transaction.reload()
 
-	assert_party_access(party_type, party)
+	company = transaction.company or frappe.get_cached_value(
+		"Bank Account",
+		transaction.bank_account,
+		"company",
+	)
+	assert_party_access(party_type, party, company=company)
 
 	transaction.reference_number = reference_number or ""
 	transaction.party_type = party_type or ""

@@ -18,6 +18,7 @@ from advanced_bank_reconciliation.api.matching import (
 	update_transaction_metadata,
 )
 from advanced_bank_reconciliation.api.create_voucher import (
+	_build_voucher,
 	create_voucher_draft_from_transaction,
 	create_voucher_from_transaction,
 	get_create_defaults,
@@ -444,6 +445,37 @@ class TestBankRecPhaseTwoAPI(FrappeTestCase):
 		self.assertEqual(bank_transaction.party_type, "Customer")
 		self.assertEqual(bank_transaction.party, TEST_CUSTOMER)
 
+	def test_update_metadata_passes_transaction_company_to_party_policy(self):
+		transaction = frappe._dict(
+			name="_Test Bank Transaction",
+			company="_Test Company",
+			status="Unreconciled",
+			reference_number="",
+			party_type="",
+			party="",
+		)
+		transaction.reload = lambda: None
+		transaction.save = lambda: None
+		transaction.as_dict = lambda: transaction
+		with (
+			patch(
+				"advanced_bank_reconciliation.api.matching.assert_bank_transaction_access",
+				return_value=transaction,
+			),
+			patch("advanced_bank_reconciliation.api.matching._lock_bank_transaction"),
+			patch("advanced_bank_reconciliation.api.matching.assert_party_access") as assert_party,
+		):
+			update_transaction_metadata(
+				transaction.name,
+				party_type="Customer",
+				party="_Test Customer",
+			)
+		assert_party.assert_called_once_with(
+			"Customer",
+			"_Test Customer",
+			company="_Test Company",
+		)
+
 
 class TestBankRecMutationGuardsAPI(FrappeTestCase):
 	@classmethod
@@ -596,6 +628,29 @@ class TestBankRecPhaseThreeAPI(FrappeTestCase):
 		self.assertEqual(result["transaction"]["name"], bank_transaction.name)
 		self.assertTrue(result["options"]["accounts"])
 		self.assertIn("posting_date", result["defaults"])
+
+	def test_create_voucher_passes_resolved_company_to_party_policy(self):
+		transaction = frappe._dict(name="_Test Bank Transaction")
+		payload = {"party_type": "Customer", "party": "_Test Customer"}
+		with (
+			patch(
+				"advanced_bank_reconciliation.api.create_voucher._get_company",
+				return_value="_Test Company",
+			),
+			patch(
+				"advanced_bank_reconciliation.api.create_voucher.assert_party_access"
+			) as assert_party,
+			patch(
+				"advanced_bank_reconciliation.api.create_voucher.create_payment_entry_bts",
+				return_value=frappe._dict(),
+			),
+		):
+			_build_voucher(transaction, payload, allow_edit=True)
+		assert_party.assert_called_once_with(
+			"Customer",
+			"_Test Customer",
+			company="_Test Company",
+		)
 
 	def test_create_defaults_include_accounting_dimensions(self):
 		bank_transaction = create_test_bank_transaction(
@@ -817,6 +872,82 @@ class TestBankRecPhaseFourAPI(FrappeTestCase):
 		)
 		self.assertTrue(account, "Expected a ledger account for {0}".format(root_type))
 		return account
+
+	def _cash_coding_row(self):
+		return {
+			"bank_transaction_name": "_Test Bank Transaction",
+			"party_type": "Customer",
+			"party": "_Test Customer",
+			"account": "Income - TC",
+		}
+
+	def _cash_coding_transaction(self):
+		transaction = frappe._dict(
+			name="_Test Bank Transaction",
+			company="_Test Company",
+			bank_account="_Test Bank Account",
+			status="Unreconciled",
+			unallocated_amount=10,
+		)
+		transaction.reload = lambda: None
+		return transaction
+
+	def test_cash_coding_preview_passes_company_to_party_policy(self):
+		row = self._cash_coding_row()
+		transaction = self._cash_coding_transaction()
+		with (
+			patch(
+				"advanced_bank_reconciliation.api.cash_coding.assert_bank_transaction_access",
+				return_value=transaction,
+			),
+			patch("advanced_bank_reconciliation.api.cash_coding.assert_company_access"),
+			patch(
+				"advanced_bank_reconciliation.api.cash_coding.assert_party_access",
+				side_effect=frappe.ValidationError("Not available"),
+			) as assert_party,
+			patch("advanced_bank_reconciliation.api.cash_coding._assert_account") as assert_account,
+		):
+			result = preview_cash_coding([row])
+		self.assertEqual(result["results"][0]["status"], "error")
+		assert_party.assert_called_once_with(
+			"Customer",
+			"_Test Customer",
+			company="_Test Company",
+		)
+		assert_account.assert_not_called()
+
+	def test_cash_coding_submit_rejects_before_journal_entry(self):
+		row = self._cash_coding_row()
+		transaction = self._cash_coding_transaction()
+		with (
+			patch(
+				"advanced_bank_reconciliation.api.cash_coding.assert_bank_transaction_access",
+				return_value=transaction,
+			),
+			patch("advanced_bank_reconciliation.api.cash_coding._lock_bank_transaction"),
+			patch("advanced_bank_reconciliation.api.cash_coding.assert_company_access"),
+			patch(
+				"advanced_bank_reconciliation.api.cash_coding.assert_party_access",
+				side_effect=frappe.ValidationError("Not available"),
+			) as assert_party,
+			patch(
+				"advanced_bank_reconciliation.api.cash_coding.create_journal_entry_bts"
+			) as create_journal_entry,
+			patch(
+				"advanced_bank_reconciliation.api.cash_coding.get_abr_default_settings",
+				return_value={"default_journal_entry_type": "Bank Entry"},
+			),
+			patch("advanced_bank_reconciliation.api.cash_coding.frappe.db.savepoint"),
+			patch("advanced_bank_reconciliation.api.cash_coding.frappe.db.rollback"),
+		):
+			result = submit_cash_coding([row])
+		self.assertEqual(result["results"][0]["status"], "error")
+		assert_party.assert_called_once_with(
+			"Customer",
+			"_Test Customer",
+			company="_Test Company",
+		)
+		create_journal_entry.assert_not_called()
 
 	def test_cash_coding_rows_include_unreconciled_transactions(self):
 		bank_transaction = create_test_bank_transaction(

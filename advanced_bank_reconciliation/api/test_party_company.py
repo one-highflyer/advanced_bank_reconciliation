@@ -9,6 +9,7 @@ from advanced_bank_reconciliation.api.party_company import (
 	is_party_eligible_for_company,
 	search_parties,
 )
+from advanced_bank_reconciliation.api.permission import assert_party_access
 
 
 def enabled_settings():
@@ -236,3 +237,26 @@ class TestPartyCompanyPolicy(FrappeTestCase):
 						),
 						fieldname,
 					)
+
+
+class TestPartyCompanyPermissionIntegration(FrappeTestCase):
+	def test_assert_party_access_delegates_company_policy(self):
+		doc = frappe._dict(name="_Test Customer")
+		with patch(
+			"advanced_bank_reconciliation.api.permission.assert_party_eligible_for_company",
+			return_value=doc,
+		) as assert_eligible:
+			self.assertIs(
+				assert_party_access(
+					"Customer",
+					"_Test Customer",
+					company="_Test Company",
+				),
+				doc,
+			)
+		assert_eligible.assert_called_once_with(
+			"Customer",
+			"_Test Customer",
+			"_Test Company",
+			user=frappe.session.user,
+		)
