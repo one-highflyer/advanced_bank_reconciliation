@@ -156,7 +156,15 @@ def _has_check_field(meta, fieldname):
 
 
 @frappe.whitelist()
-def search_parties(doctype, txt, searchfield, start, page_len, filters):
+def search_parties(
+	doctype,
+	txt,
+	searchfield,
+	start,
+	page_len,
+	filters,
+	exact_party=None,
+):
 	filters = frappe.parse_json(filters) if isinstance(filters, str) else (filters or {})
 	if not isinstance(filters, dict):
 		frappe.throw(_("Party search filters must be a dictionary."))
@@ -185,6 +193,8 @@ def search_parties(doctype, txt, searchfield, start, page_len, filters):
 		query_filters.append([doctype, "disabled", "!=", 1])
 	if mapped_field:
 		query_filters.append([doctype, mapped_field, "in", [company, ""]])
+	if exact_party:
+		query_filters.append([doctype, "name", "=", exact_party])
 
 	or_filters = []
 	if txt:

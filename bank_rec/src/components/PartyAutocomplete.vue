@@ -54,6 +54,7 @@ async function runSearch(value: string, currentRequestId: number, validate = fal
       party_type: props.partyType,
       company: props.company,
       txt: value,
+      exact_party: validate ? value : undefined,
     });
     if (currentRequestId !== requestId) {
       return;
@@ -140,6 +141,10 @@ watch(
   () => props.modelValue,
   (value) => {
     if (value !== query.value) {
+      invalidateSearch();
+      results.value = [];
+      error.value = "";
+      open.value = false;
       query.value = value;
     }
   }

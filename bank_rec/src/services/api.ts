@@ -180,6 +180,7 @@ export async function searchParties(params: {
   company: string;
   txt?: string;
   page_len?: number;
+  exact_party?: string;
 }): Promise<PartySearchResult[]> {
   const rows = await call<string[][]>(partyCompanyApiPath, "search_parties", {
     doctype: params.party_type,
@@ -187,6 +188,7 @@ export async function searchParties(params: {
     searchfield: "name",
     start: 0,
     page_len: params.page_len || 20,
+    exact_party: params.exact_party,
     filters: {
       party_type: params.party_type,
       company: params.company,
