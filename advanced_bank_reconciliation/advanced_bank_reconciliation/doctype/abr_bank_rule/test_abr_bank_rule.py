@@ -10,6 +10,7 @@ from frappe.utils import add_days, today
 
 from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.abr_bank_rule.abr_bank_rule import (
 	_conditions_match,
+	_execute_rule_action,
 	_load_rules,
 	_match_transaction,
 	evaluate_condition,
@@ -205,6 +206,25 @@ class TestABRBankRuleValidation(FrappeTestCase):
 		)
 		rule.insert()
 		self.assertTrue(rule.name)
+
+	def test_rule_party_is_validated_for_rule_company(self):
+		rule = self._make_rule(
+			entry_type="Payment Entry",
+			account="",
+			party_type="Customer",
+			party="_Test Customer",
+		)
+		with patch(
+			f"{ABR_MODULE}.assert_party_access",
+			side_effect=frappe.ValidationError,
+		) as assert_party:
+			with self.assertRaises(frappe.ValidationError):
+				rule.insert()
+		assert_party.assert_called_once_with(
+			"Customer",
+			"_Test Customer",
+			company=TEST_COMPANY,
+		)
 
 	def test_condition_without_value_fails(self):
 		with self.assertRaises(frappe.ValidationError):
@@ -632,6 +652,42 @@ class TestRulePriority(FrappeTestCase):
 # ============================================================================
 # Group 5: Integration - run_bank_rules (real txns + rules, mocked actions)
 # ============================================================================
+
+
+class TestExecuteRuleAction(FrappeTestCase):
+	def test_rule_execution_revalidates_party_company(self):
+		transaction = frappe._dict(
+			name="_Test Bank Transaction",
+			company=TEST_COMPANY,
+			reference_number="",
+			date=today(),
+		)
+		rule = frappe._dict(
+			name="ABR-RULE-TEST",
+			title="Runtime Validation Rule",
+			entry_type="Payment Entry",
+			company=TEST_COMPANY,
+			party_type="Customer",
+			party="_Test Customer",
+			cost_center=None,
+			project=None,
+		)
+		with (
+			patch(f"{ABR_MODULE}._get_rule_dimensions", return_value={}),
+			patch(
+				f"{ABR_MODULE}.assert_party_access",
+				side_effect=frappe.ValidationError("Not available"),
+			) as assert_party,
+			patch(f"{ABR_MODULE}.create_payment_entry_bts") as create_payment_entry,
+		):
+			with self.assertRaises(frappe.ValidationError):
+				_execute_rule_action(transaction, rule, get_test_logger())
+		assert_party.assert_called_once_with(
+			"Customer",
+			"_Test Customer",
+			company=TEST_COMPANY,
+		)
+		create_payment_entry.assert_not_called()
 
 
 class TestRunBankRules(FrappeTestCase):

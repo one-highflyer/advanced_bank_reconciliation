@@ -21,6 +21,14 @@ frappe.ui.form.on("ABR Bank Rule", {
 			};
 		});
 
+		frm.set_query("party", () => ({
+			query: "advanced_bank_reconciliation.api.party_company.search_parties",
+			filters: {
+				party_type: frm.doc.party_type,
+				company: frm.doc.company,
+			},
+		}));
+
 		for (const field of ["account", "cost_center"]) {
 			frm.set_query(field, function () {
 				return {
@@ -35,8 +43,12 @@ frappe.ui.form.on("ABR Bank Rule", {
 	},
 
 	company(frm) {
-		for (const field of ["bank_account", "account", "cost_center"]) {
+		for (const field of ["bank_account", "account", "cost_center", "party"]) {
 			frm.set_value(field, "");
 		}
+	},
+
+	party_type(frm) {
+		frm.set_value("party", "");
 	},
 });

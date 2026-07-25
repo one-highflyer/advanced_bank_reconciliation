@@ -7,6 +7,7 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import flt
 
+from advanced_bank_reconciliation.api.permission import assert_party_access
 from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool import (
 	create_journal_entry_bts,
 	create_payment_entry_bts,
@@ -78,6 +79,11 @@ class ABRBankRule(Document):
 			if not self.party:
 				frappe.throw("Party is required for Payment Entry rules")
 
+		assert_party_access(
+			self.party_type,
+			self.party,
+			company=self.company,
+		)
 		self._validate_bank_account_company()
 		self._validate_conditions()
 
@@ -336,6 +342,11 @@ def _get_rule_dimensions(rule):
 def _execute_rule_action(transaction, rule, logger):
 	"""Create a JE or PE based on the rule's action configuration."""
 	dimensions = _get_rule_dimensions(rule)
+	assert_party_access(
+		rule.party_type,
+		rule.party,
+		company=transaction.company or rule.company,
+	)
 
 	if rule.entry_type == "Journal Entry":
 		create_journal_entry_bts(
