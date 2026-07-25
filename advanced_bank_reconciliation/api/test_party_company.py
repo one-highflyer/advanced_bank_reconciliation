@@ -196,6 +196,51 @@ class TestPartyCompanyPolicy(FrappeTestCase):
 			get_list.call_args.kwargs["filters"],
 		)
 
+	def test_search_forwards_reference_doctype_without_bypassing_permissions(self):
+		meta = frappe._dict(
+			title_field="customer_name",
+			search_fields="customer_name",
+			translated_doctype=False,
+			fields=[],
+		)
+		meta.get_search_fields = Mock(return_value=["customer_name"])
+		meta.get_field = Mock(
+			side_effect=lambda name: frappe._dict(
+				fieldname=name,
+				fieldtype="Data",
+			)
+		)
+		with (
+			patch("frappe.get_meta", return_value=meta),
+			patch("frappe.get_list", return_value=[]) as get_list,
+			patch(
+				"advanced_bank_reconciliation.api.party_company.get_party_company_field",
+				return_value="company_scope",
+			),
+			patch(
+				"advanced_bank_reconciliation.api.permission.assert_company_access",
+				return_value="_Test Company",
+			),
+			patch("frappe.db.exists", return_value=True),
+		):
+			frappe.call(
+				search_parties,
+				doctype="Customer",
+				txt="",
+				searchfield="name",
+				start=0,
+				page_len=20,
+				filters={"company": "_Test Company", "party_type": "Customer"},
+				reference_doctype="ABR Bank Rule",
+				ignore_user_permissions=True,
+			)
+
+		self.assertEqual(
+			get_list.call_args.kwargs["reference_doctype"],
+			"ABR Bank Rule",
+		)
+		self.assertNotIn("ignore_user_permissions", get_list.call_args.kwargs)
+
 	def test_search_rejects_unsupported_party_type(self):
 		with patch("frappe.db.exists", return_value=True):
 			with self.assertRaisesRegex(

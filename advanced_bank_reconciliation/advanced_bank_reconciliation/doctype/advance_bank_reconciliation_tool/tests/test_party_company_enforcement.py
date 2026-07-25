@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -13,9 +13,46 @@ MODULE = (
 	"advanced_bank_reconciliation.advanced_bank_reconciliation.doctype."
 	"advance_bank_reconciliation_tool.advance_bank_reconciliation_tool"
 )
+LOCAL_UPDATE_METHOD = f"{MODULE}.update_bank_transaction"
+UPSTREAM_UPDATE_METHOD = (
+	"erpnext.accounts.doctype.bank_reconciliation_tool."
+	"bank_reconciliation_tool.update_bank_transaction"
+)
 
 
 class TestLegacyPartyCompanyEnforcement(FrappeTestCase):
+	def test_standard_rpc_update_resolves_to_guarded_local_method(self):
+		self.assertEqual(
+			frappe.override_whitelisted_method(UPSTREAM_UPDATE_METHOD),
+			LOCAL_UPDATE_METHOD,
+		)
+		rpc_method = frappe.get_attr(
+			frappe.override_whitelisted_method(UPSTREAM_UPDATE_METHOD)
+		)
+		transaction = frappe._dict(
+			name="_Test Bank Transaction",
+			company="_Test Company",
+			bank_account="_Test Bank Account",
+		)
+		transaction.save = Mock()
+
+		with (
+			patch(f"{MODULE}.frappe.get_doc", return_value=transaction),
+			patch(
+				f"{MODULE}.assert_party_access",
+				side_effect=frappe.ValidationError,
+			),
+		):
+			with self.assertRaises(frappe.ValidationError):
+				rpc_method(
+					transaction.name,
+					"REF",
+					"Customer",
+					"_Test Customer",
+				)
+
+		transaction.save.assert_not_called()
+
 	def test_update_validates_against_transaction_company(self):
 		transaction = frappe._dict(
 			name="_Test Bank Transaction",

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from "vue";
+import { onBeforeUnmount, ref, useId, watch } from "vue";
 import { searchParties } from "@/services/api";
 import type { PartySearchResult } from "@/types/bankRec";
 
@@ -28,6 +28,8 @@ const results = ref<PartySearchResult[]>([]);
 const loading = ref(false);
 const error = ref("");
 const open = ref(false);
+const inputId = useId();
+const listboxId = `${inputId}-listbox`;
 let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 let blurTimer: ReturnType<typeof setTimeout> | undefined;
 let requestId = 0;
@@ -189,11 +191,16 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="relative min-w-0 flex-1">
-    <label v-if="label" class="mb-1.5 block text-sm font-medium text-bank-ink">
+    <label
+      v-if="label"
+      :for="inputId"
+      class="mb-1.5 block text-sm font-medium text-bank-ink"
+    >
       {{ label }}
     </label>
     <div class="relative">
       <input
+        :id="inputId"
         :value="query"
         :placeholder="placeholder"
         :disabled="disabled || !company || !partyType"
@@ -202,6 +209,8 @@ onBeforeUnmount(() => {
         role="combobox"
         :aria-expanded="open && Boolean(results.length)"
         aria-autocomplete="list"
+        aria-haspopup="listbox"
+        :aria-controls="listboxId"
         @input="handleInput"
         @focus="handleFocus"
         @blur="handleBlur"
@@ -218,12 +227,15 @@ onBeforeUnmount(() => {
     </div>
     <div
       v-if="open && results.length"
+      :id="listboxId"
       class="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-bank-line bg-white py-1 shadow-lg"
+      role="listbox"
     >
       <button
         v-for="result in results"
         :key="result.value"
         type="button"
+        role="option"
         class="block w-full px-3 py-2 text-left text-sm text-bank-ink hover:bg-bank-surface focus:bg-bank-surface focus:outline-none"
         @mousedown.prevent
         @click="selectResult(result)"

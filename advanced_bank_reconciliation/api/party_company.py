@@ -156,6 +156,7 @@ def _has_check_field(meta, fieldname):
 
 
 @frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
 def search_parties(
 	doctype,
 	txt,
@@ -164,6 +165,7 @@ def search_parties(
 	page_len,
 	filters,
 	exact_party=None,
+	reference_doctype=None,
 ):
 	filters = frappe.parse_json(filters) if isinstance(filters, str) else (filters or {})
 	if not isinstance(filters, dict):
@@ -211,6 +213,7 @@ def search_parties(
 		limit_start=int(start),
 		limit_page_length=int(page_len),
 		as_list=True,
+		reference_doctype=reference_doctype,
 	)
 
 
