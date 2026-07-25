@@ -10,6 +10,7 @@ import type {
 import EmptyState from "@/components/EmptyState.vue";
 import ErrorState from "@/components/ErrorState.vue";
 import LoadingState from "@/components/LoadingState.vue";
+import PartyAutocomplete from "@/components/PartyAutocomplete.vue";
 import ExternalLink from "~icons/lucide/external-link";
 import Save from "~icons/lucide/save";
 
@@ -267,11 +268,11 @@ watch(
           :options="partyTypeOptions"
         />
 
-        <FormControl
+        <PartyAutocomplete
           v-model="party"
+          :company="defaults.bank_account.company"
+          :party-type="partyType"
           :label="contactLabel"
-          variant="outline"
-          size="md"
         />
 
         <div>

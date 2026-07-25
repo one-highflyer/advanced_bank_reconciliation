@@ -5,6 +5,7 @@ import BankAccountFilters from "@/components/BankAccountFilters.vue";
 import EmptyState from "@/components/EmptyState.vue";
 import ErrorState from "@/components/ErrorState.vue";
 import LoadingState from "@/components/LoadingState.vue";
+import PartyAutocomplete from "@/components/PartyAutocomplete.vue";
 import ReconcileProgressDialog from "@/components/ReconcileProgressDialog.vue";
 import { getCashCodingRows, submitCashCoding } from "@/services/api";
 import { useBankRecStore } from "@/stores/bankRec";
@@ -161,6 +162,11 @@ function markDirty(name: string) {
   const next = new Set(dirtyRows.value);
   next.add(name);
   dirtyRows.value = next;
+}
+
+function changePartyType(row: CashCodingRow) {
+  row.party = "";
+  markDirty(row.transaction.name);
 }
 
 function clearDirty(names?: string[]) {
@@ -555,17 +561,19 @@ onBeforeRouteLeave(() => guardDiscard());
                   <select
                     v-model="row.party_type"
                     class="h-9 w-[6.75rem] shrink-0 rounded-md border border-bank-line bg-white px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
-                    @change="markDirty(row.transaction.name)"
+                    @change="changePartyType(row)"
                   >
                     <option value="">None</option>
                     <option value="Customer">Customer</option>
                     <option value="Supplier">Supplier</option>
                     <option value="Employee">Employee</option>
                   </select>
-                  <input
+                  <PartyAutocomplete
                     v-model="row.party"
-                    class="h-9 min-w-0 flex-1 rounded-md border border-bank-line px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
-                    @input="markDirty(row.transaction.name)"
+                    :company="row.transaction.company || store.selectedCompany"
+                    :party-type="row.party_type"
+                    placeholder="Party"
+                    @update:model-value="markDirty(row.transaction.name)"
                   />
                 </div>
               </td>

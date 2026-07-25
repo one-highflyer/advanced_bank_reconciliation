@@ -12,6 +12,7 @@ import type {
   MatchCandidatesResponse,
   MatchVoucherSelection,
   MatchedTransactionsResponse,
+  PartySearchResult,
   StatementSummary,
   SubmitMatchResponse,
   TransactionContext,
@@ -44,6 +45,8 @@ const createVoucherApiPath =
 const cashCodingApiPath =
   "/api/method/advanced_bank_reconciliation.api.cash_coding.";
 const matchedApiPath = "/api/method/advanced_bank_reconciliation.api.matched.";
+const partyCompanyApiPath =
+  "/api/method/advanced_bank_reconciliation.api.party_company.";
 
 function getCsrfToken() {
   return window.csrf_token || "";
@@ -170,6 +173,29 @@ export function getTransactionContext(bank_transaction_name: string) {
 
 export function getBankRules(bank_account?: string) {
   return call<BankRule[]>(bankRecApiPath, "get_bank_rules", { bank_account });
+}
+
+export async function searchParties(params: {
+  party_type: string;
+  company: string;
+  txt?: string;
+  page_len?: number;
+}): Promise<PartySearchResult[]> {
+  const rows = await call<string[][]>(partyCompanyApiPath, "search_parties", {
+    doctype: params.party_type,
+    txt: params.txt || "",
+    searchfield: "name",
+    start: 0,
+    page_len: params.page_len || 20,
+    filters: {
+      party_type: params.party_type,
+      company: params.company,
+    },
+  });
+  return rows.map((row) => ({
+    value: row[0],
+    label: row[1] && row[1] !== row[0] ? `${row[1]} (${row[0]})` : row[0],
+  }));
 }
 
 export function getMatchCandidates(params: {
