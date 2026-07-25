@@ -33,6 +33,7 @@ const listboxId = `${inputId}-listbox`;
 let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 let blurTimer: ReturnType<typeof setTimeout> | undefined;
 let requestId = 0;
+let validatedValue = "";
 
 function clearDebounce() {
   if (debounceTimer) {
@@ -66,8 +67,11 @@ async function runSearch(value: string, currentRequestId: number, validate = fal
       const exactResult = rows.find((row) => row.value === value);
       results.value = [];
       if (!exactResult) {
+        validatedValue = "";
         query.value = "";
         emit("update:modelValue", "");
+      } else {
+        validatedValue = value;
       }
       return;
     }
@@ -106,6 +110,9 @@ function scheduleSearch(value: string) {
 
 function handleInput(event: Event) {
   const value = (event.target as HTMLInputElement).value;
+  if (value !== validatedValue) {
+    validatedValue = "";
+  }
   query.value = value;
   emit("update:modelValue", value);
   scheduleSearch(value);
@@ -127,11 +134,19 @@ function handleBlur() {
   blurTimer = setTimeout(() => {
     open.value = false;
     blurTimer = undefined;
+    const value = query.value;
+    if (!value || value === validatedValue || !props.company || !props.partyType) {
+      return;
+    }
+    invalidateSearch();
+    const currentRequestId = requestId;
+    void runSearch(value, currentRequestId, true);
   }, 150);
 }
 
 function selectResult(result: PartySearchResult) {
   invalidateSearch();
+  validatedValue = result.value;
   query.value = result.value;
   results.value = [];
   error.value = "";
@@ -148,6 +163,11 @@ watch(
       error.value = "";
       open.value = false;
       query.value = value;
+      if (!value || !props.company || !props.partyType) {
+        return;
+      }
+      const currentRequestId = requestId;
+      void runSearch(value, currentRequestId, true);
     }
   }
 );
@@ -159,6 +179,7 @@ watch(
     results.value = [];
     error.value = "";
     open.value = false;
+    validatedValue = "";
 
     if (!company || !partyType) {
       query.value = "";

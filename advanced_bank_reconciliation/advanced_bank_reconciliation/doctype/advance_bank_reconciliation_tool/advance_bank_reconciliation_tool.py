@@ -3,7 +3,10 @@
 import json
 
 import frappe
-from advanced_bank_reconciliation.api.permission import assert_party_access
+from advanced_bank_reconciliation.api.permission import (
+	assert_company_access,
+	assert_party_access,
+)
 from advanced_bank_reconciliation.utils.logger import get_logger
 from erpnext import get_default_cost_center
 from erpnext.accounts.doctype.bank_transaction.bank_transaction import (
@@ -333,6 +336,7 @@ def update_bank_transaction(bank_transaction_name, reference_number, party_type=
 		bank_transaction.bank_account,
 		"company",
 	)
+	assert_company_access(company)
 	assert_party_access(party_type, party, company=company)
 	bank_transaction.reference_number = reference_number
 	bank_transaction.party_type = party_type
@@ -444,6 +448,7 @@ def create_journal_entry_bts(
 			)
 
 	company = bank_transaction.company or frappe.get_value("Account", company_account, "company")
+	assert_company_access(company)
 	assert_party_access(party_type, party, company=company)
 	resolved_cost_center = cost_center or get_default_cost_center(company)
 	company_default_currency = frappe.get_cached_value("Company", company, "default_currency")
@@ -642,6 +647,7 @@ def create_payment_entry_bts(
 
 	bank_account = frappe.get_cached_value("Bank Account", bank_transaction.bank_account, "account")
 	company = bank_transaction.company or frappe.get_cached_value("Account", bank_account, "company")
+	assert_company_access(company)
 	assert_party_access(party_type, party, company=company)
 	party_account = get_party_account(party_type, party, company)
 

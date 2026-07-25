@@ -38,6 +38,7 @@ class TestLegacyPartyCompanyEnforcement(FrappeTestCase):
 
 		with (
 			patch(f"{MODULE}.frappe.get_doc", return_value=transaction),
+			patch(f"{MODULE}.assert_company_access"),
 			patch(
 				f"{MODULE}.assert_party_access",
 				side_effect=frappe.ValidationError,
@@ -53,6 +54,28 @@ class TestLegacyPartyCompanyEnforcement(FrappeTestCase):
 
 		transaction.save.assert_not_called()
 
+	def test_update_rejects_company_before_save_when_party_is_blank(self):
+		transaction = frappe._dict(
+			name="_Test Bank Transaction",
+			company="_Test Company",
+			bank_account="_Test Bank Account",
+		)
+		transaction.save = Mock()
+
+		with (
+			patch(f"{MODULE}.frappe.get_doc", return_value=transaction),
+			patch(
+				f"{MODULE}.assert_company_access",
+				side_effect=frappe.PermissionError,
+			),
+			patch(f"{MODULE}.assert_party_access") as assert_party,
+		):
+			with self.assertRaises(frappe.PermissionError):
+				update_bank_transaction(transaction.name, "REF")
+
+		assert_party.assert_not_called()
+		transaction.save.assert_not_called()
+
 	def test_update_validates_against_transaction_company(self):
 		transaction = frappe._dict(
 			name="_Test Bank Transaction",
@@ -64,6 +87,7 @@ class TestLegacyPartyCompanyEnforcement(FrappeTestCase):
 		transaction.save = lambda: None
 		with (
 			patch(f"{MODULE}.frappe.get_doc", return_value=transaction),
+			patch(f"{MODULE}.assert_company_access") as assert_company,
 			patch(f"{MODULE}.assert_party_access") as assert_party,
 			patch(f"{MODULE}.frappe.db.get_all", return_value=[transaction]),
 		):
@@ -73,6 +97,7 @@ class TestLegacyPartyCompanyEnforcement(FrappeTestCase):
 				"Customer",
 				"_Test Customer",
 			)
+		assert_company.assert_called_once_with("_Test Company")
 		assert_party.assert_called_once_with(
 			"Customer",
 			"_Test Customer",
@@ -96,6 +121,7 @@ class TestLegacyPartyCompanyEnforcement(FrappeTestCase):
 			),
 			patch(f"{MODULE}.frappe.get_value", side_effect=["Bank - TC", "_Test Company"]),
 			patch(f"{MODULE}.frappe.db.get_value", return_value="Income"),
+			patch(f"{MODULE}.assert_company_access"),
 			patch(f"{MODULE}.assert_party_access", side_effect=frappe.ValidationError),
 			patch(f"{MODULE}.frappe.new_doc") as new_doc,
 		):
@@ -107,6 +133,41 @@ class TestLegacyPartyCompanyEnforcement(FrappeTestCase):
 					party_type="Customer",
 					party="_Test Customer",
 				)
+		new_doc.assert_not_called()
+
+	def test_journal_entry_rejects_company_before_party_validation(self):
+		with (
+			patch(
+				f"{MODULE}.frappe.db.get_values",
+				return_value=[
+					frappe._dict(
+						name="_Test Bank Transaction",
+						deposit=10,
+						withdrawal=0,
+						bank_account="_Test Bank Account",
+						company="_Test Company",
+						currency="NZD",
+						unallocated_amount=10,
+					)
+				],
+			),
+			patch(f"{MODULE}.frappe.get_value", return_value="Bank - TC"),
+			patch(f"{MODULE}.frappe.db.get_value", return_value="Income"),
+			patch(
+				f"{MODULE}.assert_company_access",
+				side_effect=frappe.PermissionError,
+			),
+			patch(f"{MODULE}.assert_party_access") as assert_party,
+			patch(f"{MODULE}.frappe.new_doc") as new_doc,
+		):
+			with self.assertRaises(frappe.PermissionError):
+				create_journal_entry_bts(
+					"_Test Bank Transaction",
+					entry_type="Bank Entry",
+					second_account="Income - TC",
+				)
+
+		assert_party.assert_not_called()
 		new_doc.assert_not_called()
 
 	def test_payment_entry_rejects_before_party_account_lookup(self):
@@ -124,6 +185,7 @@ class TestLegacyPartyCompanyEnforcement(FrappeTestCase):
 				],
 			),
 			patch(f"{MODULE}.frappe.get_cached_value", side_effect=["Bank - TC", "_Test Company"]),
+			patch(f"{MODULE}.assert_company_access"),
 			patch(f"{MODULE}.assert_party_access", side_effect=frappe.ValidationError),
 			patch("erpnext.accounts.party.get_party_account") as get_party_account,
 		):
@@ -133,4 +195,33 @@ class TestLegacyPartyCompanyEnforcement(FrappeTestCase):
 					party_type="Supplier",
 					party="_Test Supplier",
 				)
+		get_party_account.assert_not_called()
+
+	def test_payment_entry_rejects_company_before_party_account_lookup(self):
+		with (
+			patch(
+				f"{MODULE}.frappe.db.get_values",
+				return_value=[
+					frappe._dict(
+						name="_Test Bank Transaction",
+						deposit=10,
+						bank_account="_Test Bank Account",
+						company="_Test Company",
+						currency="NZD",
+						unallocated_amount=10,
+					)
+				],
+			),
+			patch(f"{MODULE}.frappe.get_cached_value", return_value="Bank - TC"),
+			patch(
+				f"{MODULE}.assert_company_access",
+				side_effect=frappe.PermissionError,
+			),
+			patch(f"{MODULE}.assert_party_access") as assert_party,
+			patch("erpnext.accounts.party.get_party_account") as get_party_account,
+		):
+			with self.assertRaises(frappe.PermissionError):
+				create_payment_entry_bts("_Test Bank Transaction")
+
+		assert_party.assert_not_called()
 		get_party_account.assert_not_called()
