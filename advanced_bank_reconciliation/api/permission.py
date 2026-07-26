@@ -1,6 +1,11 @@
 import frappe
 from frappe import _
 
+from advanced_bank_reconciliation.api.party_company import (
+	SUPPORTED_PARTY_TYPES,
+	assert_party_eligible_for_company,
+)
+
 
 ALLOWED_BANK_REC_ROLES = frozenset(
 	{
@@ -19,7 +24,7 @@ ALLOWED_VOUCHER_DOCTYPES = frozenset(
 	}
 )
 
-ALLOWED_PARTY_TYPES = frozenset({"Customer", "Supplier", "Employee"})
+ALLOWED_PARTY_TYPES = SUPPORTED_PARTY_TYPES
 
 
 def has_bank_rec_permission(user=None):
@@ -84,7 +89,7 @@ def assert_company_access(company, user=None):
 	return company
 
 
-def assert_party_access(party_type=None, party=None, user=None):
+def assert_party_access(party_type=None, party=None, company=None, user=None):
 	user = user or frappe.session.user
 	require_bank_rec_permission(user)
 
@@ -95,9 +100,12 @@ def assert_party_access(party_type=None, party=None, user=None):
 	if party_type and not party:
 		frappe.throw(_("Party is required when Party Type is set."))
 	if party_type and party:
-		doc = frappe.get_doc(party_type, party)
-		frappe.has_permission(party_type, "read", doc=doc, user=user, throw=True)
-		return doc
+		return assert_party_eligible_for_company(
+			party_type,
+			party,
+			company,
+			user=user,
+		)
 
 	return None
 

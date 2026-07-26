@@ -94,7 +94,11 @@ def _build_voucher(transaction, payload, allow_edit=False):
 	company = _get_company(transaction)
 	entry_type = _selected_entry_type(payload)
 	common = _common_kwargs(transaction, payload)
-	assert_party_access(common["party_type"], common["party"])
+	assert_party_access(
+		common["party_type"],
+		common["party"],
+		company=company,
+	)
 
 	if entry_type == "Payment Entry":
 		if not common["party_type"] or not common["party"]:

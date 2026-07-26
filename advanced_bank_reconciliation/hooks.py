@@ -163,11 +163,14 @@ before_tests = "advanced_bank_reconciliation.tests.test_utils.before_tests"
 
 # Overriding Methods
 # ------------------------------
-#
-# override_whitelisted_methods = {
-# 	"frappe.desk.doctype.event.event.get_events": "advanced_bank_reconciliation.event.get_events"
-# }
-#
+
+override_whitelisted_methods = {
+    "erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.update_bank_transaction": (
+        "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype."
+        "advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.update_bank_transaction"
+    )
+}
+
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,
 # along with any modifications made in other Frappe apps

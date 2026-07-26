@@ -5,6 +5,7 @@
 tags
 node_modules
 __pycache__
+.worktrees/
 
 advanced_bank_reconciliation/public/dist
 advanced_bank_reconciliation/public/bank_rec

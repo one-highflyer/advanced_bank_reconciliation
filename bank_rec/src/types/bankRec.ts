@@ -102,6 +102,11 @@ export interface BankRule {
   desk_url: string;
 }
 
+export interface PartySearchResult {
+  value: string;
+  label: string;
+}
+
 export type TransactionStatusFilter = "unreconciled" | "reconciled" | "all";
 
 export type MatchConfidence = "high" | "medium" | "low";

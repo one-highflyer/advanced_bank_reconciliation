@@ -669,9 +669,12 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				get_query: function () {
 					return {
 						filters: {
-							name: ["in", Object.keys(frappe.boot.party_account_types)],
+							name: ["in", ["Customer", "Supplier", "Employee"]],
 						},
 					};
+				},
+				onchange: () => {
+					this.dialog.set_value("party", "");
 				},
 			},
 			{
@@ -682,6 +685,13 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				depends_on: "eval:doc.action=='Create Voucher'",
 				mandatory_depends_on:
 					"eval:doc.action=='Create Voucher' && doc.document_type=='Payment Entry'",
+				get_query: () => ({
+					query: "advanced_bank_reconciliation.api.party_company.search_parties",
+					filters: {
+						party_type: this.dialog.get_value("party_type"),
+						company: this.company,
+					},
+				}),
 			},
 			{
 				fieldname: "project",
@@ -1447,7 +1457,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 
 	update_transaction(values) {
 		frappe.call({
-			method: "erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.update_bank_transaction",
+			method: "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool.update_bank_transaction",
 			args: {
 				bank_transaction_name: this.bank_transaction.name,
 				reference_number: values.reference_number,

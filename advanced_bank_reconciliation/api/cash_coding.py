@@ -158,7 +158,11 @@ def preview_cash_coding(rows):
 				"company",
 			)
 			assert_company_access(company)
-			assert_party_access(row.get("party_type"), row.get("party"))
+			assert_party_access(
+				row.get("party_type"),
+				row.get("party"),
+				company=company,
+			)
 			account = _assert_account(row.get("account"), company)
 			if account.account_type in ["Receivable", "Payable"] and (
 				not row.get("party_type") or not row.get("party")
@@ -207,7 +211,11 @@ def submit_cash_coding(rows):
 				"company",
 			)
 			assert_company_access(company)
-			assert_party_access(row.get("party_type"), row.get("party"))
+			assert_party_access(
+				row.get("party_type"),
+				row.get("party"),
+				company=company,
+			)
 			account = _assert_account(row.get("account"), company)
 			if account.account_type in ["Receivable", "Payable"] and (
 				not row.get("party_type") or not row.get("party")

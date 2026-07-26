@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue";
 import type { BankTransaction } from "@/types/bankRec";
 import ErrorState from "@/components/ErrorState.vue";
 import LoadingState from "@/components/LoadingState.vue";
+import PartyAutocomplete from "@/components/PartyAutocomplete.vue";
 import Save from "~icons/lucide/save";
 
 const props = defineProps<{
@@ -86,11 +87,11 @@ watch(
           :options="partyTypeOptions"
         />
 
-        <FormControl
+        <PartyAutocomplete
           v-model="party"
+          :company="transaction.company || ''"
+          :party-type="partyType"
           label="Party"
-          variant="outline"
-          size="md"
         />
       </div>
 
