@@ -1,3 +1,16 @@
+## [1.9.4](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.9.3...v1.9.4) (2026-07-26)
+
+
+### Bug Fixes
+
+* add configurable party company policy ([fdb7ce8](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/fdb7ce8f0a38e76f102a0fff3357fcd2086311b3))
+* close party company enforcement gaps ([9c8120f](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/9c8120f1f427982d73950c5ddb14ff1261debdf4))
+* enforce party company eligibility ([dfdf018](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/dfdf01822efae13f10550965ee2ae627d0fc20e0))
+* filter parties in bank rec frontend ([34ab3a0](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/34ab3a0b3406b1d0762366667dbe9c2949cf2423))
+* filter parties in desk workflows ([4b52eb9](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/4b52eb9aa510a3eda3b6e6fa85cafff63ceea9d0))
+* harden party autocomplete validation ([294cae4](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/294cae4a76c7bdd41b68136b8b5ad604ba7b3bbe))
+* validate reconciliation party changes ([c081df5](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/c081df560f0a3a166627c3ecb609c2ade33a2420))
+
 ## [1.9.3](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.9.2...v1.9.3) (2026-07-21)
 
 
