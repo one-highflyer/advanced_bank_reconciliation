@@ -1,3 +1,10 @@
+## [1.9.6](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.9.5...v1.9.6) (2026-08-06)
+
+
+### Bug Fixes
+
+* make bank rec navbar logo configurable ([b96c4f8](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/b96c4f8a200a0cededee574ce7b3d2963a949f93))
+
 ## [1.9.5](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.9.4...v1.9.5) (2026-08-06)
 
 
