@@ -575,7 +575,7 @@ def publish_records(data_import, importer_data=None):
                 "currency": item[6],
                 "deposit": item[1],
                 "withdrawal": item[2],
-                "reference_number": item[4],
+                "reference_number": str(item[4]) if item[4] is not None else None,
                 "description": str(item[3]) if item[3] else None,
             }
 
