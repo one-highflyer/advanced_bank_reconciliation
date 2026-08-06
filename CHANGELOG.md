@@ -1,3 +1,10 @@
+## [1.9.5](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.9.4...v1.9.5) (2026-08-06)
+
+
+### Bug Fixes
+
+* import numeric bank references as text ([f0cc455](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/f0cc455ecf75619dcab470ea535e9383bf3bb6db))
+
 ## [1.9.4](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.9.3...v1.9.4) (2026-07-26)
 
 
