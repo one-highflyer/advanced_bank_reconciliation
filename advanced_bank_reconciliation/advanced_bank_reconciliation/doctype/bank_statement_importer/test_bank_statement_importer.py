@@ -1,7 +1,9 @@
 # Copyright (c) 2024, High Flyer and Contributors
 # See license.txt
 
+import json
 from datetime import date
+from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -12,10 +14,57 @@ from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.bank_stat
     normalize_mapping_for_headers,
     parse_date,
     parse_json_if_required,
+    publish_records,
 )
 
 
 class TestBankStatementImporter(FrappeTestCase):
+    def test_publish_records_converts_numeric_reference_to_text(self):
+        class FakeBankTransaction:
+            def update(self, values):
+                self.__dict__.update(values)
+
+            def insert(self):
+                pass
+
+            def submit(self):
+                pass
+
+        transaction = FakeBankTransaction()
+        dataset = [
+            [
+                "Date",
+                "Deposit",
+                "Withdrawal",
+                "Description",
+                "Reference Number",
+                "Bank Account",
+                "Currency",
+                "Is Duplicated",
+            ],
+            [
+                "2026-08-01",
+                100,
+                0,
+                "Deposit",
+                123,
+                "_Test Bank Account",
+                "NZD",
+                0,
+            ],
+        ]
+
+        with (
+            patch.object(frappe, "new_doc", return_value=transaction),
+            patch(
+                "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.bank_statement_importer.bank_statement_importer.flip_amount_for_credit_card"
+            ),
+        ):
+            success = publish_records(json.dumps(dataset))
+
+        self.assertTrue(success)
+        self.assertEqual(transaction.reference_number, "123")
+
     def test_date_parser(self):
         expected_date = date(2024, 5, 9)
 
