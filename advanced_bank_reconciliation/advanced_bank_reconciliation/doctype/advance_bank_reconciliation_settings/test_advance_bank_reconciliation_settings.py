@@ -11,6 +11,9 @@ from advanced_bank_reconciliation.api.party_company import (
 	validate_enabled_bank_rules,
 	validate_party_company_settings,
 )
+from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool import (
+	get_abr_default_settings,
+)
 
 
 def field(fieldname, fieldtype="Link", options="Company", label=None):
@@ -23,6 +26,19 @@ def field(fieldname, fieldtype="Link", options="Company", label=None):
 
 
 class TestAdvanceBankReconciliationSettings(FrappeTestCase):
+	def test_default_settings_include_configured_navbar_logo(self):
+		settings = frappe._dict(
+			default_reconciliation_action="Match Against Voucher",
+			default_document_type="Payment Entry",
+			default_journal_entry_type="Bank Entry",
+			compact_matching_vouchers_table=0,
+			navbar_logo="/files/bank-rec-logo.svg",
+		)
+		with patch("frappe.get_single", return_value=settings):
+			default_settings = get_abr_default_settings()
+
+		self.assertEqual(default_settings["navbar_logo"], "/files/bank-rec-logo.svg")
+
 	def test_disabled_settings_allow_blank_mappings(self):
 		settings = frappe._dict(filter_parties_by_company=0)
 		validate_party_company_settings(settings)
