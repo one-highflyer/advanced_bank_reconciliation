@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { RouterLink, RouterView, useRoute } from "vue-router";
+import { useBankRecStore } from "@/stores/bankRec";
 import CheckCheck from "~icons/lucide/check-check";
 import CheckCircle2 from "~icons/lucide/check-circle-2";
 import FileCheck2 from "~icons/lucide/file-check-2";
@@ -8,6 +9,7 @@ import ListChecks from "~icons/lucide/list-checks";
 import Table2 from "~icons/lucide/table-2";
 
 const route = useRoute();
+const store = useBankRecStore();
 
 function isActive(to: string) {
   return route.path === to || route.path.startsWith(`${to}/`);
@@ -37,6 +39,10 @@ const navItems = [
 ];
 
 const activeTitle = computed(() => route.name?.toString() || "Reconcile");
+const navbarLogo = computed(() => {
+  const logo = store.boot?.settings.navbar_logo ?? window.settings?.navbar_logo;
+  return typeof logo === "string" ? logo : "";
+});
 </script>
 
 <template>
@@ -48,7 +54,14 @@ const activeTitle = computed(() => route.name?.toString() || "Reconcile");
         class="mx-auto flex min-h-[64px] w-full max-w-[1920px] flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between md:px-6 2xl:px-8"
       >
         <div class="flex min-w-0 items-center gap-3">
+          <img
+            v-if="navbarLogo"
+            :src="navbarLogo"
+            alt="Bank Rec logo"
+            class="h-8 w-auto max-w-[120px] shrink-0 object-contain sm:max-w-[160px]"
+          />
           <div
+            v-else
             class="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-gradient-to-br from-[#67E8F9] via-[#0891B2] to-[#155E75] text-white shadow-sm"
           >
             <CheckCheck class="h-5 w-5" />
