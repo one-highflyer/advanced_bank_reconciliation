@@ -37,6 +37,7 @@ from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_b
 	TEST_COMPANY_2,
 	TEST_CUSTOMER,
 	create_test_bank_transaction,
+	create_test_purchase_invoice,
 	create_test_sales_invoice,
 	ensure_bank_account_for_company,
 	setup_abr_test_data,
@@ -250,6 +251,23 @@ class TestBankRecPhaseTwoAPI(FrappeTestCase):
 		)
 		return bank_transaction, sales_invoice
 
+	def _candidate_payload(self, bank_transaction, document_types, voucher_name):
+		result = get_match_candidates(
+			bank_transaction.name,
+			document_types=document_types,
+			from_date=add_days(nowdate(), -1),
+			to_date=add_days(nowdate(), 1),
+		)
+		candidate = next(
+			row for row in result["candidates"] if row["voucher_name"] == voucher_name
+		)
+		return {
+			"voucher_type": candidate["voucher_type"],
+			"source_type": candidate["source_type"],
+			"voucher_name": candidate["voucher_name"],
+			"amount": abs(flt(candidate["amount"])),
+		}
+
 	def test_match_candidates_return_unpaid_sales_invoice(self):
 		bank_transaction, sales_invoice = self._sales_invoice_match_fixture()
 
@@ -271,27 +289,121 @@ class TestBankRecPhaseTwoAPI(FrappeTestCase):
 		self.assertIn(row["confidence"], {"high", "medium", "low"})
 		self.assertIn("Amount", row["reasons"])
 
-	def test_submit_match_reconciles_sales_invoice(self):
+	def test_submit_match_creates_payment_entry_for_unpaid_sales_invoice(self):
 		bank_transaction, sales_invoice = self._sales_invoice_match_fixture(amount=90)
+		voucher = self._candidate_payload(
+			bank_transaction,
+			["unpaid_sales_invoice"],
+			sales_invoice.name,
+		)
+
+		result = submit_match(bank_transaction.name, [voucher])
+
+		self.assertEqual(result["status"], "Reconciled")
+		bank_transaction.reload()
+		sales_invoice.reload()
+		self.assertEqual(bank_transaction.status, "Reconciled")
+		self.assertAlmostEqual(flt(bank_transaction.unallocated_amount), 0.0, places=2)
+		self.assertEqual(len(bank_transaction.payment_entries), 1)
+		linked_payment = bank_transaction.payment_entries[0]
+		self.assertEqual(linked_payment.payment_document, "Payment Entry")
+		payment_entry = frappe.get_doc("Payment Entry", linked_payment.payment_entry)
+		self.assertEqual(payment_entry.docstatus, 1)
+		self.assertEqual(payment_entry.payment_type, "Receive")
+		self.assertTrue(
+			any(
+				row.reference_doctype == "Sales Invoice"
+				and row.reference_name == sales_invoice.name
+				and flt(row.allocated_amount) == 90
+				for row in payment_entry.references
+			)
+		)
+		self.assertAlmostEqual(flt(sales_invoice.outstanding_amount), 0.0, places=2)
+		self.assertEqual(sales_invoice.status, "Paid")
+
+	def test_submit_match_creates_payment_entry_for_unpaid_purchase_invoice(self):
+		purchase_invoice = create_test_purchase_invoice(outstanding=110)
+		bank_transaction = create_test_bank_transaction(
+			self.bank_account_a,
+			withdrawal=110,
+			reference_number="_ABR-PHASE2-PI-MATCH",
+		)
+		voucher = self._candidate_payload(
+			bank_transaction,
+			["unpaid_purchase_invoice"],
+			purchase_invoice.name,
+		)
+
+		result = submit_match(bank_transaction.name, [voucher])
+
+		self.assertEqual(result["status"], "Reconciled")
+		bank_transaction.reload()
+		purchase_invoice.reload()
+		self.assertEqual(len(bank_transaction.payment_entries), 1)
+		linked_payment = bank_transaction.payment_entries[0]
+		self.assertEqual(linked_payment.payment_document, "Payment Entry")
+		payment_entry = frappe.get_doc("Payment Entry", linked_payment.payment_entry)
+		self.assertEqual(payment_entry.docstatus, 1)
+		self.assertEqual(payment_entry.payment_type, "Pay")
+		self.assertTrue(
+			any(
+				row.reference_doctype == "Purchase Invoice"
+				and row.reference_name == purchase_invoice.name
+				and flt(row.allocated_amount) == 110
+				for row in payment_entry.references
+			)
+		)
+		self.assertAlmostEqual(flt(purchase_invoice.outstanding_amount), 0.0, places=2)
+		self.assertEqual(purchase_invoice.status, "Paid")
+
+	def test_submit_match_preserves_explicit_regular_sales_invoice_match(self):
+		bank_transaction, sales_invoice = self._sales_invoice_match_fixture(amount=65)
 
 		result = submit_match(
 			bank_transaction.name,
 			[
 				{
 					"voucher_type": "Sales Invoice",
+					"source_type": "Sales Invoice",
 					"voucher_name": sales_invoice.name,
-					"amount": 90,
+					"amount": 65,
 				}
 			],
 		)
 
 		self.assertEqual(result["status"], "Reconciled")
 		bank_transaction.reload()
-		self.assertEqual(bank_transaction.status, "Reconciled")
-		self.assertAlmostEqual(flt(bank_transaction.unallocated_amount), 0.0, places=2)
-		self.assertTrue(
-			any(row.payment_entry == sales_invoice.name for row in bank_transaction.payment_entries)
+		self.assertEqual(len(bank_transaction.payment_entries), 1)
+		linked_payment = bank_transaction.payment_entries[0]
+		self.assertEqual(linked_payment.payment_document, "Sales Invoice")
+		self.assertEqual(linked_payment.payment_entry, sales_invoice.name)
+
+	def test_submit_match_preserves_explicit_regular_purchase_invoice_match(self):
+		purchase_invoice = create_test_purchase_invoice(outstanding=70)
+		bank_transaction = create_test_bank_transaction(
+			self.bank_account_a,
+			withdrawal=70,
+			reference_number="_ABR-PHASE2-REGULAR-PI-MATCH",
 		)
+
+		result = submit_match(
+			bank_transaction.name,
+			[
+				{
+					"voucher_type": "Purchase Invoice",
+					"source_type": "Purchase Invoice",
+					"voucher_name": purchase_invoice.name,
+					"amount": 70,
+				}
+			],
+		)
+
+		self.assertEqual(result["status"], "Reconciled")
+		bank_transaction.reload()
+		self.assertEqual(len(bank_transaction.payment_entries), 1)
+		linked_payment = bank_transaction.payment_entries[0]
+		self.assertEqual(linked_payment.payment_document, "Purchase Invoice")
+		self.assertEqual(linked_payment.payment_entry, purchase_invoice.name)
 
 	def test_submit_match_rejects_negative_allocation_amount(self):
 		bank_transaction, sales_invoice = self._sales_invoice_match_fixture(amount=45)
@@ -397,11 +509,11 @@ class TestBankRecPhaseTwoAPI(FrappeTestCase):
 	def test_duplicate_submit_returns_idempotent_response_for_same_voucher(self):
 		bank_transaction, sales_invoice = self._sales_invoice_match_fixture(amount=75)
 		vouchers = [
-			{
-				"voucher_type": "Sales Invoice",
-				"voucher_name": sales_invoice.name,
-				"amount": 75,
-			}
+			self._candidate_payload(
+				bank_transaction,
+				["unpaid_sales_invoice"],
+				sales_invoice.name,
+			)
 		]
 
 		submit_match(bank_transaction.name, vouchers)
@@ -1211,11 +1323,13 @@ class TestBankRecPhaseFiveAPI(FrappeTestCase):
 			[
 				{
 					"voucher_type": "Sales Invoice",
+					"source_type": "Unpaid Sales Invoice",
 					"voucher_name": first_invoice.name,
 					"amount": 2000,
 				},
 				{
 					"voucher_type": "Sales Invoice",
+					"source_type": "Unpaid Sales Invoice",
 					"voucher_name": second_invoice.name,
 					"amount": 2950,
 				},
@@ -1230,8 +1344,22 @@ class TestBankRecPhaseFiveAPI(FrappeTestCase):
 		row = next(row for row in result["rows"] if row["name"] == bank_transaction.name)
 
 		self.assertEqual(len(row["linked_payments"]), 2)
+		self.assertTrue(
+			all(
+				payment["payment_document"] == "Payment Entry"
+				for payment in row["linked_payments"]
+			)
+		)
+		payment_entries = [
+			frappe.get_doc("Payment Entry", payment["payment_entry"])
+			for payment in row["linked_payments"]
+		]
 		self.assertEqual(
-			{payment["payment_entry"] for payment in row["linked_payments"]},
+			{
+				reference.reference_name
+				for payment_entry in payment_entries
+				for reference in payment_entry.references
+			},
 			{first_invoice.name, second_invoice.name},
 		)
 		self.assertAlmostEqual(

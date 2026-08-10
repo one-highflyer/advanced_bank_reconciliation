@@ -150,6 +150,7 @@ function submit() {
 
   const vouchers = selectedCandidates.value.map((candidate) => ({
     voucher_type: candidate.voucher_type,
+    source_type: candidate.source_type,
     voucher_name: candidate.voucher_name,
     amount: allocationAmount(candidate),
   }));
