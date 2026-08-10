@@ -1,3 +1,10 @@
+## [1.9.7](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.9.6...v1.9.7) (2026-08-10)
+
+
+### Bug Fixes
+
+* **bank-rec:** create payments for unpaid invoice matches ([b2b40a2](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/b2b40a2671b398fda08da4da237a01ec13c27d7c))
+
 ## [1.9.6](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.9.5...v1.9.6) (2026-08-06)
 
 
