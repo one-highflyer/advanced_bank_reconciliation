@@ -114,7 +114,7 @@ export type MatchConfidence = "high" | "medium" | "low";
 export interface MatchCandidate {
   rank: number;
   voucher_type: string;
-  source_type?: string;
+  source_type: string;
   voucher_name: string;
   amount: number;
   reference_number?: string;
@@ -141,6 +141,7 @@ export interface MatchCandidatesResponse {
 
 export interface MatchVoucherSelection {
   voucher_type: string;
+  source_type: string;
   voucher_name: string;
   amount: number;
 }

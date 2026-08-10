@@ -5,6 +5,7 @@ from frappe import _
 from frappe.utils import add_days, flt, getdate
 
 from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool import (
+	create_payment_entries_for_invoices,
 	get_linked_payments,
 	reconcile_vouchers,
 )
@@ -26,6 +27,12 @@ DEFAULT_MATCH_DOCUMENT_TYPES = [
 	"unpaid_sales_invoice",
 	"unpaid_purchase_invoice",
 ]
+
+UNPAID_INVOICE_SOURCE_TYPES = {
+	"Unpaid Sales Invoice": "Sales Invoice",
+	"Unpaid Purchase Invoice": "Purchase Invoice",
+}
+
 
 def as_bool(value):
 	if isinstance(value, bool):
@@ -124,6 +131,7 @@ def _normalise_vouchers(vouchers):
 	normalised = []
 	for row in vouchers:
 		voucher_type = row.get("voucher_type") or row.get("payment_doctype")
+		source_type = row.get("source_type") or voucher_type
 		voucher_type = _normalise_voucher_type(voucher_type)
 		voucher_name = row.get("voucher_name") or row.get("payment_name")
 		amount = flt(row.get("amount"))
@@ -132,24 +140,99 @@ def _normalise_vouchers(vouchers):
 			frappe.throw(_("Each selected match must include a voucher type and name."))
 		if amount <= 0:
 			frappe.throw(_("Each selected match must include a positive amount."))
+		if (
+			source_type in UNPAID_INVOICE_SOURCE_TYPES
+			and UNPAID_INVOICE_SOURCE_TYPES[source_type] != voucher_type
+		):
+			frappe.throw(_("The selected invoice type does not match its source type."))
 
 		normalised.append(
 			{
 				"payment_doctype": voucher_type,
 				"payment_name": voucher_name,
 				"amount": amount,
+				"source_type": source_type,
 			}
 		)
 
 	return normalised
 
 
-def _existing_payment_keys(transaction):
-	return {
+def _existing_match_keys(transaction):
+	keys = {
 		(row.payment_document, row.payment_entry)
 		for row in transaction.get("payment_entries", [])
 		if row.payment_document and row.payment_entry
 	}
+	payment_entries = [
+		row.payment_entry
+		for row in transaction.get("payment_entries", [])
+		if row.payment_document == "Payment Entry" and row.payment_entry
+	]
+	if payment_entries:
+		keys.update(
+			(
+				row.reference_doctype,
+				row.reference_name,
+			)
+			for row in frappe.get_all(
+				"Payment Entry Reference",
+				filters={"parent": ["in", payment_entries]},
+				fields=["reference_doctype", "reference_name"],
+			)
+			if row.reference_doctype and row.reference_name
+		)
+	return keys
+
+
+def _prepare_reconciliation_vouchers(transaction, vouchers):
+	unpaid_invoices = []
+	regular_vouchers = []
+
+	for row in vouchers:
+		voucher_doc = assert_voucher_access(
+			row["payment_doctype"],
+			row["payment_name"],
+		)
+		source_type = row["source_type"]
+		outstanding_amount = flt(voucher_doc.get("outstanding_amount"))
+
+		if source_type not in UNPAID_INVOICE_SOURCE_TYPES:
+			regular_vouchers.append(
+				{
+					"payment_doctype": row["payment_doctype"],
+					"payment_name": row["payment_name"],
+					"amount": row["amount"],
+				}
+			)
+			continue
+
+		if not outstanding_amount:
+			frappe.throw(
+				_("Invoice {0} no longer has an outstanding amount.").format(
+					voucher_doc.name
+				)
+			)
+		allocated_amount = abs(flt(row["amount"]))
+		if outstanding_amount < 0:
+			allocated_amount *= -1
+		unpaid_invoices.append(
+			{
+				"doctype": source_type,
+				"name": row["payment_name"],
+				"allocated_amount": allocated_amount,
+			}
+		)
+
+	if unpaid_invoices:
+		created = create_payment_entries_for_invoices(
+			transaction.name,
+			unpaid_invoices,
+			auto_reconcile=False,
+		)
+		regular_vouchers = created["vouchers"] + regular_vouchers
+
+	return regular_vouchers
 
 
 def _linked_payment_dto(transaction):
@@ -229,7 +312,7 @@ def _submit_match(bank_transaction_name, vouchers):
 			(row["payment_doctype"], row["payment_name"])
 			for row in requested_vouchers
 		}
-		if requested_keys.issubset(_existing_payment_keys(transaction)):
+		if requested_keys.issubset(_existing_match_keys(transaction)):
 			return {
 				"status": transaction.status,
 				"idempotent": True,
@@ -239,7 +322,7 @@ def _submit_match(bank_transaction_name, vouchers):
 		frappe.throw(_("This bank transaction is already reconciled."))
 
 	normalised_vouchers = _normalise_vouchers(vouchers)
-	existing_keys = _existing_payment_keys(transaction)
+	existing_keys = _existing_match_keys(transaction)
 	requested_keys = {
 		(row["payment_doctype"], row["payment_name"])
 		for row in normalised_vouchers
@@ -251,10 +334,14 @@ def _submit_match(bank_transaction_name, vouchers):
 	if total - abs(flt(transaction.unallocated_amount)) > 0.01:
 		frappe.throw(_("Selected amount exceeds the unallocated bank transaction amount."))
 
-	for row in normalised_vouchers:
-		assert_voucher_access(row["payment_doctype"], row["payment_name"])
-
-	updated_transaction = reconcile_vouchers(transaction.name, json.dumps(normalised_vouchers))
+	reconciliation_vouchers = _prepare_reconciliation_vouchers(
+		transaction,
+		normalised_vouchers,
+	)
+	updated_transaction = reconcile_vouchers(
+		transaction.name,
+		json.dumps(reconciliation_vouchers),
+	)
 	return {
 		"status": updated_transaction.status,
 		"idempotent": False,
