@@ -414,8 +414,8 @@ onBeforeRouteLeave(() => guardDiscard());
       @refresh="loadRows"
     />
 
-    <div class="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-      <TriangleAlert class="h-4 w-4 shrink-0 text-amber-500" />
+    <div class="flex items-center gap-2 rounded-lg border border-outline-amber-1 bg-surface-amber-2 px-4 py-3 text-sm text-ink-amber-3">
+      <TriangleAlert class="h-4 w-4 shrink-0 text-ink-amber-2" />
       Tax is not posted from bank coding.
     </div>
 
@@ -424,7 +424,7 @@ onBeforeRouteLeave(() => guardDiscard());
       :message="pageError"
     />
 
-    <section class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-bank-line bg-white shadow-sm">
+    <section class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-bank-line bg-bank-panel shadow-sm">
       <div class="grid gap-3 border-b border-bank-line p-4 sm:grid-cols-2 xl:grid-cols-4">
         <FormControl
           v-model="bulkAccount"
@@ -491,7 +491,7 @@ onBeforeRouteLeave(() => guardDiscard());
           class="w-full table-fixed divide-y divide-bank-line text-sm"
           :style="{ minWidth: tableMinWidth }"
         >
-          <thead class="sticky top-0 bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-bank-muted">
+          <thead class="sticky top-0 bg-bank-muted-surface text-left text-xs font-medium uppercase tracking-wide text-bank-muted">
             <tr>
               <th class="w-9 px-3 py-3"></th>
               <th class="w-24 px-3 py-3">Date</th>
@@ -511,13 +511,13 @@ onBeforeRouteLeave(() => guardDiscard());
               <th class="w-[10%] px-3 py-3">Reference</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-bank-line bg-white">
+          <tbody class="divide-y divide-bank-line bg-bank-panel">
             <tr
               v-for="row in visibleRows"
               :key="row.transaction.name"
               :class="
                 rowErrors[row.transaction.name]
-                  ? 'bg-red-50/50'
+                  ? 'bg-surface-red-1'
                   : selected.includes(row.transaction.name)
                     ? 'bg-bank-accent-50'
                     : ''
@@ -551,7 +551,7 @@ onBeforeRouteLeave(() => guardDiscard());
               <td class="px-3 py-3 align-top">
                 <input
                   v-model="row.account"
-                  class="h-9 w-full min-w-0 rounded-md border border-bank-line px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+                  class="h-9 w-full min-w-0 rounded-md border border-bank-line bg-bank-panel px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-bank-accent-soft"
                   list="bank-coding-accounts"
                   @input="markDirty(row.transaction.name)"
                 />
@@ -560,7 +560,7 @@ onBeforeRouteLeave(() => guardDiscard());
                 <div class="flex min-w-0 gap-2">
                   <select
                     v-model="row.party_type"
-                    class="h-9 w-[6.75rem] shrink-0 rounded-md border border-bank-line bg-white px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+                    class="h-9 w-[6.75rem] shrink-0 rounded-md border border-bank-line bg-bank-panel px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-bank-accent-soft"
                     @change="changePartyType(row)"
                   >
                     <option value="">None</option>
@@ -580,7 +580,7 @@ onBeforeRouteLeave(() => guardDiscard());
               <td class="px-3 py-3 align-top">
                 <input
                   v-model="row.cost_center"
-                  class="h-9 w-full min-w-0 rounded-md border border-bank-line px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+                  class="h-9 w-full min-w-0 rounded-md border border-bank-line bg-bank-panel px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-bank-accent-soft"
                   list="bank-coding-cost-centers"
                   @input="markDirty(row.transaction.name)"
                 />
@@ -588,7 +588,7 @@ onBeforeRouteLeave(() => guardDiscard());
               <td class="px-3 py-3 align-top">
                 <input
                   v-model="row.project"
-                  class="h-9 w-full min-w-0 rounded-md border border-bank-line px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+                  class="h-9 w-full min-w-0 rounded-md border border-bank-line bg-bank-panel px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-bank-accent-soft"
                   list="bank-coding-projects"
                   @input="markDirty(row.transaction.name)"
                 />
@@ -600,7 +600,7 @@ onBeforeRouteLeave(() => guardDiscard());
               >
                 <input
                   v-model="row.dimensions[dimension.fieldname]"
-                  class="h-9 w-full min-w-0 rounded-md border border-bank-line px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+                  class="h-9 w-full min-w-0 rounded-md border border-bank-line bg-bank-panel px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-bank-accent-soft"
                   :list="dimensionDatalistId(dimension)"
                   @input="markDirty(row.transaction.name)"
                 />
@@ -608,7 +608,7 @@ onBeforeRouteLeave(() => guardDiscard());
               <td class="px-3 py-3 align-top">
                 <input
                   v-model="row.reference_number"
-                  class="h-9 w-full min-w-0 rounded-md border border-bank-line px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+                  class="h-9 w-full min-w-0 rounded-md border border-bank-line bg-bank-panel px-2 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-bank-accent-soft"
                   @input="markDirty(row.transaction.name)"
                 />
               </td>

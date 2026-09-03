@@ -212,7 +212,7 @@ onMounted(async () => {
     <ErrorState v-if="pageError" :message="pageError" />
 
     <div class="grid min-h-[620px] flex-1 gap-4 xl:min-h-0 xl:grid-cols-[minmax(620px,1fr)_460px]">
-      <section class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-bank-line bg-white shadow-sm">
+      <section class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-bank-line bg-bank-panel shadow-sm">
         <div class="border-b border-bank-line px-4 py-3">
           <div class="text-base font-semibold text-bank-ink">Matched transactions</div>
           <div class="text-sm tabular-nums text-bank-muted">{{ rows.length }} rows</div>
@@ -226,7 +226,7 @@ onMounted(async () => {
         />
         <div v-else class="bank-rec-scrollbar min-h-0 flex-1 overflow-auto">
           <table class="w-full min-w-[980px] divide-y divide-bank-line text-sm">
-            <thead class="sticky top-0 bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-bank-muted">
+            <thead class="sticky top-0 bg-bank-muted-surface text-left text-xs font-medium uppercase tracking-wide text-bank-muted">
               <tr>
                 <th class="px-4 py-3">Date</th>
                 <th class="px-4 py-3">Transaction</th>
@@ -235,14 +235,14 @@ onMounted(async () => {
                 <th class="w-12 px-4 py-3 text-right"></th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-bank-line bg-white">
+            <tbody class="divide-y divide-bank-line bg-bank-panel">
               <tr
                 v-for="row in rows"
                 :key="row.name"
-                class="cursor-pointer transition hover:bg-blue-50/60"
+                class="cursor-pointer transition hover:bg-bank-accent-soft"
                 :class="
                   row.name === selectedName
-                    ? 'bg-blue-50 shadow-[inset_3px_0_0_0_#0891B2]'
+                    ? 'bg-bank-accent-soft shadow-bank-selected'
                     : ''
                 "
                 role="button"
@@ -299,7 +299,7 @@ onMounted(async () => {
                 </td>
                 <td class="px-4 py-3 text-right">
                   <a
-                    class="inline-flex h-8 w-8 items-center justify-center rounded-md text-bank-muted transition hover:bg-white hover:text-bank-accent"
+                    class="inline-flex h-8 w-8 items-center justify-center rounded-md text-bank-muted transition hover:bg-bank-panel hover:text-bank-accent"
                     :href="bankTransactionUrl(row)"
                     target="_blank"
                     rel="noreferrer"
@@ -316,7 +316,7 @@ onMounted(async () => {
         </div>
       </section>
 
-      <section class="flex min-h-0 flex-col rounded-lg border border-bank-line bg-white shadow-sm">
+      <section class="flex min-h-0 flex-col rounded-lg border border-bank-line bg-bank-panel shadow-sm">
         <div class="border-b border-bank-line px-4 py-3">
           <div class="text-base font-semibold text-bank-ink">Review</div>
           <div class="truncate text-sm text-bank-muted">
@@ -372,7 +372,7 @@ onMounted(async () => {
               <a
                 v-for="payment in selectedLinkedPayments"
                 :key="`${payment.payment_document}-${payment.payment_entry}`"
-                class="flex items-center justify-between gap-3 px-3 py-2 text-sm transition hover:bg-blue-50/60"
+                class="flex items-center justify-between gap-3 px-3 py-2 text-sm transition hover:bg-bank-accent-soft"
                 :href="voucherUrl(payment)"
                 target="_blank"
                 rel="noreferrer"
@@ -424,7 +424,7 @@ onMounted(async () => {
       aria-modal="true"
       aria-labelledby="bank-rec-unreconcile-title"
     >
-      <section class="w-full max-w-md rounded-lg border border-bank-line bg-white shadow-xl">
+      <section class="w-full max-w-md rounded-lg border border-bank-line bg-bank-panel shadow-xl">
         <div class="border-b border-bank-line px-4 py-3">
           <h2 id="bank-rec-unreconcile-title" class="text-base font-semibold text-bank-ink">
             Unreconcile transaction
@@ -436,7 +436,7 @@ onMounted(async () => {
         <div class="px-4 py-4 text-sm text-bank-ink">
           {{ pendingUnreconcileMessage }}
         </div>
-        <div class="flex justify-end gap-2 border-t border-bank-line bg-gray-50 px-4 py-3">
+        <div class="flex justify-end gap-2 border-t border-bank-line bg-bank-muted-surface px-4 py-3">
           <Button
             variant="subtle"
             :disabled="Boolean(submittingName)"

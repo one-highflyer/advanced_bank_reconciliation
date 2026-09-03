@@ -50,7 +50,7 @@ function paymentUrl(payment: LinkedPayment) {
 
 <template>
   <section
-    class="flex min-h-0 flex-col bg-white"
+    class="flex min-h-0 flex-col bg-bank-panel"
     :class="embedded ? '' : 'rounded-lg border border-bank-line shadow-sm'"
   >
     <div class="border-b border-bank-line px-4 py-3">

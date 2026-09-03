@@ -148,6 +148,7 @@ class TestBankRecPhaseOneAPI(FrappeTestCase):
 		self.assertEqual(boot["default_route"], "/bank-rec/reconcile")
 		self.assertIn("settings", boot)
 		self.assertIn("csrf_token", boot)
+		self.assertEqual(boot["desk_theme"], "Light")
 		self.assertEqual(boot["allowed_companies"], [TEST_COMPANY])
 
 	def test_bank_accounts_are_limited_to_permitted_company(self):

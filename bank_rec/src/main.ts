@@ -42,12 +42,34 @@ async function loadDevBoot() {
   });
 }
 
+function applyTheme() {
+  const themeMode = (window.desk_theme || "Light").toLowerCase();
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)");
+  const theme =
+    themeMode === "automatic"
+      ? prefersDark.matches
+        ? "dark"
+        : "light"
+      : themeMode;
+
+  document.documentElement.dataset.themeMode = themeMode;
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.dataset.nexwaveTheme = "modern";
+  document.documentElement.dir = window.dir || "ltr";
+
+  if (themeMode === "automatic") {
+    prefersDark.addEventListener("change", applyTheme, { once: true });
+  }
+}
+
 async function mount() {
   try {
     await loadDevBoot();
   } catch (error) {
     console.error("Unable to load development boot data.", error);
   }
+
+  applyTheme();
 
   const app = createApp(App);
   app.use(FrappeUI);

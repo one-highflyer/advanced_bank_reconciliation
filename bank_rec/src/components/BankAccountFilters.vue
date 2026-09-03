@@ -62,7 +62,7 @@ function updateStatementBalance(value: unknown) {
 </script>
 
 <template>
-  <section class="rounded-lg border border-bank-line bg-white p-3 shadow-sm">
+  <section class="rounded-lg border border-bank-line bg-bank-panel p-3 shadow-sm">
     <div class="flex flex-wrap items-end gap-3">
       <FormControl
         class="min-w-[220px] flex-1"
