@@ -225,7 +225,7 @@ onBeforeUnmount(() => {
         :value="query"
         :placeholder="placeholder"
         :disabled="disabled || !company || !partyType"
-        class="h-9 w-full min-w-0 rounded-md border border-bank-line bg-white px-3 pr-9 text-sm outline-none transition placeholder:text-bank-muted focus:border-bank-accent focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-bank-muted"
+        class="h-9 w-full min-w-0 rounded-md border border-bank-line bg-bank-panel px-3 pr-9 text-sm outline-none transition placeholder:text-bank-muted focus:border-bank-accent focus:ring-2 focus:ring-bank-accent-soft disabled:cursor-not-allowed disabled:bg-bank-muted-surface disabled:text-bank-muted"
         autocomplete="off"
         role="combobox"
         :aria-expanded="open && Boolean(results.length)"
@@ -238,18 +238,18 @@ onBeforeUnmount(() => {
       />
       <div
         v-if="loading"
-        class="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin rounded-full border-2 border-gray-300 border-t-bank-accent"
+        class="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin rounded-full border-2 border-bank-line-strong border-t-bank-accent"
         role="status"
         aria-label="Loading parties"
       />
     </div>
-    <div v-if="error" class="mt-1 text-xs text-red-600">
+    <div v-if="error" class="mt-1 text-xs text-ink-red-4">
       {{ error }}
     </div>
     <div
       v-if="open && results.length"
       :id="listboxId"
-      class="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-bank-line bg-white py-1 shadow-lg"
+      class="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-bank-line bg-bank-panel py-1 shadow-lg"
       role="listbox"
     >
       <button

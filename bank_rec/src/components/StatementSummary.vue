@@ -41,13 +41,13 @@ const differenceClass = computed(() => {
     return "text-bank-muted";
   }
 
-  return isBalanced.value ? "text-bank-success" : "text-red-600";
+  return isBalanced.value ? "text-bank-success" : "text-ink-red-4";
 });
 </script>
 
 <template>
   <section class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-    <div class="relative min-h-[96px] rounded-lg border border-bank-line bg-white p-4 shadow-sm">
+    <div class="relative min-h-[96px] rounded-lg border border-bank-line bg-bank-panel p-4 shadow-sm">
       <div class="text-xs font-medium uppercase tracking-wide text-bank-muted">
         Unreconciled
       </div>
@@ -56,12 +56,12 @@ const differenceClass = computed(() => {
         <template v-else-if="!summary">0</template>
         <template v-else>{{ summary.unreconciled_count }}</template>
       </div>
-      <div class="absolute right-4 top-4 flex h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-bank-surface text-bank-muted">
+      <div class="absolute right-4 top-4 flex h-[30px] w-[30px] items-center justify-center rounded-md bg-bank-muted-surface text-bank-muted">
         <List class="h-4 w-4" />
       </div>
     </div>
 
-    <div class="relative min-h-[96px] rounded-lg border border-bank-line bg-white p-4 shadow-sm">
+    <div class="relative min-h-[96px] rounded-lg border border-bank-line bg-bank-panel p-4 shadow-sm">
       <div class="text-xs font-medium uppercase tracking-wide text-bank-muted">
         Unreconciled total
       </div>
@@ -72,12 +72,12 @@ const differenceClass = computed(() => {
           {{ formatMoney(summary.unreconciled_total, currency) }}
         </template>
       </div>
-      <div class="absolute right-4 top-4 flex h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-bank-surface text-bank-muted">
+      <div class="absolute right-4 top-4 flex h-[30px] w-[30px] items-center justify-center rounded-md bg-bank-muted-surface text-bank-muted">
         <Banknote class="h-4 w-4" />
       </div>
     </div>
 
-    <div class="relative min-h-[96px] rounded-lg border border-bank-line bg-white p-4 shadow-sm">
+    <div class="relative min-h-[96px] rounded-lg border border-bank-line bg-bank-panel p-4 shadow-sm">
       <div class="text-xs font-medium uppercase tracking-wide text-bank-muted">
         ERP cleared balance
       </div>
@@ -88,12 +88,12 @@ const differenceClass = computed(() => {
           {{ formatMoney(summary.cleared_balance, currency) }}
         </template>
       </div>
-      <div class="absolute right-4 top-4 flex h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-bank-surface text-bank-muted">
+      <div class="absolute right-4 top-4 flex h-[30px] w-[30px] items-center justify-center rounded-md bg-bank-muted-surface text-bank-muted">
         <Landmark class="h-4 w-4" />
       </div>
     </div>
 
-    <div class="relative min-h-[96px] rounded-lg border border-bank-line bg-white p-4 shadow-sm">
+    <div class="relative min-h-[96px] rounded-lg border border-bank-line bg-bank-panel p-4 shadow-sm">
       <div class="text-xs font-medium uppercase tracking-wide text-bank-muted">
         Difference
       </div>
@@ -107,19 +107,19 @@ const differenceClass = computed(() => {
       <div v-if="!loading && difference !== null" class="mt-2">
         <span
           v-if="isBalanced"
-          class="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700"
+          class="inline-flex items-center gap-1 rounded-full bg-surface-green-2 px-2 py-0.5 text-xs font-semibold text-ink-green-3"
         >
           <Check class="h-3.5 w-3.5" />
           Balanced
         </span>
         <span
           v-else
-          class="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700"
+          class="inline-flex items-center gap-1 rounded-full bg-surface-red-2 px-2 py-0.5 text-xs font-semibold text-ink-red-4"
         >
           Out of balance
         </span>
       </div>
-      <div class="absolute right-4 top-4 flex h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-green-50 text-bank-success">
+      <div class="absolute right-4 top-4 flex h-[30px] w-[30px] items-center justify-center rounded-md bg-surface-green-2 text-bank-success">
         <Scale class="h-4 w-4" />
       </div>
     </div>

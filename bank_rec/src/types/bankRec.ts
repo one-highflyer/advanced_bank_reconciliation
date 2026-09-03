@@ -19,6 +19,7 @@ export interface BootData {
   site_name: string;
   csrf_token: string;
   session_user: string;
+  desk_theme: "Light" | "Dark" | "Automatic";
   lang: string;
   dir: "ltr" | "rtl";
   allowed_roles: string[];

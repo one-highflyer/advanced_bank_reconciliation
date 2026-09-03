@@ -153,6 +153,7 @@ def get_boot():
 		"site_name": frappe.local.site,
 		"csrf_token": frappe.sessions.get_csrf_token(),
 		"session_user": frappe.session.user,
+		"desk_theme": frappe.db.get_value("User", frappe.session.user, "desk_theme") or "Light",
 		"lang": frappe.local.lang,
 		"dir": "rtl" if is_rtl() else "ltr",
 		"allowed_roles": sorted(frappe.get_roles()),

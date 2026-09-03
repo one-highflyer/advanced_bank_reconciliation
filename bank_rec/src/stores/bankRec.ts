@@ -76,6 +76,7 @@ function windowBoot(): BootData | null {
     site_name: window.site_name || "",
     csrf_token: window.csrf_token || "",
     session_user: window.session_user,
+    desk_theme: window.desk_theme || "Light",
     lang: window.lang || "en",
     dir: window.dir || "ltr",
     allowed_roles: window.allowed_roles || [],

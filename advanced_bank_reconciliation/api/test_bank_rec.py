@@ -70,6 +70,7 @@ def _ensure_test_user(email, roles):
 		if not any(row.role == role for row in user.roles):
 			user.append("roles", {"role": role})
 
+	user.desk_theme = "Light"
 	user.save(ignore_permissions=True)
 	return email
 
@@ -148,6 +149,7 @@ class TestBankRecPhaseOneAPI(FrappeTestCase):
 		self.assertEqual(boot["default_route"], "/bank-rec/reconcile")
 		self.assertIn("settings", boot)
 		self.assertIn("csrf_token", boot)
+		self.assertEqual(boot["desk_theme"], "Light")
 		self.assertEqual(boot["allowed_companies"], [TEST_COMPANY])
 
 	def test_bank_accounts_are_limited_to_permitted_company(self):

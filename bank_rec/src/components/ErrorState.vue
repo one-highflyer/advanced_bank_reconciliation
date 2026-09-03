@@ -15,7 +15,7 @@ defineEmits<{
 
 <template>
   <div class="flex min-h-[180px] flex-col items-center justify-center gap-3 p-6 text-center">
-    <CircleAlert class="h-8 w-8 text-red-600" />
+    <CircleAlert class="h-8 w-8 text-ink-red-4" />
     <div>
       <div class="text-base font-semibold text-bank-ink">
         {{ title || "Unable to load" }}

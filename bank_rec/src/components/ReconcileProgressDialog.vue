@@ -14,7 +14,7 @@ defineProps<{
     aria-modal="true"
     aria-labelledby="bank-rec-progress-title"
   >
-    <div class="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
+    <div class="w-full max-w-md rounded-lg border border-bank-line bg-bank-panel p-5 shadow-xl">
       <div id="bank-rec-progress-title" class="text-base font-semibold text-bank-ink">
         {{ title || "Reconciling" }}
       </div>

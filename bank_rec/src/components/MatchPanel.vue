@@ -88,10 +88,10 @@ const fullyAllocated = computed(
 
 function confidenceDotClass(confidence: MatchCandidate["confidence"]) {
   if (confidence === "high") {
-    return "bg-green-500";
+    return "bg-surface-green-3";
   }
   if (confidence === "medium") {
-    return "bg-amber-500";
+    return "bg-surface-amber-3";
   }
   return "bg-bank-subtle";
 }
@@ -216,7 +216,7 @@ watch(
           <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-bank-muted" />
           <input
             v-model="search"
-            class="h-9 w-full rounded-md border border-bank-line bg-white pl-9 pr-3 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+            class="h-9 w-full rounded-md border border-bank-line bg-bank-panel pl-9 pr-3 text-sm outline-none focus:border-bank-accent focus:ring-2 focus:ring-bank-accent-soft"
             type="search"
             aria-label="Search match candidates"
             placeholder="Search documents, references, parties, dates, amounts"
@@ -233,7 +233,7 @@ watch(
 
       <div v-else class="bank-rec-scrollbar min-h-0 flex-1 overflow-auto">
         <table class="min-w-full divide-y divide-bank-line text-sm">
-          <thead class="sticky top-0 bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-bank-muted">
+          <thead class="sticky top-0 bg-bank-muted-surface text-left text-xs font-medium uppercase tracking-wide text-bank-muted">
             <tr>
               <th class="w-10 px-4 py-3"></th>
               <th class="px-4 py-3">Document</th>
@@ -243,11 +243,11 @@ watch(
               <th class="px-4 py-3 text-right">Allocate</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-bank-line bg-white">
+          <tbody class="divide-y divide-bank-line bg-bank-panel">
             <tr
               v-for="candidate in filteredCandidates"
               :key="candidate.key"
-              :class="selectedKeys.includes(candidate.key) ? 'bg-bank-accent-50' : ''"
+              :class="selectedKeys.includes(candidate.key) ? 'bg-bank-accent-soft' : ''"
             >
               <td class="px-4 py-3 align-top">
                 <input
@@ -306,7 +306,7 @@ watch(
               <td class="px-4 py-3 text-right align-top">
                 <input
                   v-model.number="amounts[candidate.key]"
-                  class="h-9 w-28 rounded-md border border-bank-line px-2 text-right text-sm tabular-nums outline-none focus:border-bank-accent focus:ring-2 focus:ring-blue-100"
+                  class="h-9 w-28 rounded-md border border-bank-line bg-bank-panel px-2 text-right text-sm tabular-nums outline-none focus:border-bank-accent focus:ring-2 focus:ring-bank-accent-soft"
                   type="number"
                   min="0.01"
                   step="0.01"
@@ -317,7 +317,7 @@ watch(
         </table>
       </div>
 
-      <div class="border-t border-bank-line bg-gray-50 px-4 py-3">
+      <div class="border-t border-bank-line bg-bank-muted-surface px-4 py-3">
         <ErrorState
           v-if="submitError"
           title="Unable to reconcile"
@@ -333,14 +333,14 @@ watch(
             </span>
             <span
               v-if="fullyAllocated"
-              class="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700"
+              class="inline-flex items-center gap-1 rounded-full bg-surface-green-2 px-2 py-0.5 text-xs font-semibold text-ink-green-3"
             >
               <Check class="h-3.5 w-3.5" />
               Fully allocated
             </span>
             <span
               v-if="invalidSelectedCandidates.length"
-              class="font-medium text-red-700"
+              class="font-medium text-ink-red-4"
             >
               Enter positive allocation amounts.
             </span>

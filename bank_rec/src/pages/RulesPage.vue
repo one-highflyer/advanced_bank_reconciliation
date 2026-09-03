@@ -86,7 +86,7 @@ onMounted(async () => {
       @refresh="loadRules"
     />
 
-    <section class="flex min-h-[620px] flex-col rounded-lg border border-bank-line bg-white shadow-sm">
+    <section class="flex min-h-[620px] flex-col rounded-lg border border-bank-line bg-bank-panel shadow-sm">
       <div class="flex flex-col gap-3 border-b border-bank-line px-4 py-3 md:flex-row md:items-center md:justify-between">
         <div>
           <div class="text-base font-semibold text-bank-ink">Rules</div>
@@ -122,7 +122,7 @@ onMounted(async () => {
       />
       <div v-else class="bank-rec-scrollbar min-h-0 flex-1 overflow-auto">
         <table class="min-w-full divide-y divide-bank-line text-sm">
-          <thead class="sticky top-0 bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-bank-muted">
+          <thead class="sticky top-0 bg-bank-muted-surface text-left text-xs font-medium uppercase tracking-wide text-bank-muted">
             <tr>
               <th class="px-4 py-3">Rule</th>
               <th class="px-4 py-3">Entry type</th>
@@ -133,7 +133,7 @@ onMounted(async () => {
               <th class="px-4 py-3 text-right">Action</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-bank-line bg-white">
+          <tbody class="divide-y divide-bank-line bg-bank-panel">
             <tr v-for="rule in filteredRules" :key="rule.name">
               <td class="max-w-[280px] px-4 py-3">
                 <div class="truncate font-medium text-bank-ink">
@@ -164,7 +164,7 @@ onMounted(async () => {
                   <template #prefix>
                     <span
                       class="h-2 w-2 rounded-full"
-                      :class="rule.enabled ? 'bg-green-500' : 'bg-bank-subtle'"
+                      :class="rule.enabled ? 'bg-surface-green-3' : 'bg-bank-subtle'"
                     />
                   </template>
                   {{ rule.enabled ? "Enabled" : "Disabled" }}
@@ -172,7 +172,7 @@ onMounted(async () => {
               </td>
               <td class="px-4 py-3 text-right">
                 <a
-                  class="inline-flex h-8 items-center gap-2 rounded-md border border-bank-line px-3 text-sm font-medium text-bank-ink transition hover:bg-gray-50"
+                  class="inline-flex h-8 items-center gap-2 rounded-md border border-bank-line px-3 text-sm font-medium text-bank-ink transition hover:bg-bank-muted-surface"
                   :href="rule.desk_url"
                   target="_blank"
                   rel="noreferrer"

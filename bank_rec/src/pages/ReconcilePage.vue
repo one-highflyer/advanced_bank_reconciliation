@@ -228,7 +228,7 @@ watch(
         />
 
         <div class="grid min-h-[620px] flex-1 gap-4 xl:min-h-0 xl:grid-cols-[minmax(380px,0.8fr)_minmax(620px,1.2fr)]">
-          <section class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-bank-line bg-white shadow-sm">
+          <section class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-bank-line bg-bank-panel shadow-sm">
             <div class="flex items-center justify-between gap-3 border-b border-bank-line px-4 py-3">
               <div>
                 <div class="text-base font-semibold text-bank-ink">
@@ -265,7 +265,7 @@ watch(
             </div>
           </section>
 
-          <section class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-bank-line bg-white shadow-sm">
+          <section class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-bank-line bg-bank-panel shadow-sm">
             <div class="border-b border-bank-line px-4 py-3">
               <div class="truncate text-base font-semibold text-bank-ink">
                 {{ store.selectedTransaction?.description || store.selectedTransaction?.name || "No transaction selected" }}

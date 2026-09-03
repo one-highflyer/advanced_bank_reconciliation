@@ -32,11 +32,11 @@ function isInflow(transaction: BankTransaction) {
     <div
       v-for="transaction in transactions"
       :key="transaction.name"
-      class="grid w-full cursor-pointer grid-cols-[120px_minmax(0,1fr)_130px_32px] gap-3 px-4 py-3 text-left transition hover:bg-blue-50/60"
+      class="grid w-full cursor-pointer grid-cols-[120px_minmax(0,1fr)_130px_32px] gap-3 px-4 py-3 text-left transition hover:bg-bank-accent-soft"
       :class="
         transaction.name === selectedName
-          ? 'bg-blue-50 shadow-[inset_3px_0_0_0_#0891B2]'
-          : 'bg-white'
+          ? 'bg-bank-accent-soft shadow-bank-selected'
+          : 'bg-bank-panel'
       "
       role="button"
       tabindex="0"
@@ -67,21 +67,21 @@ function isInflow(transaction: BankTransaction) {
         </div>
         <span
           v-if="isInflow(transaction)"
-          class="mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold bg-green-50 text-green-700"
+          class="mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold bg-surface-green-2 text-ink-green-3"
         >
           <ArrowUpRight class="h-3 w-3" />
           In
         </span>
         <span
           v-else
-          class="mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold bg-gray-100 text-bank-muted"
+          class="mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold bg-bank-muted-surface text-bank-muted"
         >
           <ArrowDownRight class="h-3 w-3" />
           Out
         </span>
       </div>
       <a
-        class="inline-flex h-8 w-8 items-center justify-center rounded-md text-bank-muted transition hover:bg-white hover:text-bank-accent"
+        class="inline-flex h-8 w-8 items-center justify-center rounded-md text-bank-muted transition hover:bg-bank-panel hover:text-bank-accent"
         :href="bankTransactionUrl(transaction)"
         target="_blank"
         rel="noreferrer"

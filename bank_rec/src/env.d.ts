@@ -17,6 +17,7 @@ interface Window {
   default_route?: string;
   site_name?: string;
   session_user?: string;
+  desk_theme?: "Light" | "Dark" | "Automatic";
   lang?: string;
   dir?: "ltr" | "rtl";
   allowed_roles?: string[];

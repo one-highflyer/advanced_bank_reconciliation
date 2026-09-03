@@ -18,15 +18,9 @@ concurrency:
 
 jobs:
   tests:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     timeout-minutes: 60
-    # Skip workflow-payload commits and fork-originated PRs. Fork PRs would
-    # otherwise execute arbitrary code on the self-hosted runner because
-    # this is a public repo and a fork can modify .github/workflows/ci.yml.
-    if: >-
-      !contains(github.event.head_commit.message, 'chore(release):')
-      && (github.event_name == 'push'
-          || github.event.pull_request.head.repo.full_name == github.repository)
+    if: "!contains(github.event.head_commit.message, 'chore(release):')"
     name: Server
 
     services:
@@ -51,9 +45,6 @@ jobs:
     steps:
       - name: Clone
         uses: actions/checkout@v4
-
-      - name: Clean previous bench
-        run: rm -rf ${{ github.workspace }}/../frappe-bench
 
       - name: Setup Python
         uses: actions/setup-python@v5

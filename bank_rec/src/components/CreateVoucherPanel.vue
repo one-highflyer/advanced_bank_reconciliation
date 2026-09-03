@@ -391,7 +391,7 @@ watch(
         />
       </div>
 
-      <div class="mt-auto border-t border-bank-line bg-gray-50 px-4 py-3">
+      <div class="mt-auto border-t border-bank-line bg-bank-muted-surface px-4 py-3">
         <ErrorState
           v-if="validationError || createError || draftError"
           title="Unable to create"
