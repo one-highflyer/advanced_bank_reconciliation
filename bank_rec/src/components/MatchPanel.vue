@@ -247,7 +247,7 @@ watch(
             <tr
               v-for="candidate in filteredCandidates"
               :key="candidate.key"
-              :class="selectedKeys.includes(candidate.key) ? 'bg-bank-accent-50' : ''"
+              :class="selectedKeys.includes(candidate.key) ? 'bg-bank-accent-soft' : ''"
             >
               <td class="px-4 py-3 align-top">
                 <input

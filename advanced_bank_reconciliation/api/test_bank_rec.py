@@ -70,6 +70,7 @@ def _ensure_test_user(email, roles):
 		if not any(row.role == role for row in user.roles):
 			user.append("roles", {"role": role})
 
+	user.desk_theme = "Light"
 	user.save(ignore_permissions=True)
 	return email
 

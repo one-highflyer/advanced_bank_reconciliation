@@ -519,7 +519,7 @@ onBeforeRouteLeave(() => guardDiscard());
                 rowErrors[row.transaction.name]
                   ? 'bg-surface-red-1'
                   : selected.includes(row.transaction.name)
-                    ? 'bg-bank-accent-50'
+                    ? 'bg-bank-accent-soft'
                     : ''
               "
             >
