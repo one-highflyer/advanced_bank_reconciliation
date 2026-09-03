@@ -1,3 +1,15 @@
+# [1.10.0](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.9.7...v1.10.0) (2026-09-03)
+
+
+### Bug Fixes
+
+* **bank-rec:** address theme review findings ([186781a](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/186781af31683cb10a085756d30d66b76e21b9ec))
+
+
+### Features
+
+* **bank-rec:** align modern UI with NexWave theme ([85d34d9](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/85d34d9a7583480fe53743b2a5799aae561ab098))
+
 ## [1.9.7](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.9.6...v1.9.7) (2026-08-10)
 
 
