@@ -4,7 +4,7 @@
 
 :root {
   color-scheme: light;
-  --font-stack: "InterVariable", "Inter", -apple-system, BlinkMacSystemFont,
+  --font-stack: "InterVariable", "Inter", -apple-system, blinkmacsystemfont,
     "Segoe UI", sans-serif;
   --nexwave-primary: #0e7490;
   --nexwave-button-hover: #155e75;
