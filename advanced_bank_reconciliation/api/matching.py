@@ -3,6 +3,11 @@ import json
 import frappe
 from frappe import _
 from frappe.utils import add_days, flt, getdate
+from erpnext.accounts.doctype.bank_transaction.bank_transaction import (
+	get_clearance_details,
+	get_related_bank_gl_entries,
+	get_total_allocated_amount,
+)
 
 from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool import (
 	create_payment_entries_for_invoices,
@@ -235,6 +240,55 @@ def _prepare_reconciliation_vouchers(transaction, vouchers):
 	return regular_vouchers
 
 
+def _resolve_internal_transfer_amounts(transaction, vouchers):
+	"""Reserve ordinary allocations, then allocate each transfer's remaining bank leg."""
+	transfers = []
+	has_unpaid_return = False
+	for row in vouchers:
+		doc = assert_voucher_access(row["payment_doctype"], row["payment_name"])
+		if row["source_type"] in UNPAID_INVOICE_SOURCE_TYPES and flt(doc.get("outstanding_amount")) < 0:
+			has_unpaid_return = True
+		if doc.doctype == "Payment Entry" and doc.payment_type == "Internal Transfer":
+			transfers.append((row, doc))
+	if not transfers:
+		return
+	if has_unpaid_return:
+		frappe.throw(_("Reconcile unpaid returns separately from internal transfers."))
+
+	transfer_names = {doc.name for _, doc in transfers}
+	remaining = flt(transaction.unallocated_amount) - sum(
+		flt(row["amount"])
+		for row in vouchers
+		if not (
+			row["payment_doctype"] == "Payment Entry"
+			and row["payment_name"] in transfer_names
+		)
+	)
+	if remaining <= 0:
+		frappe.throw(_("No bank transaction amount remains for the selected internal transfer."))
+
+	docs = [("Payment Entry", doc.name) for _, doc in transfers]
+	gl_entries = get_related_bank_gl_entries(docs)
+	allocations = get_total_allocated_amount(docs)
+	bank_account = frappe.db.get_value("Bank Account", transaction.bank_account, "account")
+	bank_side = "paid_to" if transaction.deposit > 0 else "paid_from"
+	for row, doc in transfers:
+		if doc.docstatus != 1 or doc.get(bank_side) != bank_account:
+			frappe.throw(_("The internal transfer does not match this bank transaction's account and direction."))
+		key = ("Payment Entry", doc.name)
+		available, should_clear, clearance_date = get_clearance_details(
+			transaction,
+			frappe._dict(payment_document="Payment Entry", payment_entry=doc.name),
+			dict(allocations.get(key, {})),
+			dict(gl_entries.get(key, {})),
+			bank_account,
+		)
+		row["amount"] = min(available, remaining)
+		if row["amount"] <= 0:
+			frappe.throw(_("No amount remains to allocate to the selected internal transfer."))
+		remaining = flt(remaining - row["amount"], transaction.precision("unallocated_amount"))
+
+
 def _linked_payment_dto(transaction):
 	return [
 		{
@@ -279,10 +333,22 @@ def get_match_candidates(
 		from_reference_date=from_reference_date,
 		to_reference_date=to_reference_date,
 	)
+	payment_names = [row[2] for row in rows if row[1] == "Payment Entry"]
+	internal_transfers = set(frappe.get_all(
+		"Payment Entry",
+		filters={"name": ["in", payment_names], "payment_type": "Internal Transfer"},
+		pluck="name",
+	)) if payment_names else set()
+	candidates = [_candidate_to_dto(row, transaction) for row in rows]
+	for candidate in candidates:
+		candidate["is_internal_transfer"] = (
+			candidate["voucher_type"] == "Payment Entry"
+			and candidate["voucher_name"] in internal_transfers
+		)
 
 	return {
 		"transaction": _transaction_to_dto(transaction.as_dict(), status=transaction.status),
-		"candidates": [_candidate_to_dto(row, transaction) for row in rows],
+		"candidates": candidates,
 		"filters": {
 			"document_types": document_types,
 			"from_date": from_date,
@@ -330,6 +396,7 @@ def _submit_match(bank_transaction_name, vouchers):
 	if existing_keys.intersection(requested_keys):
 		frappe.throw(_("One or more selected vouchers are already linked to this bank transaction."))
 
+	_resolve_internal_transfer_amounts(transaction, normalised_vouchers)
 	total = sum(abs(flt(row["amount"])) for row in normalised_vouchers)
 	if total - abs(flt(transaction.unallocated_amount)) > 0.01:
 		frappe.throw(_("Selected amount exceeds the unallocated bank transaction amount."))

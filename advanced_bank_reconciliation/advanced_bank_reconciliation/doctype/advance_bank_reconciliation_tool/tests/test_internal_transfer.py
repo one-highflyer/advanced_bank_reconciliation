@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import add_days, flt, nowdate
+from frappe.utils import add_days, flt, getdate, nowdate
 from erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool import (
     get_queries as get_standard_matching_queries,
 )
@@ -20,10 +20,12 @@ from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_b
 from advanced_bank_reconciliation.advanced_bank_reconciliation.overrides.bank_transaction import (
     get_voucher_allocation_amount,
 )
+from advanced_bank_reconciliation.api.matching import get_match_candidates, submit_match
 
 from .fixtures import (
     TEST_BANK,
     TEST_COMPANY,
+    create_test_sales_invoice,
     ensure_erpnext_test_company,
     ensure_fiscal_year_for_company,
 )
@@ -401,3 +403,186 @@ class TestInternalTransferMatching(FrappeTestCase):
         self.assertAlmostEqual(flt(target_transaction.unallocated_amount), 0, places=2)
         self.assertGreaterEqual(flt(target_transaction.unallocated_amount), 0)
         self.assertEqual(payment_entry.clearance_date, target_transaction.date)
+
+    def _api_candidate(self, transaction, payment_entry):
+        result = get_match_candidates(
+            transaction.name,
+            document_types=["payment_entry"],
+            from_date=add_days(nowdate(), -1),
+            to_date=add_days(nowdate(), 1),
+        )
+        return next(
+            row
+            for row in result["candidates"]
+            if row["voucher_name"] == payment_entry.name
+        )
+
+    def test_new_ui_api_matches_both_currencies_and_ignores_edited_amounts(self):
+        for same_currency in (False, True):
+            with self.subTest(same_currency=same_currency):
+                received = 100 if same_currency else 90
+                target_bank = (
+                    self.same_currency_bank_account
+                    if same_currency
+                    else self.target_bank_account
+                )
+                payment = self._create_internal_transfer(
+                    received_amount=received,
+                    target_gl_account=self.same_currency_gl_account
+                    if same_currency
+                    else None,
+                )
+                source = self._create_bank_transaction(
+                    self.source_bank_account, withdrawal=100
+                )
+                target = self._create_bank_transaction(target_bank, deposit=received)
+                transactions = (target, source) if same_currency else (source, target)
+                for index, transaction in enumerate(transactions):
+                    candidate = self._api_candidate(transaction, payment)
+                    expected = transaction.deposit or transaction.withdrawal
+                    self.assertTrue(candidate["is_internal_transfer"])
+                    self.assertEqual(candidate["currency"], transaction.currency)
+                    self.assertAlmostEqual(candidate["amount"], expected)
+                    candidate["amount"] = 999 if index == 0 else 1
+                    result = submit_match(transaction.name, [candidate])
+                    self.assertEqual(result["status"], "Reconciled")
+                    self.assertAlmostEqual(
+                        result["linked_payments"][0]["allocated_amount"], expected
+                    )
+                    payment.reload()
+                    self.assertEqual(bool(payment.clearance_date), index == 1)
+
+    def test_new_ui_api_reserves_ordinary_amounts_and_supports_split_bank_legs(self):
+        payment = self._create_internal_transfer()
+        expense = frappe.db.get_value(
+            "Account",
+            {"company": TEST_COMPANY, "root_type": "Expense", "is_group": 0},
+            "name",
+        )
+        journal = frappe.get_doc(
+            {
+                "doctype": "Journal Entry",
+                "company": TEST_COMPANY,
+                "posting_date": nowdate(),
+                "accounts": [
+                    {"account": expense, "debit_in_account_currency": 20},
+                    {
+                        "account": self.source_gl_account,
+                        "credit_in_account_currency": 20,
+                    },
+                ],
+            }
+        ).insert()
+        journal.submit()
+        first = self._create_bank_transaction(self.source_bank_account, withdrawal=60)
+        candidate = self._api_candidate(first, payment)
+        result = submit_match(
+            first.name,
+            [
+                candidate,
+                {
+                    "voucher_type": "Journal Entry",
+                    "voucher_name": journal.name,
+                    "amount": 20,
+                },
+            ],
+        )
+        amounts = {
+            row["payment_entry"]: row["allocated_amount"]
+            for row in result["linked_payments"]
+        }
+        self.assertEqual(amounts, {payment.name: 40, journal.name: 20})
+        self.assertEqual(result["status"], "Reconciled")
+        target = self._create_bank_transaction(self.target_bank_account, deposit=90)
+        submit_match(target.name, [self._api_candidate(target, payment)])
+        payment.reload()
+        self.assertFalse(payment.clearance_date)
+        second = self._create_bank_transaction(self.source_bank_account, withdrawal=60)
+        candidate = self._api_candidate(second, payment)
+        self.assertAlmostEqual(candidate["amount"], 60)
+        result = submit_match(second.name, [candidate])
+        self.assertAlmostEqual(result["linked_payments"][0]["allocated_amount"], 60)
+        self.assertEqual(result["status"], "Reconciled")
+        payment.reload()
+        self.assertEqual(payment.clearance_date, getdate(second.date))
+
+    def test_new_ui_api_rejects_wrong_bank_direction_and_exhausted_leg(self):
+        payment = self._create_internal_transfer()
+        voucher = {
+            "voucher_type": "Payment Entry",
+            "voucher_name": payment.name,
+            "amount": 100,
+        }
+        wrong_direction = self._create_bank_transaction(
+            self.source_bank_account, deposit=100
+        )
+        with self.assertRaises(frappe.ValidationError):
+            submit_match(wrong_direction.name, [voucher])
+        wrong_direction.reload()
+        self.assertFalse(wrong_direction.payment_entries)
+        source = self._create_bank_transaction(self.source_bank_account, withdrawal=100)
+        submit_match(source.name, [voucher])
+        exhausted = self._create_bank_transaction(
+            self.source_bank_account, withdrawal=100
+        )
+        with self.assertRaises(frappe.ValidationError):
+            submit_match(exhausted.name, [voucher])
+        exhausted.reload()
+        self.assertFalse(exhausted.payment_entries)
+
+    def test_new_ui_api_rejects_mixed_unpaid_return_before_creating_payment(self):
+        payment = self._create_internal_transfer()
+        group = frappe.get_doc(
+            {
+                "doctype": "Customer Group",
+                "customer_group_name": "_ABR Transfer Return Group",
+                "parent_customer_group": "All Customer Groups",
+                "is_group": 0,
+            }
+        ).insert(ignore_permissions=True)
+        territory = frappe.get_doc(
+            {
+                "doctype": "Territory",
+                "territory_name": "_ABR Transfer Return Territory",
+                "parent_territory": "All Territories",
+                "is_group": 0,
+            }
+        ).insert(ignore_permissions=True)
+        customer = frappe.get_doc(
+            {
+                "doctype": "Customer",
+                "customer_name": "_ABR Transfer Return Customer",
+                "customer_type": "Individual",
+                "customer_group": group.name,
+                "territory": territory.name,
+            }
+        ).insert(ignore_permissions=True)
+        invoice = create_test_sales_invoice(
+            outstanding=20, is_return=1, customer=customer.name
+        )
+        transaction = self._create_bank_transaction(
+            self.source_bank_account, withdrawal=60
+        )
+        before = frappe.db.count("Payment Entry")
+        with self.assertRaisesRegex(
+            frappe.ValidationError, "Reconcile unpaid returns separately"
+        ):
+            submit_match(
+                transaction.name,
+                [
+                    {
+                        "voucher_type": "Payment Entry",
+                        "voucher_name": payment.name,
+                        "amount": 40,
+                    },
+                    {
+                        "voucher_type": "Sales Invoice",
+                        "source_type": "Unpaid Sales Invoice",
+                        "voucher_name": invoice.name,
+                        "amount": 20,
+                    },
+                ],
+            )
+        transaction.reload()
+        self.assertFalse(transaction.payment_entries)
+        self.assertEqual(frappe.db.count("Payment Entry"), before)

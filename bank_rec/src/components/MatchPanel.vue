@@ -49,6 +49,10 @@ const selectedCandidates = computed(() =>
 );
 
 function allocationAmount(candidate: MatchCandidate) {
+  if (candidate.is_internal_transfer) {
+    return transferAmounts.value[candidate.key] ??
+      Math.min(Math.abs(candidate.amount), allocatableAmount.value);
+  }
   const value = amounts.value[candidate.key] ?? Math.abs(candidate.amount);
   return Number(value);
 }
@@ -77,6 +81,27 @@ const allocatableAmount = computed(() => {
   }
   const unallocated = Math.abs(Number(props.transaction.unallocated_amount || 0));
   return unallocated || Math.abs(Number(props.transaction.amount || 0));
+});
+
+const transferAmounts = computed(() => {
+  let remaining = Math.max(
+    0,
+    allocatableAmount.value -
+      selectedCandidates.value
+        .filter((candidate) => !candidate.is_internal_transfer)
+        .reduce(
+          (total, candidate) =>
+            total + Math.abs(allocationAmount(candidate) || 0),
+          0,
+        ),
+  );
+  const result: Record<string, number> = {};
+  for (const candidate of selectedCandidates.value) {
+    if (!candidate.is_internal_transfer) continue;
+    result[candidate.key] = Math.min(Math.abs(candidate.amount), remaining);
+    remaining = Math.max(0, remaining - result[candidate.key]);
+  }
+  return result;
 });
 
 const fullyAllocated = computed(
@@ -288,7 +313,7 @@ watch(
                   </Badge>
                 </div>
                 <div class="mt-1 text-xs text-bank-muted">
-                  {{ candidate.voucher_type }}
+                  {{ candidate.is_internal_transfer ? "Internal Transfer" : candidate.voucher_type }}
                 </div>
               </td>
               <td class="max-w-[180px] px-4 py-3 align-top text-bank-ink">
@@ -305,12 +330,18 @@ watch(
               </td>
               <td class="px-4 py-3 text-right align-top">
                 <input
-                  v-model.number="amounts[candidate.key]"
+                  :value="allocationAmount(candidate)"
+                  :readonly="candidate.is_internal_transfer"
+                  :aria-label="`Allocation for ${candidate.voucher_name}`"
+                  @input="amounts[candidate.key] = ($event.target as HTMLInputElement).value"
                   class="h-9 w-28 rounded-md border border-bank-line bg-bank-panel px-2 text-right text-sm tabular-nums outline-none focus:border-bank-accent focus:ring-2 focus:ring-bank-accent-soft"
                   type="number"
                   min="0.01"
                   step="0.01"
                 />
+                <div v-if="candidate.is_internal_transfer" class="mt-1 text-xs text-bank-muted">
+                  Automatic amount
+                </div>
               </td>
             </tr>
           </tbody>
