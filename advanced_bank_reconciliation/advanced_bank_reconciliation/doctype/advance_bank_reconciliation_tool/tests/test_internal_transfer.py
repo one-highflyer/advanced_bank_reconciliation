@@ -13,6 +13,7 @@ from erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool 
 )
 
 from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool import (
+    create_payment_entries_bulk,
     get_linked_payments,
     get_matching_queries,
     reconcile_vouchers,
@@ -500,11 +501,20 @@ class TestInternalTransferMatching(FrappeTestCase):
         second = self._create_bank_transaction(self.source_bank_account, withdrawal=60)
         candidate = self._api_candidate(second, payment)
         self.assertAlmostEqual(candidate["amount"], 60)
+        exact_candidate = self._get_payment_entry_candidate(second, payment.name, exact_match=1)
+        self.assertAlmostEqual(exact_candidate[3], 60)
         result = submit_match(second.name, [candidate])
         self.assertAlmostEqual(result["linked_payments"][0]["allocated_amount"], 60)
         self.assertEqual(result["status"], "Reconciled")
         payment.reload()
         self.assertEqual(payment.clearance_date, getdate(second.date))
+        first.reload()
+        first.remove_payment_entries()
+        first.reload()
+        payment.reload()
+        self.assertFalse(first.payment_entries)
+        self.assertEqual(first.unallocated_amount, 60)
+        self.assertFalse(payment.clearance_date)
 
     def test_new_ui_api_rejects_wrong_bank_direction_and_exhausted_leg(self):
         payment = self._create_internal_transfer()
@@ -527,6 +537,12 @@ class TestInternalTransferMatching(FrappeTestCase):
         )
         with self.assertRaises(frappe.ValidationError):
             submit_match(exhausted.name, [voucher])
+        exhausted.reload()
+        self.assertFalse(exhausted.payment_entries)
+        with self.assertRaisesRegex(frappe.ValidationError, "No amount remains"):
+            reconcile_vouchers(exhausted.name, json.dumps([{
+                "payment_doctype": "Payment Entry", "payment_name": payment.name, "amount": 100,
+            }]))
         exhausted.reload()
         self.assertFalse(exhausted.payment_entries)
 
@@ -564,8 +580,93 @@ class TestInternalTransferMatching(FrappeTestCase):
             self.source_bank_account, withdrawal=60
         )
         before = frappe.db.count("Payment Entry")
+        for source_type in ("Unpaid Sales Invoice", "Sales Invoice"):
+            with self.assertRaisesRegex(
+                frappe.ValidationError, "separately from internal transfers"
+            ):
+                submit_match(
+                    transaction.name,
+                    [
+                        {
+                            "voucher_type": "Payment Entry",
+                            "voucher_name": payment.name,
+                            "amount": 40,
+                        },
+                        {
+                            "voucher_type": "Sales Invoice",
+                            "source_type": source_type,
+                            "voucher_name": invoice.name,
+                            "amount": 20,
+                        },
+                    ],
+                )
+        with patch("frappe.enqueue") as enqueue:
+            with self.assertRaisesRegex(
+                frappe.ValidationError, "separately from internal transfers"
+            ):
+                create_payment_entries_bulk(
+                    transaction.name,
+                    [
+                        {
+                            "doctype": "Unpaid Sales Invoice",
+                            "name": invoice.name,
+                            "allocated_amount": -20,
+                        }
+                    ],
+                    [
+                        {
+                            "payment_doctype": "Payment Entry",
+                            "payment_name": payment.name,
+                            "amount": 40,
+                        }
+                    ],
+                )
+            enqueue.assert_not_called()
+        transaction.reload()
+        self.assertFalse(transaction.payment_entries)
+        self.assertEqual(frappe.db.count("Payment Entry"), before)
+
+    def test_existing_refund_blocks_internal_transfer_in_both_apis(self):
+        payment = self._create_internal_transfer()
+        transaction = self._create_bank_transaction(
+            self.source_bank_account, withdrawal=100
+        )
+        expense = frappe.db.get_value(
+            "Account",
+            {"company": TEST_COMPANY, "root_type": "Expense", "is_group": 0},
+            "name",
+        )
+        refund = frappe.get_doc(
+            {
+                "doctype": "Journal Entry",
+                "company": TEST_COMPANY,
+                "posting_date": nowdate(),
+                "accounts": [
+                    {
+                        "account": self.source_gl_account,
+                        "debit_in_account_currency": 20,
+                    },
+                    {"account": expense, "credit_in_account_currency": 20},
+                ],
+            }
+        ).insert()
+        refund.submit()
+        reconcile_vouchers(
+            transaction.name,
+            json.dumps(
+                [
+                    {
+                        "payment_doctype": "Journal Entry",
+                        "payment_name": refund.name,
+                        "amount": -20,
+                    }
+                ]
+            ),
+        )
+        transaction.reload()
+        self.assertEqual(transaction.unallocated_amount, 80)
         with self.assertRaisesRegex(
-            frappe.ValidationError, "Reconcile unpaid returns separately"
+            frappe.ValidationError, "separately from internal transfers"
         ):
             submit_match(
                 transaction.name,
@@ -573,16 +674,52 @@ class TestInternalTransferMatching(FrappeTestCase):
                     {
                         "voucher_type": "Payment Entry",
                         "voucher_name": payment.name,
-                        "amount": 40,
-                    },
-                    {
-                        "voucher_type": "Sales Invoice",
-                        "source_type": "Unpaid Sales Invoice",
-                        "voucher_name": invoice.name,
-                        "amount": 20,
-                    },
+                        "amount": 80,
+                    }
                 ],
             )
+        with self.assertRaisesRegex(
+            frappe.ValidationError, "separately from internal transfers"
+        ):
+            reconcile_vouchers(
+                transaction.name,
+                json.dumps(
+                    [
+                        {
+                            "payment_doctype": "Payment Entry",
+                            "payment_name": payment.name,
+                            "amount": 80,
+                        }
+                    ]
+                ),
+            )
         transaction.reload()
-        self.assertFalse(transaction.payment_entries)
-        self.assertEqual(frappe.db.count("Payment Entry"), before)
+        self.assertEqual(transaction.unallocated_amount, 80)
+        self.assertEqual(len(transaction.payment_entries), 1)
+        payment.reload()
+        self.assertFalse(payment.clearance_date)
+
+    def test_legacy_rejects_wrong_direction_draft_and_duplicate_selection(self):
+        payment = self._create_internal_transfer()
+        voucher = {
+            "payment_doctype": "Payment Entry",
+            "payment_name": payment.name,
+            "amount": 100,
+        }
+        wrong = self._create_bank_transaction(self.source_bank_account, deposit=100)
+        with self.assertRaisesRegex(frappe.ValidationError, "account and direction"):
+            reconcile_vouchers(wrong.name, json.dumps([voucher]))
+        source = self._create_bank_transaction(self.source_bank_account, withdrawal=200)
+        with self.assertRaisesRegex(frappe.ValidationError, "only once"):
+            reconcile_vouchers(source.name, json.dumps([voucher, voucher]))
+        draft = frappe.copy_doc(source)
+        draft.docstatus = 0
+        draft.insert()
+        self.assertEqual(draft.docstatus, 0)
+        with self.assertRaisesRegex(frappe.ValidationError, "must be submitted"):
+            reconcile_vouchers(draft.name, json.dumps([voucher]))
+        for transaction in (wrong, source, draft):
+            transaction.reload()
+            self.assertFalse(transaction.payment_entries)
+        payment.reload()
+        self.assertFalse(payment.clearance_date)

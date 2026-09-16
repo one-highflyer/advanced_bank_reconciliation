@@ -917,7 +917,23 @@ def get_linked_payments(
 		from_reference_date,
 		to_reference_date,
 	)
-	return subtract_allocations(gl_account, matching)
+	matching = subtract_allocations(gl_account, matching)
+
+	# An exact internal-transfer match must compare the amount still available
+	# on the bank leg, not the original GL amount. Other voucher types retain
+	# their established SQL exact-match behaviour.
+	if "exact_match" in (document_types or []):
+		precision = transaction.precision("unallocated_amount")
+		target_amount = flt(abs(transaction.unallocated_amount), precision)
+		matching = [
+			voucher
+			for voucher in matching
+			if len(voucher) <= 11
+			or not voucher[11]
+			or flt(abs(voucher[3]), precision) == target_amount
+		]
+
+	return matching
 
 
 def subtract_allocations(gl_account, vouchers):
@@ -1355,6 +1371,7 @@ def get_pe_matching_query(
 			"ELSE 0 END"
 		)
 		amount_comparison = amount_field
+		internal_transfer_side = "paid_to"
 	else:
 		# For withdrawals (bank transaction withdrawals), we want Pay payments where bank is paid_from
 		amount_field = (
@@ -1365,6 +1382,18 @@ def get_pe_matching_query(
 			"ELSE 0 END"
 		)
 		amount_comparison = amount_field
+		internal_transfer_side = "paid_from"
+
+	if exact_match:
+		# Existing Bank Transaction allocations are subtracted after this query.
+		# Keep directionally valid internal transfers in the result so exact-match
+		# filtering can compare their remaining bank-leg amount afterwards.
+		amount_condition = (
+			f"(({amount_comparison}) = %(amount)s OR "
+			f"(payment_type = 'Internal Transfer' AND {internal_transfer_side} = %(bank_account)s))"
+		)
+	else:
+		amount_condition = f"({amount_comparison}) != 0.0"
 	
 	filter_by_date = f"AND posting_date between '{from_date}' and '{to_date}'"
 	order_by = " posting_date"
@@ -1393,7 +1422,8 @@ def get_pe_matching_query(
 				WHEN party_type = 'Customer' THEN (SELECT customer_name FROM `tabCustomer` WHERE name = party LIMIT 1)
 				WHEN party_type = 'Supplier' THEN (SELECT supplier_name FROM `tabSupplier` WHERE name = party LIMIT 1)
 				ELSE party
-			END AS party_name
+			END AS party_name,
+			(payment_type = 'Internal Transfer') AS is_internal_transfer
 		FROM
 			`tabPayment Entry`
 		WHERE
@@ -1401,7 +1431,7 @@ def get_pe_matching_query(
 			AND payment_type IN ('Pay', 'Receive', 'Internal Transfer')
 			AND ifnull(clearance_date, '') = ""
 			AND (paid_from = %(bank_account)s OR paid_to = %(bank_account)s) 
-			AND {f'({amount_comparison}) {"= %(amount)s" if exact_match else "!= 0.0"}'}
+			AND {amount_condition}
 			{filter_by_date}
 			{filter_by_reference_no}
 		order by{order_by}
@@ -1800,6 +1830,7 @@ def create_payment_entries_bulk(bank_transaction_name, invoices, regular_voucher
 		frappe.throw(_("Bank Transaction must be submitted"))
 	if flt(bt.unallocated_amount) <= 0:
 		frappe.throw(_("Nothing to allocate. Bank Transaction is fully reconciled or has no unallocated amount."))
+	_validate_bulk_transfer_selection(bt, invoices, regular_vouchers)
 
 	validate_selection_against_unallocated_amount = frappe.get_single_value("Advance Bank Reconciliation Settings", "validate_selection_against_unallocated_amount")
 	reconcile_unpaid_invoices_in_background = frappe.get_single_value("Advance Bank Reconciliation Settings", "reconcile_unpaid_invoices_in_background")
@@ -1902,6 +1933,22 @@ def create_payment_entries_bulk(bank_transaction_name, invoices, regular_voucher
 		frappe.throw(_("Failed to start bulk reconciliation: {0}").format(str(e)))
 
 
+def _validate_bulk_transfer_selection(transaction, invoices, regular_vouchers):
+	from advanced_bank_reconciliation.advanced_bank_reconciliation.overrides.bank_transaction import (
+		validate_internal_transfer_selection,
+	)
+
+	vouchers = list(regular_vouchers or []) + [
+		{
+			"payment_doctype": row["doctype"].replace("Unpaid ", ""),
+			"payment_name": row["name"],
+			"amount": row.get("allocated_amount", 0),
+		}
+		for row in (invoices or [])
+	]
+	validate_internal_transfer_selection(transaction, vouchers)
+
+
 def process_bulk_reconciliation(bank_transaction_name, invoices, regular_vouchers, _job_id, user):
 	"""
 	Process bulk reconciliation in background with batching and progress updates.
@@ -1927,6 +1974,7 @@ def process_bulk_reconciliation(bank_transaction_name, invoices, regular_voucher
 		publish_progress(_job_id, 0, total_invoices, "Starting bulk reconciliation...")
 
 		bank_transaction = frappe.get_doc("Bank Transaction", bank_transaction_name)
+		_validate_bulk_transfer_selection(bank_transaction, invoices, regular_vouchers)
 
 		# Re-validate available unallocated amount at job start
 		if flt(bank_transaction.unallocated_amount) <= 0:

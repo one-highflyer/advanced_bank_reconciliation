@@ -7,6 +7,7 @@ import type {
 } from "@/types/bankRec";
 import { deskRoute } from "@/utils/desk";
 import { formatDate, formatMoney } from "@/utils/format";
+import { getSelectedCandidates } from "@/utils/matchSelection";
 import EmptyState from "@/components/EmptyState.vue";
 import ErrorState from "@/components/ErrorState.vue";
 import LoadingState from "@/components/LoadingState.vue";
@@ -45,7 +46,7 @@ const filteredCandidates = computed(() => {
   );
 });
 const selectedCandidates = computed(() =>
-  filteredCandidates.value.filter((candidate) => selectedKeys.value.includes(candidate.key))
+  getSelectedCandidates(props.candidates, selectedKeys.value)
 );
 
 function allocationAmount(candidate: MatchCandidate) {
