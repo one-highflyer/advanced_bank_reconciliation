@@ -27,7 +27,7 @@ def get_voucher_allocation_amount(voucher, precision):
 
 
 def validate_internal_transfer_selection(transaction, vouchers):
-    """Keep automatic bank-leg allocations separate from signed refund netting."""
+    """Validate the selection and return automatic amounts keyed by transfer name."""
     if transaction.docstatus != 1:
         frappe.throw(frappe._("Bank Transaction must be submitted"))
 
@@ -52,7 +52,7 @@ def validate_internal_transfer_selection(transaction, vouchers):
             if flt(frappe.db.get_value(doctype, name, "outstanding_amount")) < 0:
                 has_negative = True
     if not transfers:
-        return
+        return {}
     keys = [(row["payment_doctype"], row["payment_name"]) for row in vouchers]
     if len(keys) != len(set(keys)):
         frappe.throw(frappe._("Select each voucher only once."))
@@ -80,7 +80,7 @@ def validate_internal_transfer_selection(transaction, vouchers):
         if row["payment_doctype"] == "Payment Entry" and row["payment_name"] in transfer_names
     ]
     if not selected_transfers:
-        return
+        return {}
     precision = transaction.precision("allocated_amount", "payment_entries")
     remaining = flt(transaction.unallocated_amount, precision) - sum(
         flt(row.get("amount"), precision) for row in vouchers if row not in selected_transfers
@@ -88,6 +88,7 @@ def validate_internal_transfer_selection(transaction, vouchers):
     docs = [("Payment Entry", row["payment_name"]) for row in selected_transfers]
     gl_entries = get_related_bank_gl_entries(docs)
     allocations = get_total_allocated_amount(docs)
+    transfer_amounts = {}
     for row in selected_transfers:
         key = ("Payment Entry", row["payment_name"])
         available, _, _ = get_clearance_details(
@@ -98,7 +99,9 @@ def validate_internal_transfer_selection(transaction, vouchers):
         amount = flt(min(available, remaining), precision)
         if amount <= 0:
             frappe.throw(frappe._("No amount remains to allocate to the selected internal transfer."))
+        transfer_amounts[row["payment_name"]] = amount
         remaining = flt(remaining - amount, precision)
+    return transfer_amounts
 
 
 class ExtendedBankTransaction(BankTransaction):

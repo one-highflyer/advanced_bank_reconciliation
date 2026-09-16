@@ -15,6 +15,7 @@ from advanced_bank_reconciliation.api.matching import (
 
 
 MATCHING_MODULE = "advanced_bank_reconciliation.api.matching"
+ALLOCATION_MODULE = "advanced_bank_reconciliation.advanced_bank_reconciliation.overrides.bank_transaction"
 
 
 class TestMatchingInternalTransferGuards(FrappeTestCase):
@@ -56,6 +57,8 @@ class TestMatchingInternalTransferGuards(FrappeTestCase):
 			unallocated_amount=100,
 			bank_account="_Test Bank Account",
 			deposit=0,
+			docstatus=1,
+			get=lambda field, default: default,
 			precision=Mock(return_value=2),
 		)
 		transfer = frappe._dict(
@@ -86,17 +89,17 @@ class TestMatchingInternalTransferGuards(FrappeTestCase):
 		docs = {transfer.name: transfer, journal.name: journal}
 
 		with (
-			patch(f"{MATCHING_MODULE}.validate_internal_transfer_selection"),
+			patch("frappe.get_doc", side_effect=lambda _doctype, name: docs[name]),
 			patch(
 				f"{MATCHING_MODULE}.assert_voucher_access",
 				side_effect=lambda _doctype, name: docs[name],
 			),
-			patch(f"{MATCHING_MODULE}.get_related_bank_gl_entries", return_value={}),
-			patch(f"{MATCHING_MODULE}.get_total_allocated_amount", return_value={}),
+			patch(f"{ALLOCATION_MODULE}.get_related_bank_gl_entries", return_value={}) as gl_entries,
+			patch(f"{ALLOCATION_MODULE}.get_total_allocated_amount", return_value={}) as allocations,
 			patch("frappe.get_system_settings", return_value="Banker's Rounding"),
 			patch("frappe.db.get_value", return_value="Bank - _TC"),
 			patch(
-				f"{MATCHING_MODULE}.get_clearance_details",
+				f"{ALLOCATION_MODULE}.get_clearance_details",
 				return_value=(100, False, None),
 			),
 		):
@@ -104,6 +107,8 @@ class TestMatchingInternalTransferGuards(FrappeTestCase):
 
 		self.assertEqual(vouchers[1]["amount"], 20)
 		self.assertEqual(vouchers[0]["amount"], 80)
+		gl_entries.assert_called_once()
+		allocations.assert_called_once()
 		transaction.precision.assert_called_with(
 			"allocated_amount", "payment_entries"
 		)
@@ -113,6 +118,8 @@ class TestMatchingInternalTransferGuards(FrappeTestCase):
 			unallocated_amount=100,
 			bank_account="_Test Bank Account",
 			deposit=0,
+			docstatus=1,
+			get=lambda field, default: default,
 			precision=Mock(return_value=2),
 		)
 		transfer = frappe._dict(
@@ -132,17 +139,17 @@ class TestMatchingInternalTransferGuards(FrappeTestCase):
 		]
 
 		with (
-			patch(f"{MATCHING_MODULE}.validate_internal_transfer_selection"),
+			patch("frappe.get_doc", return_value=transfer),
 			patch(
 				f"{MATCHING_MODULE}.assert_voucher_access",
 				return_value=transfer,
 			),
-			patch(f"{MATCHING_MODULE}.get_related_bank_gl_entries", return_value={}),
-			patch(f"{MATCHING_MODULE}.get_total_allocated_amount", return_value={}),
+			patch(f"{ALLOCATION_MODULE}.get_related_bank_gl_entries", return_value={}),
+			patch(f"{ALLOCATION_MODULE}.get_total_allocated_amount", return_value={}),
 			patch("frappe.get_system_settings", return_value="Banker's Rounding"),
 			patch("frappe.db.get_value", return_value="Bank - _TC"),
 			patch(
-				f"{MATCHING_MODULE}.get_clearance_details",
+				f"{ALLOCATION_MODULE}.get_clearance_details",
 				return_value=(0.004, False, None),
 			),
 			self.assertRaisesRegex(

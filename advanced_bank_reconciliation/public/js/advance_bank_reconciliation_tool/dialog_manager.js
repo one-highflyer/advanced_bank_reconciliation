@@ -251,30 +251,6 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		const bt_unallocated = Math.abs(flt(this.bank_transaction.unallocated_amount || 0));
 		const has_internal_transfer = selected_rows.some((row) => this.is_internal_transfer(row));
 
-		// Keep the established signed allocation behaviour unchanged when no
-		// internal transfer is selected.
-		if (!has_internal_transfer) {
-			let bt_remaining = bt_unallocated;
-			let total = 0;
-			const effective = [];
-			for (const row of selected_rows) {
-				const raw = flt(row[3]);
-				const sign = raw < 0 ? -1 : 1;
-				const magnitude = Math.min(Math.abs(raw), bt_remaining);
-				const allocation = sign * magnitude;
-				bt_remaining = Math.max(0, bt_remaining - magnitude);
-				effective.push(allocation);
-				total += allocation;
-			}
-			return {
-				effective,
-				total,
-				has_internal_transfer,
-				has_negative_ordinary: false,
-				zero_effective_rows: [],
-			};
-		}
-
 		let bt_remaining = bt_unallocated;
 		let total = 0;
 		const effective = selected_rows.map(() => 0);
@@ -288,7 +264,9 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			}
 		});
 
-		const allocate_row = (index) => {
+		// Preserve the original order within each group and reserve ordinary
+		// selections first. Without transfers this is the original row order.
+		for (const index of [...ordinary_indexes, ...transfer_indexes]) {
 			const raw = flt(selected_rows[index][3]);
 			const sign = raw < 0 ? -1 : 1;
 			const magnitude = Math.min(Math.abs(raw), bt_remaining);
@@ -296,27 +274,16 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			bt_remaining = Math.max(0, bt_remaining - magnitude);
 			effective[index] = allocation;
 			total += allocation;
-			return allocation;
-		};
-
-		// Internal transfer amounts are assigned by ERPNext from their bank GL
-		// leg. Reserve every ordinary selection first so display ordering cannot
-		// cause a checked ordinary voucher to disappear from the request.
-		for (const index of ordinary_indexes) {
-			allocate_row(index);
 		}
-		for (const index of transfer_indexes) {
-			allocate_row(index);
-		}
-		const zero_effective_rows = selected_rows.filter(
+		const zero_effective_rows = has_internal_transfer ? selected_rows.filter(
 			(row, index) => flt(row[3]) && !effective[index]
-		);
+		) : [];
 
 		return {
 			effective,
 			total,
 			has_internal_transfer,
-			has_negative_ordinary: ordinary_indexes.some(
+			has_negative_ordinary: has_internal_transfer && ordinary_indexes.some(
 				(index) => flt(selected_rows[index][3]) < 0,
 			),
 			zero_effective_rows,

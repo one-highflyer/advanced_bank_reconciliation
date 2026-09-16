@@ -3,11 +3,6 @@ import json
 import frappe
 from frappe import _
 from frappe.utils import add_days, flt, getdate
-from erpnext.accounts.doctype.bank_transaction.bank_transaction import (
-	get_clearance_details,
-	get_related_bank_gl_entries,
-	get_total_allocated_amount,
-)
 
 from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool import (
 	create_payment_entries_for_invoices,
@@ -250,60 +245,21 @@ def _prepare_reconciliation_vouchers(transaction, vouchers):
 
 
 def _resolve_internal_transfer_amounts(transaction, vouchers):
-	"""Reserve ordinary allocations, then allocate each transfer's remaining bank leg."""
-	validate_internal_transfer_selection(transaction, vouchers)
-
-	transfers = []
+	"""Apply shared transfer amounts after checking access to every selected voucher."""
 	for row in vouchers:
-		doc = assert_voucher_access(row["payment_doctype"], row["payment_name"])
-		if doc.doctype == "Payment Entry" and doc.payment_type == "Internal Transfer":
-			transfers.append((row, doc))
-	if not transfers:
+		assert_voucher_access(row["payment_doctype"], row["payment_name"])
+	transfer_amounts = validate_internal_transfer_selection(transaction, vouchers)
+	if not transfer_amounts:
 		return
 
-	transfer_names = {doc.name for _, doc in transfers}
 	allocation_precision = transaction.precision("allocated_amount", "payment_entries")
-	ordinary_vouchers = [
-		row
-		for row in vouchers
-		if not (
-			row["payment_doctype"] == "Payment Entry"
-			and row["payment_name"] in transfer_names
-		)
-	]
-	for row in ordinary_vouchers:
-		row["amount"] = flt(row["amount"], allocation_precision)
+	for row in vouchers:
+		if row["payment_doctype"] == "Payment Entry" and row["payment_name"] in transfer_amounts:
+			row["amount"] = transfer_amounts[row["payment_name"]]
+		else:
+			row["amount"] = flt(row["amount"], allocation_precision)
 		if row["amount"] <= 0:
 			frappe.throw(_("Each selected match must include a positive amount at the allocation precision."))
-
-	remaining = flt(
-		flt(transaction.unallocated_amount, allocation_precision)
-		- sum(row["amount"] for row in ordinary_vouchers),
-		allocation_precision,
-	)
-	if remaining <= 0:
-		frappe.throw(_("No bank transaction amount remains for the selected internal transfer."))
-
-	docs = [("Payment Entry", doc.name) for _, doc in transfers]
-	gl_entries = get_related_bank_gl_entries(docs)
-	allocations = get_total_allocated_amount(docs)
-	bank_account = frappe.db.get_value("Bank Account", transaction.bank_account, "account")
-	bank_side = "paid_to" if transaction.deposit > 0 else "paid_from"
-	for row, doc in transfers:
-		if doc.docstatus != 1 or doc.get(bank_side) != bank_account:
-			frappe.throw(_("The internal transfer does not match this bank transaction's account and direction."))
-		key = ("Payment Entry", doc.name)
-		available, _should_clear, _clearance_date = get_clearance_details(
-			transaction,
-			frappe._dict(payment_document="Payment Entry", payment_entry=doc.name),
-			dict(allocations.get(key, {})),
-			dict(gl_entries.get(key, {})),
-			bank_account,
-		)
-		row["amount"] = flt(min(available, remaining), allocation_precision)
-		if row["amount"] <= 0:
-			frappe.throw(_("No amount remains to allocate to the selected internal transfer."))
-		remaining = flt(remaining - row["amount"], allocation_precision)
 
 
 def _linked_payment_dto(transaction):

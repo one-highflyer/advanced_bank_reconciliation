@@ -44,6 +44,17 @@ test("signed allocation behavior is unchanged without a transfer", () => {
   assert.equal(result.has_negative_ordinary, false);
 });
 
+test("ordinary-only selections retain their original order and cap", () => {
+  const result = allocate([
+    [1, "Journal Entry", "JE-FIRST", 80],
+    [1, "Journal Entry", "JE-SECOND", 40],
+    ordinary,
+  ]);
+  assert.deepEqual([...result.effective], [80, 20, 0]);
+  assert.equal(result.total, 100);
+  assert.equal(result.zero_effective_rows.length, 0);
+});
+
 test("a selected row with no effective transfer allocation is reported", () => {
   const result = allocate([
     [1, "Journal Entry", "JE-FULL", 100],
