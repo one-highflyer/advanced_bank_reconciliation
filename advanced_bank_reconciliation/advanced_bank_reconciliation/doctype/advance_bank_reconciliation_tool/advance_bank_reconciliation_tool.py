@@ -1063,7 +1063,17 @@ def get_matching_queries(
 	filter_by_reference_date,
 	from_reference_date,
 	to_reference_date,
+	common_filters=None,
 ):
+	# ERPNext also calls this hook from its standard Bank Reconciliation Tool.
+	# Core already supplies its Payment Entry, Journal Entry, invoice, and Bank
+	# Transaction queries there. Returning this tool's SQL strings would both
+	# duplicate those candidates and break the core query-builder execution path.
+	# The advanced tool calls this method without common_filters and still gets
+	# its full matcher.
+	if common_filters is not None:
+		return []
+
 	queries = []
 	if "payment_entry" in document_types:
 		query = get_pe_matching_query(
@@ -1340,6 +1350,7 @@ def get_pe_matching_query(
 		amount_field = (
 			"CASE "
 			"WHEN payment_type = 'Receive' AND paid_to = %(bank_account)s THEN received_amount "
+			"WHEN payment_type = 'Internal Transfer' AND paid_to = %(bank_account)s THEN received_amount "
 			"WHEN payment_type = 'Pay' AND paid_from = %(bank_account)s THEN -paid_amount "
 			"ELSE 0 END"
 		)
@@ -1349,6 +1360,7 @@ def get_pe_matching_query(
 		amount_field = (
 			"CASE "
 			"WHEN payment_type = 'Pay' AND paid_from = %(bank_account)s THEN paid_amount "
+			"WHEN payment_type = 'Internal Transfer' AND paid_from = %(bank_account)s THEN paid_amount "
 			"WHEN payment_type = 'Receive' AND paid_to = %(bank_account)s THEN -received_amount "
 			"ELSE 0 END"
 		)

@@ -1,0 +1,403 @@
+# Copyright (c) 2026, HighFlyer and contributors
+# For license information, please see license.txt
+
+import json
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import frappe
+from frappe.tests.utils import FrappeTestCase
+from frappe.utils import add_days, flt, nowdate
+from erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool import (
+    get_queries as get_standard_matching_queries,
+)
+
+from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool import (
+    get_linked_payments,
+    get_matching_queries,
+    reconcile_vouchers,
+)
+from advanced_bank_reconciliation.advanced_bank_reconciliation.overrides.bank_transaction import (
+    get_voucher_allocation_amount,
+)
+
+from .fixtures import (
+    TEST_BANK,
+    TEST_COMPANY,
+    ensure_erpnext_test_company,
+    ensure_fiscal_year_for_company,
+)
+
+
+MATCHING_MODULE = (
+    "advanced_bank_reconciliation.advanced_bank_reconciliation.doctype."
+    "advance_bank_reconciliation_tool.advance_bank_reconciliation_tool"
+)
+
+
+class TestInternalTransferMatching(FrappeTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        ensure_erpnext_test_company()
+        ensure_fiscal_year_for_company(TEST_COMPANY)
+        if not frappe.db.exists("Bank", TEST_BANK):
+            frappe.get_doc({"doctype": "Bank", "bank_name": TEST_BANK}).insert(
+                ignore_permissions=True
+            )
+        cls.company_currency = frappe.db.get_value(
+            "Company", TEST_COMPANY, "default_currency"
+        )
+        cls.foreign_currency = "USD" if cls.company_currency != "USD" else "EUR"
+        cls.source_bank_account, cls.source_gl_account = cls._ensure_bank_account(
+            "Transfer Source", cls.company_currency
+        )
+        cls.target_bank_account, cls.target_gl_account = cls._ensure_bank_account(
+            "Transfer Target", cls.foreign_currency
+        )
+        cls.same_currency_bank_account, cls.same_currency_gl_account = (
+            cls._ensure_bank_account("Transfer Same Currency", cls.company_currency)
+        )
+        frappe.db.commit()
+
+    @classmethod
+    def _ensure_bank_account(cls, suffix, currency):
+        abbr = frappe.db.get_value("Company", TEST_COMPANY, "abbr")
+        account_name = f"_ABR {suffix}"
+        gl_account = f"{account_name} - {abbr}"
+
+        if not frappe.db.exists("Account", gl_account):
+            parent_account = frappe.db.get_value(
+                "Account",
+                {
+                    "company": TEST_COMPANY,
+                    "root_type": "Asset",
+                    "is_group": 1,
+                },
+                "name",
+            )
+            frappe.get_doc(
+                {
+                    "doctype": "Account",
+                    "account_name": account_name,
+                    "parent_account": parent_account,
+                    "company": TEST_COMPANY,
+                    "account_type": "Bank",
+                    "account_currency": currency,
+                    "is_group": 0,
+                }
+            ).insert(ignore_permissions=True)
+
+        bank_account_name = f"_ABR {suffix} - {TEST_BANK}"
+        if not frappe.db.exists("Bank Account", bank_account_name):
+            bank_account = frappe.get_doc(
+                {
+                    "doctype": "Bank Account",
+                    "account_name": f"_ABR {suffix}",
+                    "bank": TEST_BANK,
+                    "account": gl_account,
+                    "is_company_account": 1,
+                    "company": TEST_COMPANY,
+                }
+            ).insert(ignore_permissions=True)
+            bank_account_name = bank_account.name
+
+        return bank_account_name, gl_account
+
+    def _create_internal_transfer(
+        self, paid_amount=100, received_amount=90, target_gl_account=None
+    ):
+        payment_entry = frappe.get_doc(
+            {
+                "doctype": "Payment Entry",
+                "payment_type": "Internal Transfer",
+                "company": TEST_COMPANY,
+                "posting_date": nowdate(),
+                "paid_from": self.source_gl_account,
+                "paid_to": target_gl_account or self.target_gl_account,
+                "paid_amount": paid_amount,
+                "received_amount": received_amount,
+                "source_exchange_rate": 1,
+                "target_exchange_rate": paid_amount / received_amount,
+                "reference_no": "_ABR-INTERNAL-TRANSFER",
+                "reference_date": nowdate(),
+            }
+        )
+        payment_entry.insert(ignore_permissions=True)
+        payment_entry.submit()
+        return payment_entry
+
+    def _create_bank_transaction(self, bank_account, *, deposit=0, withdrawal=0):
+        currency = frappe.db.get_value(
+            "Account",
+            frappe.db.get_value("Bank Account", bank_account, "account"),
+            "account_currency",
+        )
+        bank_transaction = frappe.get_doc(
+            {
+                "doctype": "Bank Transaction",
+                "date": nowdate(),
+                "bank_account": bank_account,
+                "deposit": deposit,
+                "withdrawal": withdrawal,
+                "currency": currency,
+                "reference_number": "_ABR-INTERNAL-TRANSFER",
+                "description": "_ABR Internal transfer test",
+            }
+        )
+        bank_transaction.insert(ignore_permissions=True)
+        bank_transaction.submit()
+        return bank_transaction
+
+    def _get_payment_entry_candidate(
+        self, bank_transaction, payment_entry_name, exact_match=0
+    ):
+        document_types = ["payment_entry"]
+        if exact_match:
+            document_types.append("exact_match")
+
+        matches = get_linked_payments(
+            bank_transaction.name,
+            document_types,
+            add_days(nowdate(), -1),
+            add_days(nowdate(), 1),
+            0,
+            None,
+            None,
+        )
+        return next(row for row in matches if row[2] == payment_entry_name)
+
+    def test_standard_hook_does_not_repeat_core_queries(self):
+        transaction = SimpleNamespace(deposit=100, withdrawal=0)
+        common_filters = frappe._dict(bank_account=self.source_gl_account)
+
+        with (
+            patch(
+                f"{MATCHING_MODULE}.get_pe_matching_query", return_value="payment query"
+            ) as payment_query,
+            patch(
+                f"{MATCHING_MODULE}.get_je_matching_query", return_value="journal query"
+            ) as journal_query,
+        ):
+            queries = get_matching_queries(
+                self.source_gl_account,
+                TEST_COMPANY,
+                transaction,
+                ["payment_entry", "journal_entry"],
+                False,
+                "paid_to",
+                nowdate(),
+                nowdate(),
+                False,
+                None,
+                None,
+                common_filters,
+            )
+
+            self.assertEqual(queries, [])
+            payment_query.assert_not_called()
+            journal_query.assert_not_called()
+
+        standard_transaction = frappe._dict(
+            deposit=100,
+            withdrawal=0,
+            unallocated_amount=100,
+            reference_number="_ABR-STANDARD-HOOK",
+            party_type=None,
+            party=None,
+        )
+        standard_queries = get_standard_matching_queries(
+            self.source_gl_account,
+            TEST_COMPANY,
+            standard_transaction,
+            ["payment_entry", "journal_entry"],
+            nowdate(),
+            nowdate(),
+            False,
+            None,
+            None,
+            False,
+            common_filters,
+        )
+
+        self.assertEqual(len(standard_queries), 2)
+
+    def test_advanced_matcher_keeps_payment_and_journal_queries(self):
+        transaction = SimpleNamespace(deposit=100, withdrawal=0)
+
+        with (
+            patch(
+                f"{MATCHING_MODULE}.get_pe_matching_query", return_value="payment query"
+            ),
+            patch(
+                f"{MATCHING_MODULE}.get_je_matching_query", return_value="journal query"
+            ),
+        ):
+            queries = get_matching_queries(
+                self.source_gl_account,
+                TEST_COMPANY,
+                transaction,
+                ["payment_entry", "journal_entry"],
+                False,
+                "paid_to",
+                nowdate(),
+                nowdate(),
+                False,
+                None,
+                None,
+            )
+
+            self.assertEqual(queries, ["payment query", "journal query"])
+
+    def test_non_transfer_payment_keeps_supplied_signed_amount(self):
+        for payment_type, supplied_amount in (("Pay", -30.0), ("Receive", 30.0)):
+            with self.subTest(payment_type=payment_type):
+                voucher = {
+                    "payment_doctype": "Payment Entry",
+                    "payment_name": "_ABR-NORMAL-PAYMENT",
+                    "amount": supplied_amount,
+                }
+
+                with patch("frappe.db.get_value", return_value=payment_type):
+                    amount = get_voucher_allocation_amount(voucher, 2)
+
+                self.assertEqual(amount, supplied_amount)
+
+    def test_cross_currency_transfer_matches_each_bank_side(self):
+        payment_entry = self._create_internal_transfer()
+        source_transaction = self._create_bank_transaction(
+            self.source_bank_account, withdrawal=100
+        )
+        target_transaction = self._create_bank_transaction(
+            self.target_bank_account, deposit=90
+        )
+
+        source_candidate = self._get_payment_entry_candidate(
+            source_transaction, payment_entry.name, exact_match=1
+        )
+        target_candidate = self._get_payment_entry_candidate(
+            target_transaction, payment_entry.name, exact_match=1
+        )
+
+        self.assertAlmostEqual(flt(source_candidate[3]), 100, places=2)
+        self.assertEqual(source_candidate[9], self.company_currency)
+        self.assertAlmostEqual(flt(target_candidate[3]), 90, places=2)
+        self.assertEqual(target_candidate[9], self.foreign_currency)
+
+    def test_same_currency_transfer_matches_each_bank_side(self):
+        payment_entry = self._create_internal_transfer(
+            paid_amount=75,
+            received_amount=75,
+            target_gl_account=self.same_currency_gl_account,
+        )
+        source_transaction = self._create_bank_transaction(
+            self.source_bank_account, withdrawal=75
+        )
+        target_transaction = self._create_bank_transaction(
+            self.same_currency_bank_account, deposit=75
+        )
+
+        source_candidate = self._get_payment_entry_candidate(
+            source_transaction, payment_entry.name
+        )
+        target_candidate = self._get_payment_entry_candidate(
+            target_transaction, payment_entry.name
+        )
+
+        self.assertAlmostEqual(flt(source_candidate[3]), 75, places=2)
+        self.assertEqual(source_candidate[9], self.company_currency)
+        self.assertAlmostEqual(flt(target_candidate[3]), 75, places=2)
+        self.assertEqual(target_candidate[9], self.company_currency)
+
+        reconcile_vouchers(
+            target_transaction.name,
+            json.dumps(
+                [
+                    {
+                        "payment_doctype": "Payment Entry",
+                        "payment_name": payment_entry.name,
+                        "amount": 999,
+                    }
+                ]
+            ),
+        )
+        target_transaction.reload()
+        payment_entry.reload()
+        self.assertAlmostEqual(
+            flt(target_transaction.payment_entries[0].allocated_amount), 75, places=2
+        )
+        self.assertAlmostEqual(flt(target_transaction.unallocated_amount), 0, places=2)
+        self.assertFalse(payment_entry.clearance_date)
+
+        reconcile_vouchers(
+            source_transaction.name,
+            json.dumps(
+                [
+                    {
+                        "payment_doctype": "Payment Entry",
+                        "payment_name": payment_entry.name,
+                        "amount": 999,
+                    }
+                ]
+            ),
+        )
+        source_transaction.reload()
+        payment_entry.reload()
+        self.assertAlmostEqual(
+            flt(source_transaction.payment_entries[0].allocated_amount), 75, places=2
+        )
+        self.assertAlmostEqual(flt(source_transaction.unallocated_amount), 0, places=2)
+        self.assertEqual(payment_entry.clearance_date, source_transaction.date)
+
+    def test_reconciliation_uses_ledger_amount_and_clears_after_both_sides(self):
+        payment_entry = self._create_internal_transfer()
+        source_transaction = self._create_bank_transaction(
+            self.source_bank_account, withdrawal=100
+        )
+        target_transaction = self._create_bank_transaction(
+            self.target_bank_account, deposit=90
+        )
+
+        reconcile_vouchers(
+            source_transaction.name,
+            json.dumps(
+                [
+                    {
+                        "payment_doctype": "Payment Entry",
+                        "payment_name": payment_entry.name,
+                        "amount": 999,
+                    }
+                ]
+            ),
+        )
+        source_transaction.reload()
+        payment_entry.reload()
+
+        self.assertAlmostEqual(
+            flt(source_transaction.payment_entries[0].allocated_amount), 100, places=2
+        )
+        self.assertAlmostEqual(flt(source_transaction.unallocated_amount), 0, places=2)
+        self.assertGreaterEqual(flt(source_transaction.unallocated_amount), 0)
+        self.assertFalse(payment_entry.clearance_date)
+
+        reconcile_vouchers(
+            target_transaction.name,
+            json.dumps(
+                [
+                    {
+                        "payment_doctype": "Payment Entry",
+                        "payment_name": payment_entry.name,
+                        "amount": 999,
+                    }
+                ]
+            ),
+        )
+        target_transaction.reload()
+        payment_entry.reload()
+
+        self.assertAlmostEqual(
+            flt(target_transaction.payment_entries[0].allocated_amount), 90, places=2
+        )
+        self.assertAlmostEqual(flt(target_transaction.unallocated_amount), 0, places=2)
+        self.assertGreaterEqual(flt(target_transaction.unallocated_amount), 0)
+        self.assertEqual(payment_entry.clearance_date, target_transaction.date)

@@ -9,6 +9,18 @@ from advanced_bank_reconciliation.utils.logger import (
 from erpnext.accounts.doctype.bank_transaction.bank_transaction import BankTransaction
 
 
+def get_voucher_allocation_amount(voucher, precision):
+    """Use ERPNext allocation only for internal transfers with two bank legs."""
+    if voucher["payment_doctype"] == "Payment Entry":
+        payment_type = frappe.db.get_value(
+            "Payment Entry", voucher["payment_name"], "payment_type"
+        )
+        if payment_type == "Internal Transfer":
+            return 0.0
+
+    return flt(voucher["amount"], precision)
+
+
 class ExtendedBankTransaction(BankTransaction):
     def before_update_after_submit(self):
         super().before_update_after_submit()
@@ -289,10 +301,16 @@ class ExtendedBankTransaction(BankTransaction):
                 logger.info(
                     "Voucher: %s being added to bank transaction %s", voucher, self.name
                 )
+                # An internal transfer has two bank legs, so its amount must come
+                # from the GL entry for this Bank Transaction's account. Keep the
+                # supplied amount for other vouchers because ABR supports signed
+                # refund and mixed allocations.
                 pe = {
                     "payment_document": voucher["payment_doctype"],
                     "payment_entry": voucher["payment_name"],
-                    "allocated_amount": flt(voucher["amount"], allocated_precision),
+                    "allocated_amount": get_voucher_allocation_amount(
+                        voucher, allocated_precision
+                    ),
                 }
                 self.append("payment_entries", pe)
                 added = True
