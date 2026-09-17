@@ -360,7 +360,7 @@ bench --site your-site run-tests --app advanced_bank_reconciliation --module tes
 ## Requirements
 
 - **Frappe Framework**: >= v15.0.0
-- **ERPNext**: >= v15.0.0
+- **ERPNext**: >= v15.56.0 (required bank allocation APIs)
 - **Python**: >= 3.10
 - **Redis**: For background jobs and WebSocket
 - **SocketIO**: For real-time progress updates

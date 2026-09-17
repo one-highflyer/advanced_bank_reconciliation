@@ -9,6 +9,9 @@ from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_b
 	get_linked_payments,
 	reconcile_vouchers,
 )
+from advanced_bank_reconciliation.advanced_bank_reconciliation.overrides.bank_transaction import (
+	validate_internal_transfer_selection,
+)
 from advanced_bank_reconciliation.api.bank_rec import _transaction_to_dto
 from advanced_bank_reconciliation.api.permission import (
 	assert_party_access,
@@ -129,6 +132,7 @@ def _normalise_vouchers(vouchers):
 		frappe.throw(_("Select at least one match before reconciling."))
 
 	normalised = []
+	seen_keys = set()
 	for row in vouchers:
 		voucher_type = row.get("voucher_type") or row.get("payment_doctype")
 		source_type = row.get("source_type") or voucher_type
@@ -145,6 +149,11 @@ def _normalise_vouchers(vouchers):
 			and UNPAID_INVOICE_SOURCE_TYPES[source_type] != voucher_type
 		):
 			frappe.throw(_("The selected invoice type does not match its source type."))
+
+		voucher_key = (voucher_type, voucher_name)
+		if voucher_key in seen_keys:
+			frappe.throw(_("The same voucher cannot be selected more than once."))
+		seen_keys.add(voucher_key)
 
 		normalised.append(
 			{
@@ -235,6 +244,24 @@ def _prepare_reconciliation_vouchers(transaction, vouchers):
 	return regular_vouchers
 
 
+def _resolve_internal_transfer_amounts(transaction, vouchers):
+	"""Apply shared transfer amounts after checking access to every selected voucher."""
+	for row in vouchers:
+		assert_voucher_access(row["payment_doctype"], row["payment_name"])
+	transfer_amounts = validate_internal_transfer_selection(transaction, vouchers)
+	if not transfer_amounts:
+		return
+
+	allocation_precision = transaction.precision("allocated_amount", "payment_entries")
+	for row in vouchers:
+		if row["payment_doctype"] == "Payment Entry" and row["payment_name"] in transfer_amounts:
+			row["amount"] = transfer_amounts[row["payment_name"]]
+		else:
+			row["amount"] = flt(row["amount"], allocation_precision)
+		if row["amount"] <= 0:
+			frappe.throw(_("Each selected match must include a positive amount at the allocation precision."))
+
+
 def _linked_payment_dto(transaction):
 	return [
 		{
@@ -279,10 +306,22 @@ def get_match_candidates(
 		from_reference_date=from_reference_date,
 		to_reference_date=to_reference_date,
 	)
+	payment_names = [row[2] for row in rows if row[1] == "Payment Entry"]
+	internal_transfers = set(frappe.get_all(
+		"Payment Entry",
+		filters={"name": ["in", payment_names], "payment_type": "Internal Transfer"},
+		pluck="name",
+	)) if payment_names else set()
+	candidates = [_candidate_to_dto(row, transaction) for row in rows]
+	for candidate in candidates:
+		candidate["is_internal_transfer"] = (
+			candidate["voucher_type"] == "Payment Entry"
+			and candidate["voucher_name"] in internal_transfers
+		)
 
 	return {
 		"transaction": _transaction_to_dto(transaction.as_dict(), status=transaction.status),
-		"candidates": [_candidate_to_dto(row, transaction) for row in rows],
+		"candidates": candidates,
 		"filters": {
 			"document_types": document_types,
 			"from_date": from_date,
@@ -303,8 +342,12 @@ def submit_match(bank_transaction_name, vouchers):
 def _submit_match(bank_transaction_name, vouchers):
 	require_bank_rec_permission()
 	transaction = assert_bank_transaction_access(bank_transaction_name, ptype="write")
+	if transaction.docstatus != 1:
+		frappe.throw(_("Only submitted bank transactions can be reconciled."))
 	_lock_bank_transaction(transaction.name)
 	transaction.reload()
+	if transaction.docstatus != 1:
+		frappe.throw(_("Only submitted bank transactions can be reconciled."))
 
 	if transaction.status == "Reconciled" or flt(transaction.unallocated_amount) <= 0:
 		requested_vouchers = _normalise_vouchers(vouchers)
@@ -330,6 +373,7 @@ def _submit_match(bank_transaction_name, vouchers):
 	if existing_keys.intersection(requested_keys):
 		frappe.throw(_("One or more selected vouchers are already linked to this bank transaction."))
 
+	_resolve_internal_transfer_amounts(transaction, normalised_vouchers)
 	total = sum(abs(flt(row["amount"])) for row in normalised_vouchers)
 	if total - abs(flt(transaction.unallocated_amount)) > 0.01:
 		frappe.throw(_("Selected amount exceeds the unallocated bank transaction amount."))

@@ -113,6 +113,7 @@ export type TransactionStatusFilter = "unreconciled" | "reconciled" | "all";
 export type MatchConfidence = "high" | "medium" | "low";
 
 export interface MatchCandidate {
+  is_internal_transfer?: boolean;
   rank: number;
   voucher_type: string;
   source_type: string;

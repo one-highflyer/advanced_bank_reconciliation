@@ -6,10 +6,130 @@ from frappe.utils import flt
 from advanced_bank_reconciliation.utils.logger import (
     get_logger,
 )
-from erpnext.accounts.doctype.bank_transaction.bank_transaction import BankTransaction
+from erpnext.accounts.doctype.bank_transaction.bank_transaction import (
+    BankTransaction,
+    get_clearance_details,
+    get_related_bank_gl_entries,
+    get_total_allocated_amount,
+)
+
+
+def get_voucher_allocation_amount(voucher, precision):
+    """Use ERPNext allocation only for internal transfers with two bank legs."""
+    if voucher["payment_doctype"] == "Payment Entry":
+        payment_type = frappe.db.get_value(
+            "Payment Entry", voucher["payment_name"], "payment_type"
+        )
+        if payment_type == "Internal Transfer":
+            return 0.0
+
+    return flt(voucher["amount"], precision)
+
+
+def validate_internal_transfer_selection(transaction, vouchers):
+    """Validate the selection and return automatic amounts keyed by transfer name."""
+    if transaction.docstatus != 1:
+        frappe.throw(frappe._("Bank Transaction must be submitted"))
+
+    existing = [
+        {
+            "payment_doctype": row.payment_document,
+            "payment_name": row.payment_entry,
+            "amount": row.allocated_amount,
+        }
+        for row in transaction.get("payment_entries", [])
+    ]
+    rows = existing + list(vouchers)
+    transfers = []
+    has_negative = any(flt(row.get("amount")) < 0 for row in rows)
+    for row in rows:
+        doctype, name = row["payment_doctype"], row["payment_name"]
+        if doctype == "Payment Entry":
+            payment = frappe.get_doc(doctype, name)
+            if payment.payment_type == "Internal Transfer":
+                transfers.append(payment)
+        elif doctype in ("Sales Invoice", "Purchase Invoice"):
+            if flt(frappe.db.get_value(doctype, name, "outstanding_amount")) < 0:
+                has_negative = True
+    if not transfers:
+        return {}
+    keys = [(row["payment_doctype"], row["payment_name"]) for row in vouchers]
+    if len(keys) != len(set(keys)):
+        frappe.throw(frappe._("Select each voucher only once."))
+    if has_negative:
+        frappe.throw(
+            frappe._(
+                "Reconcile refunds and negative allocations separately from internal transfers."
+            )
+        )
+    bank_account = frappe.db.get_value(
+        "Bank Account", transaction.bank_account, "account"
+    )
+    bank_side = "paid_to" if flt(transaction.deposit) > 0 else "paid_from"
+    for payment in transfers:
+        if payment.docstatus != 1 or payment.get(bank_side) != bank_account:
+            frappe.throw(
+                frappe._(
+                    "The internal transfer does not match this bank transaction's account and direction."
+                )
+            )
+
+    transfer_names = {payment.name for payment in transfers}
+    selected_transfers = [
+        row for row in vouchers
+        if row["payment_doctype"] == "Payment Entry" and row["payment_name"] in transfer_names
+    ]
+    if not selected_transfers:
+        return {}
+    precision = transaction.precision("allocated_amount", "payment_entries")
+    remaining = flt(transaction.unallocated_amount, precision) - sum(
+        flt(row.get("amount"), precision) for row in vouchers if row not in selected_transfers
+    )
+    docs = [("Payment Entry", row["payment_name"]) for row in selected_transfers]
+    gl_entries = get_related_bank_gl_entries(docs)
+    allocations = get_total_allocated_amount(docs)
+    transfer_amounts = {}
+    for row in selected_transfers:
+        key = ("Payment Entry", row["payment_name"])
+        available, _, _ = get_clearance_details(
+            transaction,
+            frappe._dict(payment_document="Payment Entry", payment_entry=row["payment_name"]),
+            dict(allocations.get(key, {})), dict(gl_entries.get(key, {})), bank_account,
+        )
+        amount = flt(min(available, remaining), precision)
+        if amount <= 0:
+            frappe.throw(frappe._("No amount remains to allocate to the selected internal transfer."))
+        transfer_amounts[row["payment_name"]] = amount
+        remaining = flt(remaining - amount, precision)
+    return transfer_amounts
 
 
 class ExtendedBankTransaction(BankTransaction):
+    @frappe.whitelist()
+    def remove_payment_entries(self):
+        # Removal mutates the child table. Iterate a copy to unlink every row.
+        for payment_entry in list(self.payment_entries):
+            self.remove_payment_entry(payment_entry)
+        self.save()
+
+    def clear_linked_payment_entry(self, payment_entry, clearance_date=None):
+        if (
+            clearance_date
+            and payment_entry.payment_document == "Payment Entry"
+            and frappe.db.get_value(
+                "Payment Entry", payment_entry.payment_entry, "payment_type"
+            )
+            == "Internal Transfer"
+        ):
+            from advanced_bank_reconciliation.utils.internal_transfer import (
+                get_internal_transfer_clearance_date,
+            )
+
+            clearance_date = get_internal_transfer_clearance_date(
+                payment_entry.payment_entry, current_date=clearance_date
+            )
+        super().clear_linked_payment_entry(payment_entry, clearance_date)
+
     def before_update_after_submit(self):
         super().before_update_after_submit()
         # Fetch the current state of the document from the database
@@ -258,6 +378,7 @@ class ExtendedBankTransaction(BankTransaction):
     def add_payment_entries(self, vouchers):
         "Add the vouchers with zero allocation. Save() will perform the allocations and clearance"
         logger = get_logger()
+        validate_internal_transfer_selection(self, vouchers)
 
         if 0.0 >= self.unallocated_amount:
             frappe.throw(
@@ -289,10 +410,16 @@ class ExtendedBankTransaction(BankTransaction):
                 logger.info(
                     "Voucher: %s being added to bank transaction %s", voucher, self.name
                 )
+                # An internal transfer has two bank legs, so its amount must come
+                # from the GL entry for this Bank Transaction's account. Keep the
+                # supplied amount for other vouchers because ABR supports signed
+                # refund and mixed allocations.
                 pe = {
                     "payment_document": voucher["payment_doctype"],
                     "payment_entry": voucher["payment_name"],
-                    "allocated_amount": flt(voucher["amount"], allocated_precision),
+                    "allocated_amount": get_voucher_allocation_amount(
+                        voucher, allocated_precision
+                    ),
                 }
                 self.append("payment_entries", pe)
                 added = True

@@ -235,26 +235,59 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		this.dialog.show();
 	}
 
+	is_internal_transfer(row) {
+		if (!row || row[1] !== "Payment Entry") return false;
+		const marker = row[11];
+		return marker === true || marker === 1 || marker === "1";
+	}
+
 	compute_effective_allocations(rows) {
 		// Cap each row's allocation at the bank transaction's remaining
 		// unallocated amount (sign preserved), carrying the cap across rows
 		// so later selections only see what is left. Returns the per-row
 		// effective allocations plus the total so preview and submission
 		// use identical numbers.
+		const selected_rows = rows || [];
 		const bt_unallocated = Math.abs(flt(this.bank_transaction.unallocated_amount || 0));
+		const has_internal_transfer = selected_rows.some((row) => this.is_internal_transfer(row));
+
 		let bt_remaining = bt_unallocated;
 		let total = 0;
-		const effective = [];
-		for (const x of rows || []) {
-			const raw = flt(x[3]);
+		const effective = selected_rows.map(() => 0);
+		const ordinary_indexes = [];
+		const transfer_indexes = [];
+		selected_rows.forEach((row, index) => {
+			if (this.is_internal_transfer(row)) {
+				transfer_indexes.push(index);
+			} else {
+				ordinary_indexes.push(index);
+			}
+		});
+
+		// Preserve the original order within each group and reserve ordinary
+		// selections first. Without transfers this is the original row order.
+		for (const index of [...ordinary_indexes, ...transfer_indexes]) {
+			const raw = flt(selected_rows[index][3]);
 			const sign = raw < 0 ? -1 : 1;
 			const magnitude = Math.min(Math.abs(raw), bt_remaining);
 			const allocation = sign * magnitude;
 			bt_remaining = Math.max(0, bt_remaining - magnitude);
-			effective.push(allocation);
+			effective[index] = allocation;
 			total += allocation;
 		}
-		return { effective, total };
+		const zero_effective_rows = has_internal_transfer ? selected_rows.filter(
+			(row, index) => flt(row[3]) && !effective[index]
+		) : [];
+
+		return {
+			effective,
+			total,
+			has_internal_transfer,
+			has_negative_ordinary: has_internal_transfer && ordinary_indexes.some(
+				(index) => flt(selected_rows[index][3]) < 0,
+			),
+			zero_effective_rows,
+		};
 	}
 
 	selection_exceeds_unallocated(signed_alloc_total, bt_unallocated, tolerance = 0.01) {
@@ -287,7 +320,8 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			raw_total += flt(x[3]);
 			currency = x[9];
 		}
-		const { total: effective_total } = this.compute_effective_allocations(transactions);
+		const allocation_result = this.compute_effective_allocations(transactions);
+		const { total: effective_total } = allocation_result;
 
 		this.dialog.set_value(
 			"allocated_amount",
@@ -306,10 +340,18 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 			&& this.selection_exceeds_unallocated(effective_total, bt_unallocated)
 			? `<div class="text-center pb-2 text-danger"><small>Strict matching is enabled: allocations must equal ${format_currency(bt_unallocated, currency)}. Add or remove vouchers to match.</small></div>`
 			: "";
+		const transfer_warning = allocation_result.has_negative_ordinary
+			? `<div class="text-center pb-2 text-danger"><small>${__("Reconcile negative allocations separately from internal transfers.")}</small></div>`
+			: "";
+		const omitted_warning = allocation_result.zero_effective_rows.length
+			? `<div class="text-center pb-2 text-danger"><small>${__("One or more selected vouchers have no amount left to allocate. Remove a selection before reconciling.")}</small></div>`
+			: "";
 		transactions_wrapper.html(`
 			<div class="text-center pb-2">
 				<h5 class="font-bold">Total (${transactions.length} selected): ${format_currency(raw_total, currency)}${cap_note}</h5>
 			</div>
+			${transfer_warning}
+			${omitted_warning}
 			${strict_warning}
 		`);
 	}
@@ -903,7 +945,24 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		let unpaidInvoices = [];
 		let regularVouchers = [];
 
-		const { effective, total: effective_total } = this.compute_effective_allocations(selectedRows);
+		const allocation_result = this.compute_effective_allocations(selectedRows);
+		const { effective, total: effective_total } = allocation_result;
+
+		if (allocation_result.has_negative_ordinary) {
+			frappe.msgprint(
+				__("Reconcile negative allocations separately from internal transfers.")
+			);
+			return;
+		}
+
+		if (allocation_result.zero_effective_rows.length) {
+			frappe.msgprint(
+				__(
+					"One or more selected vouchers have no amount left to allocate. Remove a selection before reconciling."
+				)
+			);
+			return;
+		}
 
 		// Strict match: mirror the backend pre-check so the user sees a
 		// clear in-dialog message instead of a server-side throw mid-submit.
