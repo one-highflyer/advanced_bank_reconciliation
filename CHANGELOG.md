@@ -1,3 +1,13 @@
+## [1.10.1](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.10.0...v1.10.1) (2026-09-17)
+
+
+### Bug Fixes
+
+* address reconciliation review findings ([e0e6995](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/e0e69956911635652dabbc1f3ef0df406b308126))
+* align bank rec UI with internal transfer allocations ([3cc5145](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/3cc514535323343fca48671110801f44da773109))
+* harden internal transfer reconciliation paths ([00e274d](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/00e274db7b3dc02953969b5ad4286700fbd7d666))
+* reconcile internal bank transfers safely ([840bb16](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/840bb16d6691b186551bb0f9afc53dbc0f366d96))
+
 # [1.10.0](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.9.7...v1.10.0) (2026-09-03)
 
 
