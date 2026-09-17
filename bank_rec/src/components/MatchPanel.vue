@@ -330,7 +330,9 @@ watch(
               </td>
               <td class="px-4 py-3 text-right align-top">
                 <input
-                  :value="allocationAmount(candidate)"
+                  :value="candidate.is_internal_transfer
+                    ? allocationAmount(candidate)
+                    : (amounts[candidate.key] ?? Math.abs(candidate.amount))"
                   :readonly="candidate.is_internal_transfer"
                   :aria-label="`Allocation for ${candidate.voucher_name}`"
                   @input="amounts[candidate.key] = ($event.target as HTMLInputElement).value"

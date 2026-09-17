@@ -1938,15 +1938,26 @@ def _validate_bulk_transfer_selection(transaction, invoices, regular_vouchers):
 		validate_internal_transfer_selection,
 	)
 
-	vouchers = list(regular_vouchers or []) + [
-		{
+	vouchers = list(regular_vouchers or [])
+	for row in (invoices or []):
+		if (
+			not isinstance(row, dict)
+			or row.get("doctype") not in (
+				"Sales Invoice", "Purchase Invoice", "Unpaid Sales Invoice", "Unpaid Purchase Invoice"
+			)
+			or not isinstance(row.get("name"), str)
+			or not row["name"].strip()
+		):
+			frappe.throw(_("Each invoice must have a valid doctype and name."))
+		vouchers.append({
 			"payment_doctype": row["doctype"].replace("Unpaid ", ""),
 			"payment_name": row["name"],
 			"amount": row.get("allocated_amount", 0),
-		}
-		for row in (invoices or [])
-	]
-	validate_internal_transfer_selection(transaction, vouchers)
+		})
+	transfer_amounts = validate_internal_transfer_selection(transaction, vouchers)
+	for row in (regular_vouchers or []):
+		if row["payment_doctype"] == "Payment Entry" and row["payment_name"] in transfer_amounts:
+			row["amount"] = transfer_amounts[row["payment_name"]]
 
 
 def process_bulk_reconciliation(bank_transaction_name, invoices, regular_vouchers, _job_id, user):

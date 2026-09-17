@@ -16,6 +16,7 @@ from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_b
     create_payment_entries_bulk,
     get_linked_payments,
     get_matching_queries,
+    process_bulk_reconciliation,
     reconcile_vouchers,
 )
 from advanced_bank_reconciliation.advanced_bank_reconciliation.overrides.bank_transaction import (
@@ -515,6 +516,56 @@ class TestInternalTransferMatching(FrappeTestCase):
         self.assertFalse(first.payment_entries)
         self.assertEqual(first.unallocated_amount, 60)
         self.assertFalse(payment.clearance_date)
+
+    def test_bulk_normalises_transfer_before_enqueue_and_worker_checks(self):
+        payment = self._create_internal_transfer()
+        expense = frappe.db.get_value(
+            "Account",
+            {"company": TEST_COMPANY, "root_type": "Expense", "is_group": 0},
+            "name",
+        )
+        journal = frappe.get_doc({
+            "doctype": "Journal Entry",
+            "company": TEST_COMPANY,
+            "posting_date": nowdate(),
+            "accounts": [
+                {"account": expense, "debit_in_account_currency": 20},
+                {"account": self.source_gl_account, "credit_in_account_currency": 20},
+            ],
+        }).insert()
+        journal.submit()
+        transaction = self._create_bank_transaction(self.source_bank_account, withdrawal=100)
+        vouchers = [
+            {"payment_doctype": "Payment Entry", "payment_name": payment.name, "amount": 100},
+            {"payment_doctype": "Journal Entry", "payment_name": journal.name, "amount": 20},
+        ]
+        lock_key = f"abr:recon:lock:{transaction.name}"
+        try:
+            with (
+                patch("frappe.get_single_value", return_value=1),
+                patch("frappe.enqueue") as enqueue,
+            ):
+                create_payment_entries_bulk(transaction.name, [], vouchers)
+            self.assertEqual(enqueue.call_args.kwargs["regular_vouchers"][0]["amount"], 80)
+        finally:
+            frappe.cache().delete_value(lock_key)
+
+        # A queued request also recalculates a stale client amount before its checks.
+        vouchers[0]["amount"] = 100
+        with (
+            patch("frappe.get_single_value", return_value=1),
+            patch("frappe.db.commit"),
+            patch(f"{MATCHING_MODULE}.publish_progress"),
+            patch(f"{MATCHING_MODULE}.publish_completion") as completed,
+        ):
+            process_bulk_reconciliation(transaction.name, [], vouchers, "_ABR-TEST", "Administrator")
+        transaction.reload()
+        self.assertEqual(
+            {row.payment_entry: row.allocated_amount for row in transaction.payment_entries},
+            {payment.name: 80, journal.name: 20},
+        )
+        self.assertEqual(transaction.unallocated_amount, 0)
+        self.assertTrue(completed.call_args.kwargs["success"])
 
     def test_new_ui_api_rejects_wrong_bank_direction_and_exhausted_leg(self):
         payment = self._create_internal_transfer()

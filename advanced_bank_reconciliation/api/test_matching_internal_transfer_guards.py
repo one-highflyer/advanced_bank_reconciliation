@@ -12,6 +12,9 @@ from advanced_bank_reconciliation.api.matching import (
 	_resolve_internal_transfer_amounts,
 	_submit_match,
 )
+from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.advance_bank_reconciliation_tool.advance_bank_reconciliation_tool import (
+	_validate_bulk_transfer_selection,
+)
 
 
 MATCHING_MODULE = "advanced_bank_reconciliation.api.matching"
@@ -19,6 +22,14 @@ ALLOCATION_MODULE = "advanced_bank_reconciliation.advanced_bank_reconciliation.o
 
 
 class TestMatchingInternalTransferGuards(FrappeTestCase):
+	def test_bulk_rejects_incomplete_invoice_records(self):
+		for invoice in (None, {}, {"doctype": None, "name": "INV"},
+			{"doctype": "Sales Invoice"}, {"doctype": "Sales Invoice", "name": 1}):
+			with self.subTest(invoice=invoice), self.assertRaisesRegex(
+				frappe.ValidationError, "Each invoice must have a valid doctype and name"
+			):
+				_validate_bulk_transfer_selection(None, [invoice], [])
+
 	def test_normalise_vouchers_rejects_duplicate_selection(self):
 		voucher = {
 			"voucher_type": "Payment Entry",
