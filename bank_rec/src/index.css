@@ -33,6 +33,7 @@
   --nexwave-menu-shadow: 0 14px 36px rgba(11, 31, 43, 0.16);
 
   /* Frappe UI semantic colours aligned with the NexWave modern theme. */
+  --surface-base: var(--nexwave-surface);
   --surface-white: var(--nexwave-surface);
   --surface-cards: var(--nexwave-surface);
   --surface-modal: var(--nexwave-surface);
@@ -66,12 +67,18 @@
   --blue-900: #0f2a39;
   --surface-blue-1: #e9f5f7;
   --surface-blue-2: #d8eef2;
-  --surface-blue-3: #155e75;
+  --surface-blue-3: var(--blue-200);
+  --surface-blue-4: var(--blue-300);
+  --surface-blue-6: var(--nexwave-primary);
+  --surface-blue-7: var(--nexwave-button-hover);
+  --surface-blue-8: var(--nexwave-button-active);
   --ink-blue-1: #e9f5f7;
   --ink-blue-2: #0e7490;
   --ink-blue-3: #155e75;
+  --ink-blue-5: var(--ink-blue-3);
   --ink-blue-link: #0e7490;
   --outline-blue-1: #8fcbd6;
+  --outline-blue-4: var(--blue-400);
 
   --green-50: #f0fdf4;
   --green-100: #dcfce7;
@@ -140,6 +147,8 @@
 [data-theme="dark"] {
   color-scheme: dark;
   --nexwave-primary: #22d3ee;
+  --nexwave-button-hover: #67e8f9;
+  --nexwave-button-active: #a5f3fc;
   --nexwave-primary-soft: rgba(34, 211, 238, 0.12);
   --nexwave-shell: #061720;
   --nexwave-sidebar: #0a202b;
@@ -161,6 +170,7 @@
     0 12px 28px rgba(0, 0, 0, 0.12);
   --nexwave-menu-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
 
+  --surface-base: var(--nexwave-surface);
   --surface-white: var(--nexwave-surface);
   --surface-cards: var(--nexwave-surface);
   --surface-modal: var(--nexwave-surface);
@@ -189,11 +199,17 @@
   --blue-700: #164e63;
   --surface-blue-1: #102d37;
   --surface-blue-2: #123b47;
-  --surface-blue-3: #155e75;
+  --surface-blue-3: #184855;
+  --surface-blue-4: #1d5362;
+  --surface-blue-6: var(--nexwave-primary);
+  --surface-blue-7: var(--nexwave-button-hover);
+  --surface-blue-8: var(--nexwave-button-active);
   --ink-blue-2: #67e8f9;
   --ink-blue-3: #a5f3fc;
+  --ink-blue-5: var(--ink-blue-3);
   --ink-blue-link: #67e8f9;
   --outline-blue-1: #155e75;
+  --outline-blue-4: var(--blue-400);
 
   --green-50: #ecfdf3;
   --green-100: #d1fae1;

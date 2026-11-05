@@ -189,7 +189,7 @@ export interface CreateDefaultsResponse {
   };
 }
 
-export interface CreateVoucherPayload {
+export type CreateVoucherPayload = {
   account?: string;
   party_type?: string;
   party?: string;
@@ -202,7 +202,7 @@ export interface CreateVoucherPayload {
   dimensions?: Record<string, unknown>;
   save_as_rule?: boolean;
   rule_title?: string;
-}
+};
 
 export interface CreateVoucherResponse {
   status: string;

@@ -6,11 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "typecheck": "tsc --noEmit",
     "serve": "vite preview"
   },
   "dependencies": {
     "@vitejs/plugin-vue": "^4.2.3",
-    "frappe-ui": "1.0.0-beta.3",
+    "frappe-ui": "1.1.0",
     "pinia": "^2.0.33",
     "vue": "^3.5.14",
     "vue-router": "^4.2.2"

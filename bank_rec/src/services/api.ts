@@ -68,7 +68,7 @@ function encodeParams(params: Record<string, ApiValue>) {
   return body;
 }
 
-function getServerMessage(payload: FrappeResponse<unknown>) {
+export function getServerMessage(payload: FrappeResponse<unknown>) {
   if (payload._server_messages) {
     try {
       const messages = JSON.parse(payload._server_messages) as string[];
@@ -95,7 +95,7 @@ function getServerMessage(payload: FrappeResponse<unknown>) {
   return "The server returned an error.";
 }
 
-async function call<T>(
+export async function call<T>(
   apiPath: string,
   method: string,
   params: Record<string, ApiValue> = {}
