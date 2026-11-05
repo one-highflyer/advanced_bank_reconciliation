@@ -30,19 +30,19 @@ const additional = ref(false);
 const page = ref(1);
 const pageSize = ref(25);
 const filtered = computed(() =>
-  filterImportRows(props.preview.rows, filter.value, search.value),
+  filterImportRows(props.preview.rows, filter.value, search.value)
 );
 const totalPages = computed(() =>
-  Math.max(1, Math.ceil(filtered.value.length / pageSize.value)),
+  Math.max(1, Math.ceil(filtered.value.length / pageSize.value))
 );
 const visible = computed(() =>
   filtered.value.slice(
     (page.value - 1) * pageSize.value,
-    page.value * pageSize.value,
-  ),
+    page.value * pageSize.value
+  )
 );
 const chosen = computed(() =>
-  selectedImportRows(props.preview.rows, props.selected),
+  selectedImportRows(props.preview.rows, props.selected)
 );
 const totals = computed(() =>
   chosen.value.reduce(
@@ -50,21 +50,21 @@ const totals = computed(() =>
       deposit: total.deposit + row.deposit,
       withdrawal: total.withdrawal + row.withdrawal,
     }),
-    { deposit: 0, withdrawal: 0 },
-  ),
+    { deposit: 0, withdrawal: 0 }
+  )
 );
 const selectable = computed(() =>
-  visible.value.filter((row) => !row.errors.length),
+  visible.value.filter((row) => !row.errors.length)
 );
 const allPageSelected = computed(
   () =>
     selectable.value.length > 0 &&
-    selectable.value.every((row) => props.selected.includes(row.index)),
+    selectable.value.every((row) => props.selected.includes(row.index))
 );
 const somePageSelected = computed(
   () =>
     !allPageSelected.value &&
-    selectable.value.some((row) => props.selected.includes(row.index)),
+    selectable.value.some((row) => props.selected.includes(row.index))
 );
 const buttons = computed(() => [
   { label: "All " + props.preview.summary.total, value: "all" },
@@ -106,7 +106,13 @@ watch(totalPages, (last) => {
             Money in · {{ preview.currency }}
           </div>
           <div class="mt-1 font-medium tabular-nums text-bank-success">
-            {{ formatMoney(totals.deposit, preview.currency) }}
+            {{
+              formatMoney(
+                totals.deposit,
+                preview.currency,
+                preview.amount_precision.deposit
+              )
+            }}
           </div>
         </div>
         <div>
@@ -114,7 +120,13 @@ watch(totalPages, (last) => {
             Money out · {{ preview.currency }}
           </div>
           <div class="mt-1 font-medium tabular-nums text-bank-ink">
-            {{ formatMoney(totals.withdrawal, preview.currency) }}
+            {{
+              formatMoney(
+                totals.withdrawal,
+                preview.currency,
+                preview.amount_precision.withdrawal
+              )
+            }}
           </div>
         </div>
       </div>
@@ -213,8 +225,8 @@ watch(totalPages, (last) => {
                     selectVisibleRows(
                       selected,
                       visible,
-                      ($event.target as HTMLInputElement).checked,
-                    ),
+                      ($event.target as HTMLInputElement).checked
+                    )
                   )
                 "
               />
@@ -282,12 +294,28 @@ watch(totalPages, (last) => {
             <td
               class="whitespace-nowrap px-3 py-3 text-right align-top tabular-nums text-bank-success"
             >
-              {{ row.deposit ? formatMoney(row.deposit) : "" }}
+              {{
+                row.deposit
+                  ? formatMoney(
+                      row.deposit,
+                      undefined,
+                      preview.amount_precision.deposit
+                    )
+                  : ""
+              }}
             </td>
             <td
               class="whitespace-nowrap px-3 py-3 text-right align-top tabular-nums"
             >
-              {{ row.withdrawal ? formatMoney(row.withdrawal) : "" }}
+              {{
+                row.withdrawal
+                  ? formatMoney(
+                      row.withdrawal,
+                      undefined,
+                      preview.amount_precision.withdrawal
+                    )
+                  : ""
+              }}
             </td>
             <td class="px-3 py-3 align-top">
               <span
@@ -296,15 +324,15 @@ watch(totalPages, (last) => {
                   row.errors.length
                     ? 'bg-surface-red-2 text-ink-red-4'
                     : row.is_duplicate
-                      ? 'bg-surface-amber-2 text-ink-amber-3'
-                      : 'bg-surface-green-2 text-ink-green-3'
+                    ? 'bg-surface-amber-2 text-ink-amber-3'
+                    : 'bg-surface-green-2 text-ink-green-3'
                 "
                 >{{
                   row.errors.length
                     ? "Invalid row"
                     : row.is_duplicate
-                      ? "Possible duplicate"
-                      : "Ready"
+                    ? "Possible duplicate"
+                    : "Ready"
                 }}</span
               >
             </td>

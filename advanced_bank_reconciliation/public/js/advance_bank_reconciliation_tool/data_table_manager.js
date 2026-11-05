@@ -82,26 +82,31 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 			},
 			{
 				name: __("Description"),
+				format: frappe.utils.escape_html,
 				editable: false,
 				width: 180,
 			},
 			{
 				name: __("Reference Number"),
+				format: frappe.utils.escape_html,
 				editable: false,
 				width: 120,
 			},
 			{
 				name: __("Particulars"),
+				format: frappe.utils.escape_html,
 				editable: false,
 				width: 120
 			},
 			{
 				name: __("Code"),
+				format: frappe.utils.escape_html,
 				editable: false,
 				width: 80,
 			},
 			{
 				name: __("Bank Party"),
+				format: frappe.utils.escape_html,
 				editable: false,
 				width: 120
 			},
@@ -156,26 +161,31 @@ nexwave.accounts.bank_reconciliation.DataTableManager = class DataTableManager {
 			},
 			{
 				name: __("Party"),
+				format: frappe.utils.escape_html,
 				editable: false,
 				width: 140,
 			},
 			{
 				name: __("Bank Party"),
+				format: frappe.utils.escape_html,
 				editable: false,
 				width: 140,
 			},
 			{
 				name: __("Particulars"),
+				format: frappe.utils.escape_html,
 				editable: false,
 				width: 120,
 			},
 			{
 				name: __("Code"),
+				format: frappe.utils.escape_html,
 				editable: false,
 				width: 80,
 			},
 			{
 				name: __("Reference"),
+				format: frappe.utils.escape_html,
 				editable: false,
 				width: 120,
 			},

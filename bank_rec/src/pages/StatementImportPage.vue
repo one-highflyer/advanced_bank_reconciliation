@@ -200,10 +200,12 @@ async function updateAccount(field: "company" | "bank", value: unknown) {
   changingAccount.value = true;
   try {
     resetImport();
+    const version = operationVersion;
     if (field === "company") await store.changeCompany(String(value || ""));
     else store.selectedBankAccount = String(value || "");
+    if (version !== operationVersion) return;
     await replaceQuery();
-    await loadContext();
+    if (version === operationVersion) await loadContext();
   } finally {
     changingAccount.value = false;
   }
@@ -213,11 +215,11 @@ async function readFile(previousMapping?: ImportMapping) {
   if (!uploaded.value || !context.value) return false;
   const version = operationVersion;
   const account = store.selectedBankAccount;
-  const url = uploaded.value.file_url;
+  const fileId = uploaded.value.name;
   reading.value = true;
   error.value = "";
   try {
-    const response = await prepareStatement(account, url);
+    const response = await prepareStatement(account, fileId);
     if (version !== operationVersion || account !== store.selectedBankAccount)
       return false;
     const next = { ...emptyImportMapping(), ...response.mapping };
@@ -315,7 +317,7 @@ async function buildPreview() {
   try {
     const response = await previewStatement(
       account,
-      uploaded.value.file_url,
+      uploaded.value.name,
       reviewed
     );
     if (version !== operationVersion || account !== store.selectedBankAccount)
@@ -323,7 +325,7 @@ async function buildPreview() {
     preview.value = response;
     reviewedMapping.value = reviewed;
     selected.value = defaultSelectedRows(response.rows);
-    requestId = crypto.randomUUID();
+    requestId = createRequestId();
     step.value = 2;
   } catch (reason) {
     if (version === operationVersion)
@@ -333,11 +335,17 @@ async function buildPreview() {
   }
 }
 
+function createRequestId() {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+    byte.toString(16).padStart(2, "0")
+  ).join("");
+}
+
 function updateSelection(indices: number[]) {
   if (busy.value) return;
   selected.value = indices;
   duplicateConsent.value = false;
-  requestId = crypto.randomUUID();
+  requestId = createRequestId();
 }
 
 function editMapping() {
@@ -367,7 +375,7 @@ async function submitImport() {
   try {
     const response = await importStatement({
       bank_account: store.selectedBankAccount,
-      file_url: uploaded.value.file_url,
+      file_id: uploaded.value.name,
       mapping: { ...reviewedMapping.value },
       selected_rows: [...selected.value],
       include_duplicates:
@@ -376,6 +384,7 @@ async function submitImport() {
         (row) => row.index
       ),
       file_hash: preview.value.file_hash,
+      account_revision: preview.value.account_revision,
       request_id: requestId,
     });
     result.value = response;
@@ -431,16 +440,18 @@ function beforeUnload(event: BeforeUnloadEvent) {
 }
 
 onMounted(async () => {
+  window.addEventListener("beforeunload", beforeUnload);
+  const version = operationVersion;
   try {
     await store.initialize(route.query);
+    if (version !== operationVersion) return;
     if (!store.errors.boot && !store.errors.bankAccounts) {
       await replaceQuery();
-      await loadContext();
+      if (version === operationVersion) await loadContext();
     }
   } finally {
     initializing.value = false;
   }
-  window.addEventListener("beforeunload", beforeUnload);
 });
 onBeforeUnmount(() => {
   operationVersion++;

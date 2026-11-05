@@ -68,6 +68,8 @@ export interface StatementPreview {
   };
   currency: string;
   file_hash: string;
+  account_revision: string;
+  amount_precision: { deposit: number; withdrawal: number };
 }
 
 export interface StatementImportResult {

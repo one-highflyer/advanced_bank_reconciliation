@@ -4,19 +4,24 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 const require = createRequire(
-  new URL("../bank_rec/package.json", import.meta.url),
+  new URL("../bank_rec/package.json", import.meta.url)
 );
 const ts = require("typescript");
-const source = readFileSync(
-  new URL("../bank_rec/src/utils/statementImport.ts", import.meta.url),
-  "utf8",
-);
-const compiled = ts.transpileModule(source, {
-  compilerOptions: {
-    module: ts.ModuleKind.ESNext,
-    target: ts.ScriptTarget.ES2022,
-  },
-}).outputText;
+function importUtility(name) {
+  const source = readFileSync(
+    new URL(`../bank_rec/src/utils/${name}.ts`, import.meta.url),
+    "utf8"
+  );
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+    },
+  }).outputText;
+  return import(
+    "data:text/javascript;base64," + Buffer.from(compiled).toString("base64")
+  );
+}
 const {
   dateFormats,
   emptyImportMapping,
@@ -26,9 +31,8 @@ const {
   selectedImportRows,
   selectVisibleRows,
   filterImportRows,
-} = await import(
-  "data:text/javascript;base64," + Buffer.from(compiled).toString("base64")
-);
+} = await importUtility("statementImport");
+const { formatMoney } = await importUtility("format");
 
 function row(index, values = {}) {
   return {
@@ -52,8 +56,16 @@ test("a default date format does not imply a saved bank mapping", () => {
   assert.equal(hasSavedBankMapping({ date_format: "Auto" }), false);
   assert.equal(
     hasSavedBankMapping({ date_format: "d/m/Y", date: "Date" }),
-    true,
+    true
   );
+});
+
+test("the import preview can show amounts beyond currency default precision", () => {
+  assert.notEqual(
+    formatMoney(10.001, undefined, 3),
+    formatMoney(10, undefined, 3)
+  );
+  assert.notEqual(formatMoney(10.001, "NZD", 3), formatMoney(10, "NZD", 3));
 });
 
 test("required mapping follows single and separate amount layouts", () => {
@@ -68,7 +80,7 @@ test("required mapping follows single and separate amount layouts", () => {
   assert.equal(hasRequiredMapping({ ...mapping, positive_field: "" }), false);
   assert.equal(
     hasRequiredMapping({ ...mapping, same_amount_field: false }),
-    false,
+    false
   );
   assert.equal(
     hasRequiredMapping({
@@ -78,7 +90,7 @@ test("required mapping follows single and separate amount layouts", () => {
       deposit_select: "Credit",
       withdrawal_select: "Debit",
     }),
-    true,
+    true
   );
   assert.equal(dateFormats.length, 17);
   assert.equal(new Set(dateFormats.map((format) => format.value)).size, 17);
@@ -94,7 +106,7 @@ test("duplicates and invalid rows require review instead of default selection", 
   assert.deepEqual(defaultSelectedRows(rows), [0, 3]);
   assert.deepEqual(
     selectedImportRows(rows, [0, 1, 2]).map((item) => item.index),
-    [0, 1],
+    [0, 1]
   );
 });
 
@@ -118,18 +130,18 @@ test("search and status filters do not remove hidden checked rows", () => {
   ];
   assert.deepEqual(
     filterImportRows(rows, "all", "merchant").map((item) => item.index),
-    [0],
+    [0]
   );
   assert.deepEqual(
     filterImportRows(rows, "duplicates", "fee").map((item) => item.index),
-    [1],
+    [1]
   );
   assert.deepEqual(
     filterImportRows(rows, "errors", "date").map((item) => item.index),
-    [2],
+    [2]
   );
   assert.deepEqual(
     selectedImportRows(rows, [0, 1]).map((item) => item.index),
-    [0, 1],
+    [0, 1]
   );
 });

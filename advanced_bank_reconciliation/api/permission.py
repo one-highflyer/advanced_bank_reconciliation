@@ -110,14 +110,14 @@ def assert_party_access(party_type=None, party=None, company=None, user=None):
 	return None
 
 
-def assert_bank_account_access(bank_account, user=None):
+def assert_bank_account_access(bank_account, user=None, *, for_update=False):
 	user = user or frappe.session.user
 	require_bank_rec_permission(user)
 
 	if not bank_account:
 		raise frappe.PermissionError(_("Bank Account is required."))
 
-	doc = frappe.get_doc("Bank Account", bank_account)
+	doc = frappe.get_doc("Bank Account", bank_account, for_update=for_update)
 	frappe.has_permission("Bank Account", "read", doc=doc, user=user, throw=True)
 	assert_company_access(doc.company, user=user)
 	return doc

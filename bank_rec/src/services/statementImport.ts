@@ -26,39 +26,40 @@ export async function uploadStatementFile(file: File) {
     body,
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.exc || !payload.message?.file_url) {
+  if (!response.ok || payload.exc || !payload.message?.name) {
     throw new Error(getServerMessage(payload));
   }
   return payload.message as UploadedStatement;
 }
 
-export function prepareStatement(bank_account: string, file_url: string) {
+export function prepareStatement(bank_account: string, file_id: string) {
   return call<PreparedStatement>(apiPath, "prepare_statement", {
     bank_account,
-    file_url,
+    file_id,
   });
 }
 
 export function previewStatement(
   bank_account: string,
-  file_url: string,
+  file_id: string,
   mapping: ImportMapping
 ) {
   return call<StatementPreview>(apiPath, "preview_statement", {
     bank_account,
-    file_url,
+    file_id,
     mapping,
   });
 }
 
 export function importStatement(params: {
   bank_account: string;
-  file_url: string;
+  file_id: string;
   mapping: ImportMapping;
   selected_rows: number[];
   include_duplicates: boolean;
   confirmed_duplicate_rows: number[];
   file_hash: string;
+  account_revision: string;
   request_id: string;
 }) {
   return call<StatementImportResult>(apiPath, "import_statement", params);

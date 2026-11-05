@@ -4,6 +4,7 @@ import copy
 import hashlib
 import tempfile
 import unittest
+from contextlib import nullcontext
 from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
@@ -116,9 +117,7 @@ class Transaction:
 
 class TestStatementImport(unittest.TestCase):
     def setUp(self):
-        context = patch.object(
-            frappe.local, "flags", frappe._dict(in_test=True), create=True
-        )
+        context = patch.object(frappe, "flags", frappe._dict(in_test=True))
         context.start()
         self.addCleanup(context.stop)
         self.db = MemoryDatabase()
@@ -140,7 +139,8 @@ class TestStatementImport(unittest.TestCase):
         )
         self._patch("_account_context", return_value=(self.bank, "NZD", False))
         self._patch(
-            "_read_statement", side_effect=lambda url: (HEADERS, self.source, FILE_HASH)
+            "_read_statement",
+            side_effect=lambda file_id: (HEADERS, self.source, FILE_HASH),
         )
         self._patch("_bank_mapping", return_value=(None, {"date_format": "Auto"}))
         self._patch("get_logger", return_value=Mock())
@@ -170,17 +170,16 @@ class TestStatementImport(unittest.TestCase):
         return mock
 
     def preview(self, **changes):
-        return api.preview_statement(
-            self.bank.name, "/private/files/statement.csv", mapping(**changes)
-        )
+        return api.preview_statement(self.bank.name, "_Test File", mapping(**changes))
 
     def run_import(self, **changes):
         args = dict(
             bank_account=self.bank.name,
-            file_url="/private/files/statement.csv",
+            file_id="_Test File",
             mapping=mapping(),
             selected_rows=[0, 1],
             file_hash=FILE_HASH,
+            account_revision=api._account_revision(*api._account_context.return_value),
             request_id="test-request",
         )
         args.update(changes)
@@ -328,8 +327,28 @@ class TestStatementImport(unittest.TestCase):
         self.failures["precision"] = dict(deposit=3, withdrawal=3, unallocated_amount=3)
         self.assertFalse(self.preview()["rows"][0]["errors"])
         self.assertEqual(self.preview()["rows"][0]["deposit"], 10.001)
+        self.assertEqual(self.preview()["amount_precision"]["deposit"], 3)
         self.failures["precision"]["unallocated_amount"] = 2
         self.assertIn("2 decimal places", self.preview()["rows"][0]["errors"][0])
+
+    def test_amount_rounding_cannot_hide_excess_precision(self):
+        self.source[0][1] = "999999999999.99001"
+        self.assertIn("losing precision", self.preview()["rows"][0]["errors"][0])
+
+    def test_auto_dates_report_invalid_and_partial_rows(self):
+        for value in ("invalid date", "2026-11", "5 Nov"):
+            with self.subTest(value=value):
+                self.source[0][0] = value
+                preview = self.preview(date_format="Auto")
+                self.assertTrue(preview["rows"][0]["errors"])
+                self.assertFalse(preview["rows"][1]["errors"])
+
+    def test_duplicate_check_uses_the_text_frappe_saves(self):
+        self.source[0][2] = "Payment <WIRE>"
+        row = self.preview()["rows"][0]
+        self.assertEqual(row["description"], "Payment &lt;WIRE&gt;")
+        self.db.rows = [frappe._dict(row, name="_Test Existing", docstatus=1)]
+        self.assertTrue(self.preview()["rows"][0]["is_duplicate"])
 
     def test_precision_document_receives_account_company_and_currency(self):
         transaction = Mock()
@@ -403,6 +422,16 @@ class TestStatementImport(unittest.TestCase):
                 self.assertRaises(frappe.ValidationError),
             ):
                 self.run_import(**changes)
+        self.assertEqual(self.db.rows, [])
+
+    def test_credit_card_change_after_preview_requires_review(self):
+        reviewed = self.preview()["account_revision"]
+        api._account_context.return_value = self.bank, "NZD", True
+        with self.assertRaisesRegex(
+            frappe.ValidationError, "account settings have changed"
+        ):
+            self.run_import(account_revision=reviewed)
+        api._account_context.assert_called_with(self.bank.name, for_update=True)
         self.assertEqual(self.db.rows, [])
 
     def test_create_and_submit_permissions_checked_before_reading_file(self):
@@ -522,6 +551,7 @@ class TestStatementFileValidation(unittest.TestCase):
             is_remote_file=False,
             is_folder=False,
         )
+        self.doc.name = "_Test File"
         self.doc.get_full_path.return_value = str(self.path)
         self._patch(
             "_fail",
@@ -529,10 +559,6 @@ class TestStatementFileValidation(unittest.TestCase):
                 frappe.ValidationError(message)
             ),
         )
-        for name, value in (("db", Mock(get_value=Mock(return_value="_Test File"))),):
-            context = patch.object(frappe, name, value, create=True)
-            context.start()
-            self.addCleanup(context.stop)
         for name, kwargs in (
             ("get_doc", dict(return_value=self.doc)),
             ("has_permission", dict(return_value=True)),
@@ -549,7 +575,8 @@ class TestStatementFileValidation(unittest.TestCase):
         return result
 
     def test_csv_file_is_read_from_uploaded_path_and_hashed(self):
-        headers, rows, digest = api._read_statement(self.doc.file_url)
+        headers, rows, digest = api._read_statement(self.doc.name)
+        frappe.get_doc.assert_called_once_with("File", self.doc.name)
         self.assertEqual(headers, ["Date", "Amount", "Description", "Reference"])
         self.assertEqual(rows[0][-1], "0")
         self.assertEqual(digest, hashlib.sha256(self.path.read_bytes()).hexdigest())
@@ -562,25 +589,26 @@ class TestStatementFileValidation(unittest.TestCase):
         workbook.save(buffer)
         self.path.write_bytes(buffer.getvalue())
         self.doc.file_url = "/private/files/statement.xlsx"
-        _, rows, _ = api._read_statement(self.doc.file_url)
+        _, rows, _ = api._read_statement(self.doc.name)
         self.assertIsInstance(rows[0][0], datetime)
         self.doc.file_url = "/private/files/statement.xls"
         book = Mock(datemode=0)
         sheet = book.sheet_by_index.return_value
         sheet.nrows = 2
+        sheet.ncols = 1
         sheet.row.side_effect = [
             [Mock(ctype=1, value="Date")],
             [Mock(ctype=api.xlrd.XL_CELL_DATE, value=46331)],
         ]
-        with patch.object(api.xlrd, "open_workbook", return_value=book):
-            _, rows, _ = api._read_statement(self.doc.file_url)
+        with patch.object(api.xlrd, "open_workbook", return_value=nullcontext(book)):
+            _, rows, _ = api._read_statement(self.doc.name)
         self.assertIsInstance(rows[0][0], datetime)
 
     def test_csv_source_rows_account_for_multiline_cells(self):
         self.path.write_text(
             'Date,Amount,Description,Reference\n2026-11-05,5,"Line one\nLine two",0\n2026-11-06,6,Transfer,1\n'
         )
-        _, rows, _ = api._read_statement(self.doc.file_url)
+        _, rows, _ = api._read_statement(self.doc.name)
         self.assertEqual(rows[0].source_row, 2)
         self.assertEqual(rows[1].source_row, 4)
 
@@ -594,25 +622,55 @@ class TestStatementFileValidation(unittest.TestCase):
             "/files/a\\b.csv",
         ):
             with self.subTest(url=url), self.assertRaises(frappe.ValidationError):
-                api._read_statement(url)
-        frappe.db.get_value.return_value = None
+                self.doc.file_url = url
+                api._read_statement(self.doc.name)
+        self.doc.file_url = "/private/files/statement.csv"
+        frappe.get_doc.side_effect = frappe.DoesNotExistError
         with self.assertRaisesRegex(frappe.ValidationError, "not found"):
-            api._read_statement(self.doc.file_url)
-        frappe.db.get_value.return_value = "_Test File"
+            api._read_statement(self.doc.name)
+        frappe.get_doc.side_effect = None
         self.doc.get_full_path.return_value = str(self.root.parent / "outside.csv")
         with self.assertRaisesRegex(frappe.ValidationError, "outside"):
-            api._read_statement(self.doc.file_url)
+            api._read_statement(self.doc.name)
 
     def test_file_read_permission_is_required(self):
         frappe.has_permission.side_effect = frappe.PermissionError(
             "Private file access denied"
         )
         with self.assertRaises(frappe.PermissionError):
-            api._read_statement(self.doc.file_url)
+            api._read_statement(self.doc.name)
 
     def test_repeated_headers_are_rejected(self):
         self.path.write_text(
             "Date,Amount,Amount,Description,Reference\n2026-11-05,5,5,Transfer,1\n"
         )
         with self.assertRaisesRegex(frappe.ValidationError, "repeated column headers"):
-            api._read_statement(self.doc.file_url)
+            api._read_statement(self.doc.name)
+
+    def test_file_limit_rejects_before_parsing(self):
+        with (
+            patch.object(api, "MAX_FILE_BYTES", 10),
+            patch.object(api, "_read_content") as parse,
+            self.assertRaisesRegex(frappe.ValidationError, "statement exceeds"),
+        ):
+            api._read_statement(self.doc.name)
+        parse.assert_not_called()
+
+    def test_xlsx_rejects_expanded_bytes_and_sparse_dimensions(self):
+        workbook = Workbook()
+        workbook.active["A1"] = "Date"
+        workbook.active["A32"] = "2026-11-05"
+        workbook.save(self.path)
+        self.doc.file_url = "/private/files/statement.xlsx"
+        with (
+            patch.object(api, "MAX_XLSX_BYTES", 10),
+            patch.object(api, "load_workbook") as load,
+            self.assertRaisesRegex(frappe.ValidationError, "after decompression"),
+        ):
+            api._read_statement(self.doc.name)
+        load.assert_not_called()
+        with (
+            patch.object(api, "MAX_ROWS", 8),
+            self.assertRaisesRegex(frappe.ValidationError, "too many rows or columns"),
+        ):
+            api._read_statement(self.doc.name)

@@ -12,17 +12,20 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 from uuid import uuid4
+from zipfile import ZipFile
 
 import frappe
 import xlrd
+from dateutil.parser import parse as parse_auto_date
 from frappe import _
-from frappe.utils import getdate
+from frappe.utils.csvutils import unescape_formula_injection
+from frappe.utils.html_utils import sanitize_html
+from openpyxl import load_workbook
 
 from advanced_bank_reconciliation.advanced_bank_reconciliation.doctype.bank_statement_importer.bank_statement_importer import (
     BANK_MAPPING_FIELD_ORDER,
     get_selected_bank_mapping,
     is_truthy,
-    read_content,
 )
 from advanced_bank_reconciliation.api.permission import assert_bank_account_access
 from advanced_bank_reconciliation.utils.logger import get_logger
@@ -77,6 +80,12 @@ TEXT_FIELDS = (
     "custom_code",
     "bank_party_name",
 )
+MAX_FILE_BYTES = 10 * 1024 * 1024
+MAX_XLSX_BYTES = 32 * 1024 * 1024
+MAX_XLSX_MEMBERS = 1000
+MAX_ROWS = 20_001  # Includes the header.
+MAX_COLUMNS = 256
+MAX_CELLS = 500_000
 
 
 class _SourceRow(list):
@@ -85,33 +94,93 @@ class _SourceRow(list):
         self.source_row = source_row
 
 
-def _read_content(content, extension):
+def _check_dimensions(rows, columns):
+    if rows > MAX_ROWS or columns > MAX_COLUMNS or rows * columns > MAX_CELLS:
+        _fail(
+            "The statement has too many rows or columns. Split it into smaller files."
+        )
+
+
+def _read_csv_rows(content):
+    for encoding in ("utf-8", "windows-1250", "windows-1252"):
+        try:
+            decoded = content.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        _fail("The CSV encoding is not supported.")
+    reader = csv.reader(io.StringIO(decoded, newline=""))
+    start_line = 1
+    for row in reader:
+        _check_dimensions(1, len(row))
+        yield _SourceRow(
+            [unescape_formula_injection(value.strip()) or None for value in row],
+            start_line,
+        )
+        start_line = reader.line_num + 1
+
+
+def _read_excel_rows(content, extension):
     if extension == "xls":
-        book = xlrd.open_workbook(file_contents=content)
-        sheet = book.sheet_by_index(0)
-        return [
-            [
-                xlrd.xldate_as_datetime(cell.value, book.datemode)
-                if cell.ctype == xlrd.XL_CELL_DATE
-                else cell.value
-                for cell in sheet.row(index)
-            ]
-            for index in range(sheet.nrows)
-        ]
-    data = read_content(content, extension)
-    if extension == "csv":
-        for encoding in ("utf-8", "windows-1250", "windows-1252"):
-            try:
-                decoded = content.decode(encoding)
-                break
-            except UnicodeDecodeError:
-                continue
-        reader = csv.reader(io.StringIO(decoded, newline=""))
-        start_line = 1
-        for index, _row in enumerate(reader):
-            data[index] = _SourceRow(data[index], start_line)
-            start_line = reader.line_num + 1
-    return data
+        with xlrd.open_workbook(
+            file_contents=content, on_demand=True, ragged_rows=True
+        ) as book:
+            sheet = book.sheet_by_index(0)
+            _check_dimensions(sheet.nrows, sheet.ncols)
+            for index in range(sheet.nrows):
+                yield [
+                    xlrd.xldate_as_datetime(cell.value, book.datemode)
+                    if cell.ctype == xlrd.XL_CELL_DATE
+                    else cell.value
+                    for cell in sheet.row(index)
+                ]
+        return
+
+    with ZipFile(io.BytesIO(content)) as archive:
+        members = archive.infolist()
+        if (
+            len(members) > MAX_XLSX_MEMBERS
+            or sum(member.file_size for member in members) > MAX_XLSX_BYTES
+        ):
+            _fail(
+                "The spreadsheet is too large after decompression. Split it into smaller files."
+            )
+    workbook = load_workbook(
+        io.BytesIO(content), data_only=True, read_only=True, keep_links=False
+    )
+    try:
+        sheet = workbook.active
+        _check_dimensions(sheet.max_row or 0, sheet.max_column or 0)
+        # Check the actual rows even if the workbook declares smaller dimensions.
+        sheet.reset_dimensions()
+        yield from sheet.iter_rows(values_only=True)
+    finally:
+        workbook.close()
+
+
+def _read_content(content, extension):
+    source = (
+        _read_csv_rows(content)
+        if extension == "csv"
+        else _read_excel_rows(content, extension)
+    )
+    rows = []
+    width = 0
+    text_length = 0
+    try:
+        for row in source:
+            width = max(width, len(row))
+            _check_dimensions(len(rows) + 1, width)
+            text_length += sum(len(cell) for cell in row if isinstance(cell, str))
+            if text_length > MAX_FILE_BYTES:
+                _fail(
+                    "The statement contains too much text. Split it into smaller files."
+                )
+            rows.append(row)
+    finally:
+        source.close()
+    return rows
 
 
 def _fail(message):
@@ -133,21 +202,30 @@ def _text(value):
     return "" if value is None else str(value).strip()
 
 
-def _account_context(bank_account):
-    doc = assert_bank_account_access(bank_account)
+def _account_context(bank_account, *, for_update=False):
+    doc = assert_bank_account_access(bank_account, for_update=for_update)
     frappe.has_permission("Bank Transaction", "read", throw=True)
     if not doc.account:
         _fail(
             "Link a ledger account to this Bank Account before you import a statement."
         )
-    account = frappe.get_cached_value(
-        "Account", doc.account, ["company", "account_currency"], as_dict=True
+    account = frappe.db.get_value(
+        "Account",
+        doc.account,
+        ["company", "account_currency"],
+        as_dict=True,
+        for_update=for_update,
     )
     if not account or account.company != doc.company or not account.account_currency:
         _fail(
             "The Bank Account needs a ledger account and currency in the same company."
         )
     return doc, account.account_currency, bool(doc.get("is_credit_card"))
+
+
+def _account_revision(doc, currency, is_credit_card):
+    fields = [doc.name, doc.company, doc.account, doc.bank, currency, is_credit_card]
+    return hashlib.sha256(json.dumps(fields).encode()).hexdigest()
 
 
 def _bank_mapping(bank_account_doc):
@@ -164,9 +242,22 @@ def _bank_mapping(bank_account_doc):
     return bank, mapping
 
 
-def _read_statement(file_url):
-    if not isinstance(file_url, str):
+def _read_statement(file_id):
+    if not isinstance(file_id, str) or not file_id:
         _fail("Select an uploaded statement file.")
+    try:
+        doc = frappe.get_doc("File", file_id)
+    except frappe.DoesNotExistError:
+        _fail("The uploaded file was not found. Upload the statement again.")
+    frappe.has_permission("File", "read", doc=doc, throw=True)
+    file_url = doc.file_url
+    if (
+        doc.is_remote_file
+        or doc.is_folder
+        or not isinstance(file_url, str)
+        or not file_url
+    ):
+        _fail("Select a local uploaded statement file.")
     url = urlsplit(file_url)
     decoded = unquote(url.path)
     if (
@@ -179,15 +270,6 @@ def _read_statement(file_url):
         or "\x00" in decoded
         or any(part in (".", "..") for part in decoded.split("/"))
     ):
-        _fail("Select a local uploaded statement file.")
-    file_name = frappe.db.get_value(
-        "File", {"file_url": file_url, "is_folder": 0}, "name"
-    )
-    if not file_name:
-        _fail("The uploaded file was not found. Upload the statement again.")
-    doc = frappe.get_doc("File", file_name)
-    frappe.has_permission("File", "read", doc=doc, throw=True)
-    if doc.is_remote_file or doc.is_folder or doc.file_url != file_url:
         _fail("Select a local uploaded statement file.")
     extension = Path(decoded).suffix.lower().lstrip(".")
     if extension not in ("csv", "xlsx", "xls"):
@@ -203,8 +285,13 @@ def _read_statement(file_url):
             "The uploaded file is missing or is outside the upload folder. Upload it again."
         )
     try:
-        content = path.read_bytes()
+        with path.open("rb") as uploaded:
+            content = uploaded.read(MAX_FILE_BYTES + 1)
+        if len(content) > MAX_FILE_BYTES:
+            _fail("The statement exceeds 10 MB. Split it into smaller files.")
         data = _read_content(content, extension)
+    except frappe.ValidationError:
+        raise
     except Exception:
         _fail(
             "The statement file could not be read. Check its file format and upload it again."
@@ -307,11 +394,16 @@ def _parse_date(value, date_format):
     if not isinstance(value, str) or not value.strip():
         raise ValueError("Date is missing or invalid.")
     try:
-        parsed = (
-            getdate(value.strip())
-            if date_format == "Auto"
-            else datetime.strptime(value.strip(), DATE_FORMATS[date_format]).date()
-        )
+        if date_format == "Auto":
+            # Missing date parts must not depend on the day the user imports the file.
+            parsed = parse_auto_date(value.strip(), default=datetime(2000, 1, 1)).date()
+            if (
+                parsed
+                != parse_auto_date(value.strip(), default=datetime(2001, 2, 2)).date()
+            ):
+                raise ValueError
+        else:
+            parsed = datetime.strptime(value.strip(), DATE_FORMATS[date_format]).date()
     except (ValueError, TypeError, OverflowError):
         raise ValueError("Date does not match the selected format.") from None
     if not parsed:
@@ -343,6 +435,8 @@ def _parse_amount(value):
         raise ValueError("Amount is outside the supported range.")
     if amount != amount.quantize(Decimal("0.000000001")):
         raise ValueError("Amount has more than nine decimal places.")
+    if Decimal(str(result)) != amount:
+        raise ValueError("Amount cannot be represented without losing precision.")
     return result
 
 
@@ -405,7 +499,8 @@ def _build_preview(
             errors=[],
         )
         for field in TEXT_FIELDS:
-            row[field] = _text(cell(FIELD_MAPPING[field]))
+            value = _text(cell(FIELD_MAPPING[field]))
+            row[field] = sanitize_html(value) if "<" in value or ">" in value else value
         if len(cells) > len(headers) and any(
             _text(value) for value in cells[len(headers) :]
         ):
@@ -483,6 +578,8 @@ def _build_preview(
         ),
         currency=currency,
         file_hash=file_hash,
+        account_revision=_account_revision(bank_doc, currency, is_credit_card),
+        amount_precision=precisions,
     )
 
 
@@ -518,9 +615,9 @@ def get_import_context(bank_account):
 
 
 @frappe.whitelist(methods=["POST"])
-def prepare_statement(bank_account, file_url):
+def prepare_statement(bank_account, file_id):
     doc, _, _ = _account_context(bank_account)
-    headers, source, _ = _read_statement(file_url)
+    headers, source, _ = _read_statement(file_id)
     _, saved = _bank_mapping(doc)
     mapping, stale = _default_mapping(headers, saved)
     nonempty = [row for row in source if row and any(_text(cell) for cell in row)]
@@ -534,9 +631,9 @@ def prepare_statement(bank_account, file_url):
 
 
 @frappe.whitelist(methods=["POST"])
-def preview_statement(bank_account, file_url, mapping):
+def preview_statement(bank_account, file_id, mapping):
     doc, currency, credit_card = _account_context(bank_account)
-    headers, source, file_hash = _read_statement(file_url)
+    headers, source, file_hash = _read_statement(file_id)
     mapping = _validate_mapping(mapping, headers)
     return _build_preview(
         doc, currency, credit_card, headers, source, mapping, file_hash
@@ -631,15 +728,16 @@ def _request_prefix(request_id, bank_account):
 @frappe.whitelist(methods=["POST"])
 def import_statement(
     bank_account,
-    file_url,
+    file_id,
     mapping,
     selected_rows,
+    file_hash,
+    account_revision,
     include_duplicates=False,
-    file_hash=None,
     request_id=None,
     confirmed_duplicate_rows=None,
 ):
-    doc, currency, credit_card = _account_context(bank_account)
+    doc, currency, _ = _account_context(bank_account)
     permission_doc = frappe.new_doc("Bank Transaction")
     permission_doc.update(
         dict(bank_account=doc.name, company=doc.company, currency=currency)
@@ -648,12 +746,16 @@ def import_statement(
         frappe.has_permission(
             "Bank Transaction", permission, doc=permission_doc, throw=True
         )
-    headers, source, actual_hash = _read_statement(file_url)
-    if file_hash is not None and file_hash != actual_hash:
+    headers, source, actual_hash = _read_statement(file_id)
+    if file_hash != actual_hash:
         _fail("The statement file has changed. Preview it again before you import.")
+    # Lock and reload the account before checking the reviewed settings and writing.
+    doc, currency, credit_card = _account_context(bank_account, for_update=True)
+    if account_revision != _account_revision(doc, currency, credit_card):
+        _fail(
+            "The bank account settings have changed. Preview the statement again before you import."
+        )
     mapping = _validate_mapping(mapping, headers)
-    # Serialise imports for this account, including requests that start at the same time.
-    frappe.db.get_value("Bank Account", doc.name, "name", for_update=True)
     preview = _build_preview(
         doc, currency, credit_card, headers, source, mapping, actual_hash, current=True
     )
