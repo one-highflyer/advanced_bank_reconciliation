@@ -45,27 +45,30 @@ export function formatDate(value?: string) {
   }).format(date);
 }
 
-export function formatMoney(amount?: number | null, currency?: string) {
+export function formatMoney(
+  amount?: number | null,
+  currency?: string,
+  precision?: number
+) {
   const value = Number(amount || 0);
+  const decimals = {
+    minimumFractionDigits: Math.min(precision ?? 2, 2),
+    maximumFractionDigits: precision ?? 2,
+  };
 
   if (currency) {
     try {
       return new Intl.NumberFormat(undefined, {
         style: "currency",
         currency,
+        maximumFractionDigits: precision,
       }).format(value);
     } catch {
-      return `${currency} ${value.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })}`;
+      return `${currency} ${value.toLocaleString(undefined, decimals)}`;
     }
   }
 
-  return value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return value.toLocaleString(undefined, decimals);
 }
 
 export function signedAmountClass(amount?: number | null) {

@@ -1286,7 +1286,7 @@ nexwave.accounts.bank_reconciliation.DialogManager = class DialogManager {
 					fieldname: `match_${cf.key}`,
 					fieldtype: "Check",
 					default: cf.default_checked ? 1 : 0,
-					description: cf.fixed_value !== undefined ? "" : val,
+					description: cf.fixed_value !== undefined ? "" : frappe.utils.escape_html(val),
 				},
 				{ fieldtype: "Column Break" },
 				{

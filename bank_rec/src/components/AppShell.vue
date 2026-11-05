@@ -7,6 +7,7 @@ import CheckCircle2 from "~icons/lucide/check-circle-2";
 import FileCheck2 from "~icons/lucide/file-check-2";
 import ListChecks from "~icons/lucide/list-checks";
 import Table2 from "~icons/lucide/table-2";
+import Upload from "~icons/lucide/upload";
 
 const route = useRoute();
 const store = useBankRecStore();
@@ -20,6 +21,11 @@ const navItems = [
     label: "Reconcile",
     to: "/reconcile",
     icon: CheckCircle2,
+  },
+  {
+    label: "Import",
+    to: "/import",
+    icon: Upload,
   },
   {
     label: "Bank Coding",
@@ -83,7 +89,17 @@ const navbarLogo = computed(() => {
           <RouterLink
             v-for="item in navItems"
             :key="item.to"
-            :to="item.to"
+            :to="
+              item.to === '/import'
+                ? {
+                    path: item.to,
+                    query: {
+                      company: store.selectedCompany || undefined,
+                      bank_account: store.selectedBankAccount || undefined,
+                    },
+                  }
+                : item.to
+            "
             class="flex h-9 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-medium text-bank-shell-muted transition hover:bg-bank-shell-hover hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bank-shell-accent"
             active-class="bg-bank-shell-active text-white shadow-sm"
           >

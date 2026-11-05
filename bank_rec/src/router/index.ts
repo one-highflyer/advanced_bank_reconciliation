@@ -3,6 +3,7 @@ import CashCodingPage from "@/pages/CashCodingPage.vue";
 import MatchedPage from "@/pages/MatchedPage.vue";
 import ReconcilePage from "@/pages/ReconcilePage.vue";
 import RulesPage from "@/pages/RulesPage.vue";
+import StatementImportPage from "@/pages/StatementImportPage.vue";
 
 export const router = createRouter({
   history: createWebHistory("/bank-rec"),
@@ -15,6 +16,11 @@ export const router = createRouter({
       path: "/reconcile",
       name: "Reconcile",
       component: ReconcilePage,
+    },
+    {
+      path: "/import",
+      name: "Import statement",
+      component: StatementImportPage,
     },
     {
       path: "/bank-coding",

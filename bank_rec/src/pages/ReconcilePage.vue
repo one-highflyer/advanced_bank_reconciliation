@@ -15,6 +15,7 @@ import UpdateTransactionPanel from "@/components/UpdateTransactionPanel.vue";
 import { useBankRecStore } from "@/stores/bankRec";
 import type { MatchVoucherSelection } from "@/types/bankRec";
 import type { TransactionStatusFilter } from "@/types/bankRec";
+import Upload from "~icons/lucide/upload";
 
 const store = useBankRecStore();
 const route = useRoute();
@@ -229,7 +230,7 @@ watch(
 
         <div class="grid min-h-[620px] flex-1 gap-4 xl:min-h-0 xl:grid-cols-[minmax(380px,0.8fr)_minmax(620px,1.2fr)]">
           <section class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-bank-line bg-bank-panel shadow-sm">
-            <div class="flex items-center justify-between gap-3 border-b border-bank-line px-4 py-3">
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-bank-line px-4 py-3">
               <div>
                 <div class="text-base font-semibold text-bank-ink">
                   Bank transactions
@@ -238,6 +239,23 @@ watch(
                   {{ store.transactions.length }} rows
                 </div>
               </div>
+              <Button
+                theme="blue"
+                variant="solid"
+                :disabled="!store.selectedBankAccount || pageLoading"
+                @click="
+                  router.push({
+                    path: '/import',
+                    query: {
+                      company: store.selectedCompany,
+                      bank_account: store.selectedBankAccount,
+                    },
+                  })
+                "
+              >
+                <template #prefix><Upload class="h-4 w-4" /></template>
+                Import statement
+              </Button>
             </div>
 
             <LoadingState
@@ -273,7 +291,7 @@ watch(
               <div class="mt-1 overflow-x-auto">
                 <TabButtons
                   v-model="activePanel"
-                  :buttons="panelButtons"
+                  :options="panelButtons"
                 />
               </div>
             </div>

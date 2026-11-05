@@ -462,7 +462,7 @@ onBeforeRouteLeave(() => guardDiscard());
       <div class="flex flex-col gap-3 border-b border-bank-line px-4 py-3 md:flex-row md:items-center md:justify-between">
         <TabButtons
           v-model="viewFilter"
-          :buttons="viewFilterButtons"
+          :options="viewFilterButtons"
         />
         <div class="flex gap-2">
           <Button variant="subtle" :loading="loading" @click="loadRows">
