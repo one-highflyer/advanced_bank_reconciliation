@@ -1,5 +1,6 @@
 import { call, getServerMessage } from "@/services/api";
 import type {
+  CsvEncoding,
   ImportContext,
   ImportMapping,
   PreparedStatement,
@@ -32,28 +33,36 @@ export async function uploadStatementFile(file: File) {
   return payload.message as UploadedStatement;
 }
 
-export function prepareStatement(bank_account: string, file_id: string) {
+export function prepareStatement(
+  bank_account: string,
+  file_id: string,
+  csv_encoding: CsvEncoding
+) {
   return call<PreparedStatement>(apiPath, "prepare_statement", {
     bank_account,
     file_id,
+    csv_encoding,
   });
 }
 
 export function previewStatement(
   bank_account: string,
   file_id: string,
-  mapping: ImportMapping
+  mapping: ImportMapping,
+  csv_encoding: CsvEncoding
 ) {
   return call<StatementPreview>(apiPath, "preview_statement", {
     bank_account,
     file_id,
     mapping,
+    csv_encoding,
   });
 }
 
 export function importStatement(params: {
   bank_account: string;
   file_id: string;
+  csv_encoding: CsvEncoding;
   mapping: ImportMapping;
   selected_rows: number[];
   include_duplicates: boolean;

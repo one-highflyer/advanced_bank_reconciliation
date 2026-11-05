@@ -16,6 +16,7 @@ import {
   uploadStatementFile,
 } from "@/services/statementImport";
 import type {
+  CsvEncoding,
   ImportContext,
   ImportMapping,
   PreparedStatement,
@@ -49,6 +50,12 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const context = ref<ImportContext | null>(null);
 const prepared = ref<PreparedStatement | null>(null);
 const uploaded = ref<UploadedStatement | null>(null);
+const csvEncoding = ref<CsvEncoding>("utf-8");
+const csvEncodingOptions = [
+  { label: "UTF-8", value: "utf-8" },
+  { label: "Windows-1252 (Western European)", value: "windows-1252" },
+  { label: "Windows-1250 (Central European)", value: "windows-1250" },
+];
 const localFileSize = ref(0);
 const mapping = ref<ImportMapping>(emptyImportMapping());
 const pendingMapping = ref<ImportMapping | null>(null);
@@ -129,6 +136,7 @@ const fileSize = computed(() => {
       : Math.max(1, Math.round(size / 1024)) + " KB"
     : "";
 });
+const isCsv = computed(() => /\.csv$/i.test(uploaded.value?.file_name || ""));
 
 function errorMessage(reason: unknown, fallback: string) {
   return reason instanceof Error ? reason.message : fallback;
@@ -150,6 +158,7 @@ function clearReview() {
 function resetImport() {
   operationVersion++;
   uploaded.value = null;
+  csvEncoding.value = "utf-8";
   prepared.value = null;
   mapping.value = emptyImportMapping();
   pendingMapping.value = null;
@@ -219,7 +228,7 @@ async function readFile(previousMapping?: ImportMapping) {
   reading.value = true;
   error.value = "";
   try {
-    const response = await prepareStatement(account, fileId);
+    const response = await prepareStatement(account, fileId, csvEncoding.value);
     if (version !== operationVersion || account !== store.selectedBankAccount)
       return false;
     const next = { ...emptyImportMapping(), ...response.mapping };
@@ -271,6 +280,7 @@ async function chooseFile(file?: File) {
     const response = await uploadStatementFile(file);
     if (version !== operationVersion) return;
     uploaded.value = response;
+    csvEncoding.value = "utf-8";
     prepared.value = null;
     pendingMapping.value = previousMapping || null;
     localFileSize.value = file.size;
@@ -282,6 +292,15 @@ async function chooseFile(file?: File) {
     if (version === operationVersion) uploading.value = false;
     if (fileInput.value) fileInput.value.value = "";
   }
+}
+
+async function changeCsvEncoding(value: CsvEncoding) {
+  if (busy.value || value === csvEncoding.value) return;
+  if (prepared.value) pendingMapping.value = { ...mapping.value };
+  csvEncoding.value = value;
+  prepared.value = null;
+  clearReview();
+  await readFile();
 }
 
 function dropFile(event: DragEvent) {
@@ -318,7 +337,8 @@ async function buildPreview() {
     const response = await previewStatement(
       account,
       uploaded.value.name,
-      reviewed
+      reviewed,
+      csvEncoding.value
     );
     if (version !== operationVersion || account !== store.selectedBankAccount)
       return;
@@ -376,6 +396,7 @@ async function submitImport() {
     const response = await importStatement({
       bank_account: store.selectedBankAccount,
       file_id: uploaded.value.name,
+      csv_encoding: csvEncoding.value,
       mapping: { ...reviewedMapping.value },
       selected_rows: [...selected.value],
       include_duplicates:
@@ -680,6 +701,17 @@ onBeforeRouteLeave(() => !submitting.value && discardAllowed());
                 <template #icon><X class="h-4 w-4" /></template>
               </Button>
             </div>
+            <FormControl
+              v-if="isCsv"
+              class="mt-4 max-w-sm"
+              type="select"
+              label="CSV encoding"
+              variant="outline"
+              :model-value="csvEncoding"
+              :options="csvEncodingOptions"
+              :disabled="busy"
+              @update:model-value="changeCsvEncoding"
+            />
             <p class="mt-3 text-xs text-bank-muted">
               Review the mapped transactions before they are imported.
             </p>

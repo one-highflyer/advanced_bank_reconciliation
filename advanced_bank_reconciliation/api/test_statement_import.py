@@ -1,7 +1,6 @@
 """Focused unit tests. These tests do not connect to a site or write site data."""
 
 import copy
-import hashlib
 import tempfile
 import unittest
 from contextlib import nullcontext
@@ -140,7 +139,7 @@ class TestStatementImport(unittest.TestCase):
         self._patch("_account_context", return_value=(self.bank, "NZD", False))
         self._patch(
             "_read_statement",
-            side_effect=lambda file_id: (HEADERS, self.source, FILE_HASH),
+            side_effect=lambda file_id, csv_encoding: (HEADERS, self.source, FILE_HASH),
         )
         self._patch("_bank_mapping", return_value=(None, {"date_format": "Auto"}))
         self._patch("get_logger", return_value=Mock())
@@ -579,7 +578,34 @@ class TestStatementFileValidation(unittest.TestCase):
         frappe.get_doc.assert_called_once_with("File", self.doc.name)
         self.assertEqual(headers, ["Date", "Amount", "Description", "Reference"])
         self.assertEqual(rows[0][-1], "0")
-        self.assertEqual(digest, hashlib.sha256(self.path.read_bytes()).hexdigest())
+        self.assertEqual(len(digest), 64)
+        original = self.path.read_bytes()
+        self.path.write_bytes(original.replace(b"Transfer", b"Payment"))
+        self.assertNotEqual(api._read_statement(self.doc.name)[2], digest)
+
+    def test_csv_requires_explicit_encoding_for_legacy_bytes(self):
+        self.path.write_bytes(
+            "Date,Amount,Description,Reference\n2026-11-05,5,Caf\u00e9 \u00a3,REF\u00a3\n".encode(
+                "windows-1252"
+            )
+        )
+        with self.assertRaisesRegex(frappe.ValidationError, "selected encoding"):
+            api._read_statement(self.doc.name)
+        _, western, western_hash = api._read_statement(self.doc.name, "windows-1252")
+        _, central, central_hash = api._read_statement(self.doc.name, "windows-1250")
+        self.assertEqual(western[0][2:], ["Caf\u00e9 \u00a3", "REF\u00a3"])
+        self.assertEqual(central[0][2:], ["Caf\u00e9 \u0141", "REF\u0141"])
+        self.assertNotEqual(western_hash, central_hash)
+
+    def test_csv_supports_utf8_bom_and_rejects_unknown_encodings(self):
+        self.path.write_text(
+            '"Date",Amount,Description,Reference\n', encoding="utf-8-sig"
+        )
+        self.assertEqual(api._read_statement(self.doc.name)[0][0], "Date")
+        with self.assertRaisesRegex(
+            frappe.ValidationError, "encoding is not supported"
+        ):
+            api._read_statement(self.doc.name, "utf-16")
 
     def test_xlsx_and_xls_preserve_native_dates(self):
         workbook = Workbook()

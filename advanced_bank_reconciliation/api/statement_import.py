@@ -86,6 +86,11 @@ MAX_XLSX_MEMBERS = 1000
 MAX_ROWS = 20_001  # Includes the header.
 MAX_COLUMNS = 256
 MAX_CELLS = 500_000
+CSV_ENCODINGS = {
+    "utf-8": "utf-8-sig",
+    "windows-1252": "windows-1252",
+    "windows-1250": "windows-1250",
+}
 
 
 class _SourceRow(list):
@@ -101,15 +106,15 @@ def _check_dimensions(rows, columns):
         )
 
 
-def _read_csv_rows(content):
-    for encoding in ("utf-8", "windows-1250", "windows-1252"):
-        try:
-            decoded = content.decode(encoding)
-            break
-        except UnicodeDecodeError:
-            continue
-    else:
+def _read_csv_rows(content, csv_encoding):
+    if not isinstance(csv_encoding, str) or csv_encoding not in CSV_ENCODINGS:
         _fail("The CSV encoding is not supported.")
+    try:
+        decoded = content.decode(CSV_ENCODINGS[csv_encoding])
+    except UnicodeDecodeError:
+        _fail(
+            "This CSV cannot be read with the selected encoding. Choose a different CSV encoding."
+        )
     reader = csv.reader(io.StringIO(decoded, newline=""))
     start_line = 1
     for row in reader:
@@ -159,9 +164,9 @@ def _read_excel_rows(content, extension):
         workbook.close()
 
 
-def _read_content(content, extension):
+def _read_content(content, extension, csv_encoding):
     source = (
-        _read_csv_rows(content)
+        _read_csv_rows(content, csv_encoding)
         if extension == "csv"
         else _read_excel_rows(content, extension)
     )
@@ -242,7 +247,7 @@ def _bank_mapping(bank_account_doc):
     return bank, mapping
 
 
-def _read_statement(file_id):
+def _read_statement(file_id, csv_encoding="utf-8"):
     if not isinstance(file_id, str) or not file_id:
         _fail("Select an uploaded statement file.")
     try:
@@ -289,7 +294,7 @@ def _read_statement(file_id):
             content = uploaded.read(MAX_FILE_BYTES + 1)
         if len(content) > MAX_FILE_BYTES:
             _fail("The statement exceeds 10 MB. Split it into smaller files.")
-        data = _read_content(content, extension)
+        data = _read_content(content, extension, csv_encoding)
     except frappe.ValidationError:
         raise
     except Exception:
@@ -305,7 +310,12 @@ def _read_statement(file_id):
         _fail(
             "The statement has repeated column headers. Give each column a unique name and upload it again."
         )
-    return headers, data[1:], hashlib.sha256(content).hexdigest()
+    digest = hashlib.sha256()
+    if extension == "csv":
+        # The preview and retry must use the same encoding as the import.
+        digest.update(f"csv:{csv_encoding}\0".encode())
+    digest.update(content)
+    return headers, data[1:], digest.hexdigest()
 
 
 def _default_mapping(headers, saved):
@@ -615,9 +625,9 @@ def get_import_context(bank_account):
 
 
 @frappe.whitelist(methods=["POST"])
-def prepare_statement(bank_account, file_id):
+def prepare_statement(bank_account, file_id, csv_encoding="utf-8"):
     doc, _, _ = _account_context(bank_account)
-    headers, source, _ = _read_statement(file_id)
+    headers, source, _ = _read_statement(file_id, csv_encoding)
     _, saved = _bank_mapping(doc)
     mapping, stale = _default_mapping(headers, saved)
     nonempty = [row for row in source if row and any(_text(cell) for cell in row)]
@@ -631,9 +641,9 @@ def prepare_statement(bank_account, file_id):
 
 
 @frappe.whitelist(methods=["POST"])
-def preview_statement(bank_account, file_id, mapping):
+def preview_statement(bank_account, file_id, mapping, csv_encoding="utf-8"):
     doc, currency, credit_card = _account_context(bank_account)
-    headers, source, file_hash = _read_statement(file_id)
+    headers, source, file_hash = _read_statement(file_id, csv_encoding)
     mapping = _validate_mapping(mapping, headers)
     return _build_preview(
         doc, currency, credit_card, headers, source, mapping, file_hash
@@ -736,6 +746,7 @@ def import_statement(
     include_duplicates=False,
     request_id=None,
     confirmed_duplicate_rows=None,
+    csv_encoding="utf-8",
 ):
     doc, currency, _ = _account_context(bank_account)
     permission_doc = frappe.new_doc("Bank Transaction")
@@ -746,9 +757,11 @@ def import_statement(
         frappe.has_permission(
             "Bank Transaction", permission, doc=permission_doc, throw=True
         )
-    headers, source, actual_hash = _read_statement(file_id)
+    headers, source, actual_hash = _read_statement(file_id, csv_encoding)
     if file_hash != actual_hash:
-        _fail("The statement file has changed. Preview it again before you import.")
+        _fail(
+            "The statement file or CSV encoding has changed. Preview it again before you import."
+        )
     # Lock and reload the account before checking the reviewed settings and writing.
     doc, currency, credit_card = _account_context(bank_account, for_update=True)
     if account_revision != _account_revision(doc, currency, credit_card):

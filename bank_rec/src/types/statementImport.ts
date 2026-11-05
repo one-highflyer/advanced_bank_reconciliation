@@ -1,5 +1,7 @@
 import type { BankAccount } from "@/types/bankRec";
 
+export type CsvEncoding = "utf-8" | "windows-1252" | "windows-1250";
+
 export interface ImportMapping extends Record<string, string | boolean> {
   date_select: string;
   date_format: string;
