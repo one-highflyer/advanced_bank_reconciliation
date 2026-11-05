@@ -1,3 +1,16 @@
+# [1.11.0](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.10.1...v1.11.0) (2026-11-05)
+
+
+### Bug Fixes
+
+* **bank-rec:** harden statement import ([e763d0f](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/e763d0f0f713b0ff3aa9f26c26154079d663724a))
+* **bank-rec:** require explicit encoding for legacy CSV files ([773942a](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/773942a795d476c739bb9d2d7c3e593841a5dae9))
+
+
+### Features
+
+* **bank-rec:** add statement import ([23b693f](https://github.com/one-highflyer/advanced_bank_reconciliation/commit/23b693f6cbeaa0ca914cd1f1553d007bc03d4970))
+
 ## [1.10.1](https://github.com/one-highflyer/advanced_bank_reconciliation/compare/v1.10.0...v1.10.1) (2026-09-17)
 
 
